@@ -53,8 +53,8 @@ erDiagram
         datetime updatedAt
     }
 
-    USUARIO ||--o{ PARTICIPANTE : "tiene"
-    SALA ||--o{ PARTICIPANTE : "contiene"
+    USUARIO ||--o{ PARTICIPANTE
+    SALA ||--o{ PARTICIPANTE
 ```
 
 ### Diagrama de relaciones
