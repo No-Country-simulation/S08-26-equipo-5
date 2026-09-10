@@ -227,7 +227,6 @@ Los seeds generan datos de prueba para desarrollo.
 
 Los usuarios de prueba utilizan un mismo hash de contraseña para facilitar las pruebas durante el desarrollo.
 
-> **Nota:** Las credenciales de prueba son únicamente para desarrollo y no deben utilizarse en producción.
 
 ---
 
@@ -237,7 +236,7 @@ Los usuarios de prueba utilizan un mismo hash de contraseña para facilitar las 
 | -------------- | ------------------------------- | ------------------------------------------------ |
 | `DATABASE_URL` | Connection string de PostgreSQL | `postgresql://user:pass@host/db?sslmode=require` |
 
-> `.env` no debe incluirse en el repositorio.
+
 
 ---
 
