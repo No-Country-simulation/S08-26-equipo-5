@@ -2,6 +2,19 @@
 
 API REST para el MVP de MeetFlow. Node.js + Express + Prisma + PostgreSQL (Neon).
 
+## Navegación
+
+- [Stack](#stack)
+- [Arquitectura MVC](#arquitectura-mvc)
+- [Estructura de archivos](#estructura-de-archivos)
+- [Modelo de datos](#modelo-de-datos)
+- [Onboarding](#onboarding)
+- [Comandos](#comandos)
+- [Variables de entorno](#variables-de-entorno)
+- [Convenciones](#convenciones)
+
+---
+
 ## Stack
 
 | Componente    | Tecnología        |
@@ -11,6 +24,63 @@ API REST para el MVP de MeetFlow. Node.js + Express + Prisma + PostgreSQL (Neon)
 | ORM           | Prisma 6          |
 | Base de datos | PostgreSQL (Neon) |
 | Lenguaje      | TypeScript 5      |
+
+---
+
+## Arquitectura MVC
+
+El backend sigue el patrón **Model-View-Controller** para separar responsabilidades:
+
+| Capa           | Responsabilidad                                    | Ubicación          |
+| -------------- | -------------------------------------------------- | ------------------ |
+| **Config**     | Variables de entorno y configuración centralizada  | `src/config/`      |
+| **Models**     | Acceso a datos via Prisma Client                   | `src/models/`      |
+| **Services**   | Lógica de negocio, validaciones, transformaciones  | `src/services/`    |
+| **Controllers**| Reciben HTTP, validan input, delegan a services    | `src/controllers/` |
+| **Routes**     | Definen endpoints y métodos HTTP                   | `src/routes/`      |
+| **Middlewares**| Cross-cutting: auth, logging, error handling       | `src/middlewares/` |
+
+**Flujo de una request:**
+
+```
+HTTP Request → Router → Middleware(s) → Controller → Service → Model (Prisma) → DB
+                                                                      ↓
+HTTP Response ← Controller ← Service ← Model ←───────────────────────┘
+```
+
+---
+
+## Estructura de archivos
+
+```text
+apps/server/
+├── src/
+│   ├── config/
+│   ├── controllers/
+│   ├── middlewares/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   ├── app.ts          ← Configuración de Express (middlewares, rutas, handlers)
+│   └── server.ts       ← Entry point (listen)
+│
+├── prisma/
+│   ├── migrations/
+│   │   └── 20260908151139_init/
+│   │       └── migration.sql
+│   ├── schema.prisma
+│   └── seed.ts
+│
+├── .env
+├── .env.example
+├── .gitignore
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+└── README.md
+```
+
+---
 
 ## Modelo de datos
 
@@ -85,6 +155,8 @@ erDiagram
 | `Participante` | `usuarioId`           | INDEX  |
 | `Participante` | `salaId`              | INDEX  |
 
+---
+
 ## Onboarding
 
 ### Requisitos
@@ -125,6 +197,8 @@ npx prisma migrate status
 npx prisma studio
 ```
 
+---
+
 ## Comandos
 
 | Comando                     | Descripción                               |
@@ -139,6 +213,8 @@ npx prisma studio
 | `npx prisma generate`       | Regenerar Prisma Client                   |
 | `npx prisma validate`       | Validar el schema de Prisma               |
 
+---
+
 ## Seeds
 
 Los seeds generan datos de prueba para desarrollo.
@@ -151,26 +227,8 @@ Los seeds generan datos de prueba para desarrollo.
 
 Los usuarios de prueba utilizan un mismo hash de contraseña para facilitar las pruebas durante el desarrollo.
 
-> **Nota:** Las credenciales de prueba son únicamente para desarrollo y no deben utilizarse en producción.
 
-## Estructura de archivos
-
-```text
-apps/server/
-├── prisma/
-│   ├── migrations/
-│   │   └── 20260908151139_init/
-│   │       └── migration.sql
-│   ├── schema.prisma
-│   └── seed.ts
-├── src/
-│   └── index.ts
-├── .env.example
-├── .env
-├── package.json
-├── package-lock.json
-└── tsconfig.json
-```
+---
 
 ## Variables de entorno
 
@@ -178,7 +236,9 @@ apps/server/
 | -------------- | ------------------------------- | ------------------------------------------------ |
 | `DATABASE_URL` | Connection string de PostgreSQL | `postgresql://user:pass@host/db?sslmode=require` |
 
-> `.env` no debe incluirse en el repositorio.
+
+
+---
 
 ## Convenciones
 
@@ -189,6 +249,8 @@ apps/server/
 * **Secrets:** nunca commitear `.env`.
 * **Migraciones:** los cambios estructurales de la base de datos deben realizarse mediante migraciones de Prisma.
 
+---
+
 ## Estado actual
 
 Implementación inicial del modelo relacional del MVP:
@@ -198,4 +260,3 @@ Implementación inicial del modelo relacional del MVP:
 * `Participante`
 
 La `Sala` representa la reunión concreta de MeetFlow. El historial se obtiene a partir de las salas finalizadas/canceladas y sus participantes, sin necesidad de una tabla `Historial` independiente.
-
