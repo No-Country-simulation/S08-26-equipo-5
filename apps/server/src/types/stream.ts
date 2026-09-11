@@ -7,6 +7,7 @@ export interface CreateRoomBody {
 export interface GenerateTokenBody {
   userId: string;
   role: RoomRole;
+  callCid: string;
 }
 
 export interface CreateRoomResponse {
