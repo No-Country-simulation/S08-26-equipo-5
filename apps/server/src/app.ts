@@ -1,4 +1,6 @@
 import express from "express";
+import roomsRoutes from "./routes/rooms.routes.js";
+import { errorHandler } from "./middlewares/error-handler.js";
 
 const app = express();
 
@@ -11,22 +13,15 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// ─── API Routes ──────────────────────────────────────────
+app.use("/api", roomsRoutes);
+
 // ─── 404 handler ─────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
 // ─── Error handler ───────────────────────────────────────
-app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error("[ERROR]", err.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
-);
+app.use(errorHandler);
 
 export default app;
