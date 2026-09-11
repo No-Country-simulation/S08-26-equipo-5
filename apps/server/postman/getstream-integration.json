@@ -1,0 +1,309 @@
+{
+  "info": {
+    "name": "MeetFlow — GetStream Integration",
+    "description": "Colección de endpoints para la integración de GetStream Video/Audio con el dominio Sala de MeetFlow.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001"
+    },
+    {
+      "key": "salaId",
+      "value": "",
+      "description": "Se asigna automáticamente tras crear una sala"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Verifica que el servidor está operativo."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 200', () => { pm.response.to.have.status(200); });",
+              "pm.test('Body contiene status ok', () => { const body = pm.response.json(); pm.expect(body.status).to.eql('ok'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Crear Sala",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Reunión Q4\"\n}"
+        },
+        "description": "Crea una sala en GetStream y la persiste en Prisma."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 201', () => { pm.response.to.have.status(201); });",
+              "pm.test('Body contiene salaId, streamRoomId y name', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body).to.have.property('salaId');",
+              "  pm.expect(body).to.have.property('streamRoomId');",
+              "  pm.expect(body).to.have.property('name');",
+              "  pm.environment.set('salaId', body.salaId);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Crear Sala — Nombre vacío",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"\"\n}"
+        },
+        "description": "Debería retornar 400 — nombre vacío."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 400', () => { pm.response.to.have.status(400); });",
+              "pm.test('Body contiene error de validación', () => { const body = pm.response.json(); pm.expect(body.error).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Crear Sala — Nombre >100 chars",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\n}"
+        },
+        "description": "Debería retornar 400 — nombre excede 100 caracteres."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 400', () => { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generar Token",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/{{salaId}}/token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "{{salaId}}", "token"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"user-789\",\n  \"role\": \"HOST\"\n}"
+        },
+        "description": "Genera un token GetStream para un participante de la sala."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 200', () => { pm.response.to.have.status(200); });",
+              "pm.test('Body contiene token', () => { const body = pm.response.json(); pm.expect(body.token).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generar Token — PARTICIPANTE",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/{{salaId}}/token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "{{salaId}}", "token"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"user-456\",\n  \"role\": \"PARTICIPANTE\"\n}"
+        },
+        "description": "Genera un token con permisos de PARTICIPANTE."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 200', () => { pm.response.to.have.status(200); });",
+              "pm.test('Body contiene token', () => { const body = pm.response.json(); pm.expect(body.token).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generar Token — Sala no encontrada",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/00000000-0000-0000-0000-000000000000/token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "00000000-0000-0000-0000-000000000000", "token"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"user-789\",\n  \"role\": \"HOST\"\n}"
+        },
+        "description": "Debería retornar 404 — sala no existe."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 404', () => { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generar Token — userId vacío",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/{{salaId}}/token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "{{salaId}}", "token"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"\",\n  \"role\": \"HOST\"\n}"
+        },
+        "description": "Debería retornar 400 — userId vacío."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 400', () => { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Generar Token — Role inválido",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/rooms/{{salaId}}/token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "rooms", "{{salaId}}", "token"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"user-789\",\n  \"role\": \"INVALID\"\n}"
+        },
+        "description": "Debería retornar 400 — role inválido."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status es 400', () => { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
