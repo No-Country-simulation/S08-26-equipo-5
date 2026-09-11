@@ -188,14 +188,14 @@ Authorization: Bearer <accessToken>
 
 ## 7. GET `/api/v1/health`
 
-Health check del backend y de WebSockets.
+Health check del backend.
 
 **200 OK**
 
 ```json
 {
   "status": "success",
-  "message": "Backend operational & WebSockets ready",
+  "message": "Backend operativo",
   "timestamp": "2026-09-11T21:27:48.535Z"
 }
 ```
