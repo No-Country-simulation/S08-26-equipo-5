@@ -54,7 +54,7 @@ Los errores `400 VALIDATION_ERROR` agregan un arreglo `errors` con el detalle po
 | POST | `/api/v1/auth/register` | No | 201 |
 | POST | `/api/v1/auth/login` | No | 200 |
 | POST | `/api/v1/auth/refresh` | No (el refresh token es la credencial) | 200 |
-| POST | `/api/v1/auth/logout` | Bearer | 200 |
+| POST | `/api/v1/auth/logout` | No (el refresh token es la credencial) | 200 |
 | GET | `/api/v1/health` | No | 200 |
 
 ---
@@ -164,10 +164,14 @@ Renueva la sesión. Es público: el propio `refreshToken` es la credencial.
 
 ## 6. POST `/api/v1/auth/logout`
 
-**Headers**
+Cierra la sesión y **revoca el refresh token** en el servidor (server-side).
 
-```
-Authorization: Bearer <accessToken>
+**Body**
+
+```json
+{
+  "refreshToken": "Vf3k...opaque..."
+}
 ```
 
 **200 OK**
@@ -180,9 +184,11 @@ Authorization: Bearer <accessToken>
 
 **Errores**
 
-- `401 UNAUTHORIZED` — sin header `Authorization` o access token inválido/expirado.
+- `400 VALIDATION_ERROR` — falta `refreshToken` (con `errors[]`).
 
-> Importante: el logout es **stateless** sobre el access token. No invalida el refresh token en el servidor; el frontend debe descartar ambos tokens. La revocación server-side del refresh token queda como pendiente (ver sección 11).
+> El endpoint es **idempotente**: responde 200 aunque el token ya esté revocado, expirado o no exista (no filtra información).
+>
+> El access token sigue siendo stateless: aunque el refresh quede revocado, el access actual es válido hasta su expiración (15m). El frontend debe descartar ambos tokens al cerrar sesión.
 
 ---
 
@@ -273,6 +279,10 @@ export function login(email: string, password: string): Promise<TokenPair> {
 export function refresh(refreshToken: string): Promise<TokenPair> {
   return request<TokenPair>("/auth/refresh", { refreshToken });
 }
+
+export async function logout(refreshToken: string): Promise<void> {
+  await request<{ message: string }>("/auth/logout", { refreshToken });
+}
 ```
 
 ---
@@ -285,11 +295,11 @@ export function refresh(refreshToken: string): Promise<TokenPair> {
 | `login` respuesta | `{accessToken, refreshToken}` | Igual |
 | `POST /auth/refresh` (con rotación) | Definido | Igual (rotación + detección de reuso) |
 | `GET /auth/me` | Definido | No implementado |
-| `POST /auth/logout` | No definido | Implementado (pedido por frontend), stateless |
+| `POST /auth/logout` | No definido | Implementado (pedido por frontend); revoca el refresh token server-side |
 | `errors[]` por campo en 400 | `{errors:[{campo,mensaje}]}` | Igual |
 | Código 500 | `INTERNAL_SERVER_ERROR` | Igual |
 
-Pendientes conocidos: `GET /auth/me`, auto-login en `register` y revocación server-side del refresh token en `logout`.
+Pendientes conocidos: `GET /auth/me` y auto-login en `register`.
 
 Cualquier cambio en esta tabla debe acordarse en un issue/PR antes de modificar el consumo del frontend.
 
@@ -299,5 +309,6 @@ Cualquier cambio en esta tabla debe acordarse en un issue/PR antes de modificar 
 
 | Fecha | Versión | Cambio |
 |-------|---------|--------|
+| 2026-09-11 | 0.3.0 | `POST /auth/logout` revoca el refresh token server-side (recibe `refreshToken` en el body) |
 | 2026-09-11 | 0.2.0 | `POST /auth/refresh` con rotación y detección de reuso; `login` devuelve `refreshToken`; `errors[]` en 400; código `INTERNAL_SERVER_ERROR` |
 | 2026-09-11 | 0.1.0 | Documento inicial de la API de auth implementada |

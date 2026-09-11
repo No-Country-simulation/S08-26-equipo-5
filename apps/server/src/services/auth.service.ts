@@ -102,4 +102,12 @@ export class AuthService {
 
     return { accessToken, refreshToken };
   }
+
+  async logout(token: string) {
+    const record = await this.refreshTokenRepository.findByHash(hashRefreshToken(token));
+
+    if (record && !record.revokedAt) {
+      await this.refreshTokenRepository.revoke(record.id, new Date());
+    }
+  }
 }
