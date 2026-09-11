@@ -20,8 +20,18 @@ export interface RegisterResponse {
   userId: string;
 }
 
+export interface RefreshDto {
+  refreshToken: string;
+}
+
 export interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
+}
+
+export interface RefreshResponse {
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface LogoutResponse {

@@ -27,7 +27,7 @@ export function createApp() {
   app.use("/api/v1/auth", authLimiter, authRoutes);
 
   app.use((_req, _res, next) => {
-    next(new AppError(404, "NOT_FOUND", "Route not found"));
+    next(new AppError(404, "NOT_FOUND", "Recurso no encontrado"));
   });
 
   app.use(errorMiddleware);

@@ -3,10 +3,12 @@ import { AuthController } from "../controllers/auth.controller.js";
 import { validateBody } from "../middlewares/validateBody.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
+import { PrismaRefreshTokenRepository } from "../repositories/refreshToken.repository.js";
 import { AuthService } from "../services/auth.service.js";
 
 const userRepository = new PrismaUserRepository();
-const authService = new AuthService(userRepository);
+const refreshTokenRepository = new PrismaRefreshTokenRepository();
+const authService = new AuthService(userRepository, refreshTokenRepository);
 const authController = new AuthController(authService);
 
 const router = Router();
@@ -32,5 +34,11 @@ router.post(
 );
 
 router.post("/logout", verifyToken, authController.logout.bind(authController));
+
+router.post(
+  "/refresh",
+  validateBody([{ field: "refreshToken", required: true }]),
+  authController.refresh.bind(authController),
+);
 
 export default router;

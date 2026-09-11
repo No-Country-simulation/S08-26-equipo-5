@@ -7,7 +7,7 @@ export function verifyToken(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return next(new AppError(401, "UNAUTHORIZED", "Unauthorized"));
+    return next(new AppError(401, "UNAUTHORIZED", "Token ausente, inválido o expirado"));
   }
 
   const token = authHeader.slice("Bearer ".length);
@@ -17,6 +17,6 @@ export function verifyToken(req: Request, _res: Response, next: NextFunction) {
     req.user = { sub: payload.sub as string, email: payload.email as string };
     next();
   } catch {
-    return next(new AppError(401, "UNAUTHORIZED", "Unauthorized"));
+    return next(new AppError(401, "UNAUTHORIZED", "Token ausente, inválido o expirado"));
   }
 }

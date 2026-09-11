@@ -22,7 +22,16 @@ export class AuthController {
     }
   }
 
+  async refresh(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await this.authService.refresh(req.body.refreshToken);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async logout(_req: Request, res: Response, _next: NextFunction) {
-    res.status(200).json({ message: "Logout successful" });
+    res.status(200).json({ message: "Sesión cerrada exitosamente" });
   }
 }

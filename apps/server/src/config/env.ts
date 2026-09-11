@@ -15,6 +15,7 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
   databaseUrl: requireEnv("DATABASE_URL"),
   jwtSecret: requireEnv("JWT_SECRET"),
-  jwtExpiresIn: (process.env.JWT_EXPIRES_IN ?? "8h") as jwt.SignOptions["expiresIn"],
+  jwtExpiresIn: (process.env.JWT_EXPIRES_IN ?? "15m") as jwt.SignOptions["expiresIn"],
+  refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 7),
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS ?? 12),
 };
