@@ -34,3 +34,6 @@ Thumbs.db
 # Misceláneos
 .cache/
 .tmp/
+
+# Pruebas locales de API (REST Client de VS Code)
+api.http
