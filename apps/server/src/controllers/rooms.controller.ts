@@ -13,7 +13,7 @@ export async function createRoom(
   req: Request<unknown, unknown, CreateRoomBody>,
   res: Response
 ): Promise<void> {
-  const { name } = req.body;
+  const { name, userId } = req.body;
 
   // ── Validación ──────────────────────────────────────────
   if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -25,7 +25,7 @@ export async function createRoom(
   }
 
   // ── Crear sala en GetStream ─────────────────────────────
-  const { streamRoomId } = await createRoomService(name.trim());
+  const { streamRoomId } = await createRoomService(name.trim(), userId);
 
   // ── Persistir en Prisma ─────────────────────────────────
   try {

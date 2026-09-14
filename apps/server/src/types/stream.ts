@@ -2,6 +2,7 @@ export type RoomRole = "HOST" | "PARTICIPANTE";
 
 export interface CreateRoomBody {
   name: string;
+  userId?: string;
 }
 
 export interface GenerateTokenBody {

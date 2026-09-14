@@ -48,10 +48,12 @@ export function initStreamClient(): StreamClient {
 /**
  * Crea una sala de video en GetStream.
  * @param name Nombre de la sala (usado como ID del call)
+ * @param userId ID del usuario que crea la sala (opcional, default "system")
  * @returns Objeto con el streamRoomId (cid) asignado por GetStream
  */
 export async function createRoom(
-  name: string
+  name: string,
+  userId?: string
 ): Promise<{ streamRoomId: string }> {
   const client = initStreamClient();
 
@@ -62,6 +64,7 @@ export async function createRoom(
     const response = await call.getOrCreate({
       data: {
         custom: { name },
+        created_by_id: userId || "system",
       },
     });
 

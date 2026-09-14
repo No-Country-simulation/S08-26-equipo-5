@@ -56,7 +56,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Reunión Q4\"\n}"
+          "raw": "{\n  \"name\": \"Reunión Q4\",\n  \"userId\": \"user-789\"\n}"
         },
         "description": "Crea una sala en GetStream y la persiste en Prisma."
       },
