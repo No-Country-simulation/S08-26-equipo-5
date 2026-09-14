@@ -1,12 +1,15 @@
 import { PrismaClient, RolParticipante, EstadoParticipante, EstadoSala } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
-// Hash simplificado para desarrollo (NO usar en producción)
-const DEV_PASSWORD_HASH = "$2b$10$KxG1kQmHhKz8yQxQxQxQxuQxQxQxQxQxQxQxQxQxQxQxQxQxQx";
+const SEED_PASSWORD = "password123";
+const BCRYPT_SALT_ROUNDS = 10;
 
 async function main() {
   console.log("🌱 Seeding database...");
+
+  const passwordHash = await bcrypt.hash(SEED_PASSWORD, BCRYPT_SALT_ROUNDS);
 
   // ─── Usuarios ──────────────────────────────────────────
   const usuario1 = await prisma.usuario.create({
@@ -14,7 +17,7 @@ async function main() {
       nombre: "Juan",
       apellido: "Pérez",
       email: "juan.perez@test.com",
-      passwordHash: DEV_PASSWORD_HASH,
+      passwordHash,
     },
   });
 
@@ -23,7 +26,7 @@ async function main() {
       nombre: "María",
       apellido: "García",
       email: "maria.garcia@test.com",
-      passwordHash: DEV_PASSWORD_HASH,
+      passwordHash,
     },
   });
 
@@ -32,7 +35,7 @@ async function main() {
       nombre: "Carlos",
       apellido: "López",
       email: "carlos.lopez@test.com",
-      passwordHash: DEV_PASSWORD_HASH,
+      passwordHash,
     },
   });
 
@@ -41,7 +44,7 @@ async function main() {
       nombre: "Ana",
       apellido: "Martínez",
       email: "ana.martinez@test.com",
-      passwordHash: DEV_PASSWORD_HASH,
+      passwordHash,
     },
   });
 
@@ -50,7 +53,7 @@ async function main() {
       nombre: "Pedro",
       apellido: "Rodríguez",
       email: "pedro.rodriguez@test.com",
-      passwordHash: DEV_PASSWORD_HASH,
+      passwordHash,
     },
   });
 

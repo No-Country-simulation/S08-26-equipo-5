@@ -1,32 +1,36 @@
+import cors from "cors";
 import express from "express";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import { env } from "./config/env.js";
+import { errorMiddleware } from "./middlewares/error.middleware.js";
+import authRoutes from "./routes/auth.routes.js";
+import { healthRoutes } from "./routes/health.routes.js";
+import { AppError } from "./utils/AppError.js";
 
-const app = express();
+export function createApp() {
+  const app = express();
 
-// ─── Global Middlewares ──────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+  app.use(helmet());
+  app.use(cors({ origin: env.corsOrigin }));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
-// ─── Health check ────────────────────────────────────────
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 100,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+  });
 
-// ─── 404 handler ─────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ error: "Route not found" });
-});
+  app.use("/api/v1", healthRoutes);
+  app.use("/api/v1/auth", authLimiter, authRoutes);
 
-// ─── Error handler ───────────────────────────────────────
-app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error("[ERROR]", err.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
-);
+  app.use((_req, _res, next) => {
+    next(new AppError(404, "NOT_FOUND", "Recurso no encontrado"));
+  });
 
-export default app;
+  app.use(errorMiddleware);
+
+  return app;
+}

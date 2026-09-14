@@ -1,0 +1,125 @@
+@host = http://localhost:4000/api/v1
+@email = juan.test@test.com
+@password = password123
+
+# Orden pensado para probar el flujo de auth de punta a punta.
+# Los requests dependen del estado que dejan los anteriores (variables @name):
+#   register -> login -> me -> refresh -> login2 -> logout
+# Ejecútalos en orden. Se declara una segunda sesión (login2) para poder
+# revocar de verdad en el logout y además probar su idempotencia.
+
+### 1. Health  -> 200
+GET {{host}}/health
+
+### 2. Register  -> 201  (si repites, da 409; cambia @email)
+# @name register
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 3. Register con email repetido  -> 409 EMAIL_ALREADY_REGISTERED
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 4. Login  -> 200  (guarda accessToken y refreshToken)
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 5. Login con password incorrecta  -> 401 INVALID_CREDENTIALS
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "password-incorrecta"
+}
+
+### 6. Me  -> 200  (perfil del usuario autenticado)
+GET {{host}}/auth/me
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### 7. Me sin token  -> 401 UNAUTHORIZED
+GET {{host}}/auth/me
+
+### 8. Me con token inválido  -> 401 UNAUTHORIZED
+GET {{host}}/auth/me
+Authorization: Bearer token-de-mentira
+
+### 9. Refresh  -> 200  (rota el par de tokens)
+# @name refresh
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.$.refreshToken}}"
+}
+
+### 10. Refresh con el token VIEJO  -> 401 (reuso; además revoca la familia)
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.$.refreshToken}}"
+}
+
+### 11. Refresh sin token  -> 400 VALIDATION_ERROR con errors[]
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{}
+
+### 12. Login 2  -> 200  (segunda sesión, para revocar en el logout)
+# @name login2
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 13. Logout  -> 200  (revoca el refresh token de login2)
+POST {{host}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login2.response.body.$.refreshToken}}"
+}
+
+### 14. Logout repetido  -> 200 (idempotente, no falla aunque ya esté revocado)
+POST {{host}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login2.response.body.$.refreshToken}}"
+}
+
+### 15. Refresh tras logout  -> 401 (token revocado server-side)
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login2.response.body.$.refreshToken}}"
+}
+
+### 16. 404
+GET {{host}}/no-existe
