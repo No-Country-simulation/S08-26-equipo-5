@@ -336,7 +336,223 @@ export async function me(accessToken: string): Promise<Me> {
 
 ---
 
-## 12. Diferencias con el contrato general
+## 12. Flujos por endpoint (PlantUML)
+
+Diagramas de actividad de cada endpoint. Se pueden renderizar con la extensión
+PlantUML de VS Code o en https://www.plantuml.com/plantuml.
+
+### 12.1 `POST /auth/register`
+
+```plantuml
+@startuml
+start
+
+:Persona proporciona nombre,\napellido, correo y contraseña;
+
+:Sistema valida que los campos\nexistan y cumplan las reglas;
+
+if (¿Datos válidos?) then (No)
+    :Rechazar con 400 VALIDATION_ERROR;
+    stop
+else (Sí)
+endif
+
+:Sistema verifica que el correo\nno esté registrado;
+
+if (¿Correo ya registrado?) then (Sí)
+    :Rechazar con 409 EMAIL_ALREADY_REGISTERED;
+    stop
+else (No)
+endif
+
+:Sistema hashea la contraseña con bcrypt;
+
+:Crear Usuario;
+
+:Responder 201 {message, userId};
+
+stop
+@enduml
+```
+
+### 12.2 `POST /auth/login`
+
+```plantuml
+@startuml
+start
+
+:Persona proporciona correo y contraseña;
+
+:Sistema valida los campos;
+
+if (¿Datos válidos?) then (No)
+    :Rechazar con 400 VALIDATION_ERROR;
+    stop
+else (Sí)
+endif
+
+:Sistema busca el usuario por correo;
+
+if (¿Usuario existe?) then (No)
+    :Rechazar con 401 INVALID_CREDENTIALS;
+    stop
+else (Sí)
+endif
+
+:Sistema compara la contraseña con el hash;
+
+if (¿Coincide?) then (No)
+    :Rechazar con 401 INVALID_CREDENTIALS;
+    stop
+else (Sí)
+endif
+
+:Generar access token (JWT, 15m);
+
+:Generar refresh token opaco;\nguardar solo su hash SHA-256;
+
+:Responder 200 {accessToken, refreshToken};
+
+stop
+@enduml
+```
+
+### 12.3 `GET /auth/me`
+
+```plantuml
+@startuml
+start
+
+:Cliente envía GET /auth/me con\nAuthorization: Bearer <accessToken>;
+
+:Sistema verifica el JWT;
+
+if (¿Token válido?) then (No)
+    :Rechazar con 401 UNAUTHORIZED;
+    stop
+else (Sí)
+endif
+
+:Sistema busca el usuario por el\nsub del token;
+
+if (¿Usuario existe?) then (No)
+    :Rechazar con 404 USER_NOT_FOUND;
+    stop
+else (Sí)
+endif
+
+:Responder 200 {id, nombre, apellido, email};
+
+stop
+@enduml
+```
+
+### 12.4 `POST /auth/refresh`
+
+```plantuml
+@startuml
+start
+
+:Cliente envía refreshToken;
+
+:Sistema valida el campo;
+
+if (¿Campo presente?) then (No)
+    :Rechazar con 400 VALIDATION_ERROR;
+    stop
+else (Sí)
+endif
+
+:Sistema busca el token por su hash SHA-256;
+
+if (¿Token existe?) then (No)
+    :Rechazar con 401 INVALID_REFRESH_TOKEN;
+    stop
+else (Sí)
+endif
+
+if (¿Token ya revocado?) then (Sí)
+    :Revocar toda la familia de tokens\n(posible robo);
+    :Rechazar con 401 INVALID_REFRESH_TOKEN;
+    stop
+else (No)
+endif
+
+if (¿Token expiró?) then (Sí)
+    :Rechazar con 401 INVALID_REFRESH_TOKEN;
+    stop
+else (No)
+endif
+
+:Sistema busca el usuario del token;
+
+if (¿Usuario existe?) then (No)
+    :Rechazar con 401 INVALID_REFRESH_TOKEN;
+    stop
+else (Sí)
+endif
+
+:Revocar el refresh token usado;
+
+:Generar nuevo access token;
+
+:Generar nuevo refresh token\n(misma familia) y guardar su hash;
+
+:Responder 200 {accessToken, refreshToken};
+
+stop
+@enduml
+```
+
+### 12.5 `POST /auth/logout`
+
+```plantuml
+@startuml
+start
+
+:Cliente envía refreshToken;
+
+:Sistema valida el campo;
+
+if (¿Campo presente?) then (No)
+    :Rechazar con 400 VALIDATION_ERROR;
+    stop
+else (Sí)
+endif
+
+:Sistema busca el token por su hash SHA-256;
+
+if (¿Token existe y no está revocado?) then (Sí)
+    :Revocar el refresh token;
+else (No)
+    :No hacer nada\n(idempotente, no revela información);
+endif
+
+:Responder 200 {message};
+
+stop
+@enduml
+```
+
+### 12.6 `GET /health`
+
+```plantuml
+@startuml
+start
+
+:Cliente envía GET /health;
+
+:Sistema verifica que el backend esté operativo;
+
+:Responder 200 {status, message, timestamp};
+
+stop
+@enduml
+```
+
+---
+
+## 13. Diferencias con el contrato general
 
 | Tema | Contrato general | Implementación actual |
 |------|------------------|------------------------|
@@ -358,6 +574,7 @@ Cualquier cambio en esta tabla debe acordarse en un issue/PR antes de modificar 
 
 | Fecha | Versión | Cambio |
 |-------|---------|--------|
+| 2026-09-14 | 0.5.0 | Diagramas de flujo (PlantUML) por endpoint y `api_auth.http` reordenado por flujo |
 | 2026-09-14 | 0.4.0 | `GET /auth/me` devuelve el perfil del usuario autenticado |
 | 2026-09-11 | 0.3.0 | `POST /auth/logout` revoca el refresh token server-side (recibe `refreshToken` en el body) |
 | 2026-09-11 | 0.2.0 | `POST /auth/refresh` con rotación y detección de reuso; `login` devuelve `refreshToken`; `errors[]` en 400; código `INTERNAL_SERVER_ERROR` |
