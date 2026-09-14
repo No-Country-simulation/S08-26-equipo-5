@@ -37,3 +37,10 @@ export interface RefreshResponse {
 export interface LogoutResponse {
   message: string;
 }
+
+export interface MeResponse {
+  id: string;
+  nombre: string;
+  apellido: string;
+  email: string;
+}

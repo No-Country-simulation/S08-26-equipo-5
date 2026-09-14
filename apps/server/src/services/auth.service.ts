@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import type { IUserRepository } from "../repositories/user.repository.js";
 import type { IRefreshTokenRepository } from "../repositories/refreshToken.repository.js";
-import type { JwtPayload, LoginDto, RegisterDto } from "../types/auth.types.js";
+import type { JwtPayload, LoginDto, MeResponse, RegisterDto } from "../types/auth.types.js";
 import { AppError } from "../utils/AppError.js";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken.js";
 
@@ -109,5 +109,19 @@ export class AuthService {
     if (record && !record.revokedAt) {
       await this.refreshTokenRepository.revoke(record.id, new Date());
     }
+  }
+
+  async me(userId: string): Promise<MeResponse> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new AppError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+    }
+
+    return {
+      id: user.id,
+      nombre: user.nombre,
+      apellido: user.apellido,
+      email: user.email,
+    };
   }
 }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller.js";
 import { validateBody } from "../middlewares/validateBody.js";
+import { verifyToken } from "../middlewares/verifyToken.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
 import { PrismaRefreshTokenRepository } from "../repositories/refreshToken.repository.js";
 import { AuthService } from "../services/auth.service.js";
@@ -31,6 +32,8 @@ router.post(
   ]),
   authController.login.bind(authController),
 );
+
+router.get("/me", verifyToken, authController.me.bind(authController));
 
 router.post(
   "/logout",

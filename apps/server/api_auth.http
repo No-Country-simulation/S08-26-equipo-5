@@ -1,0 +1,81 @@
+@host = http://localhost:4000/api/v1
+@email = juan.test@test.com
+@password = password123
+
+### Health
+GET {{host}}/health
+
+### Registrar usuario  (si repites, da 409; cambia @email)
+# @name register
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Login  (guarda los tokens)
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Me  (perfil del usuario autenticado)
+GET {{host}}/auth/me
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### Me sin token  → 401 UNAUTHORIZED
+GET {{host}}/auth/me
+
+### Me con token inválido  → 401 UNAUTHORIZED
+GET {{host}}/auth/me
+Authorization: Bearer token-de-mentira
+
+### Refresh  (rota el par de tokens)
+# @name refresh
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.$.refreshToken}}"
+}
+
+### Refresh con token VIEJO  → 401 (reuso; además revoca la familia)
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.$.refreshToken}}"
+}
+
+### Refresh sin token  → 400 con errors[]
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{}
+
+### Logout  (revoca el refresh token del login)
+POST {{host}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.$.refreshToken}}"
+}
+
+### Refresh tras logout  → 401 (token revocado)
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.$.refreshToken}}"
+}
+
+### 404
+GET {{host}}/no-existe
