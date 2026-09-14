@@ -42,6 +42,7 @@ Los errores `400 VALIDATION_ERROR` agregan un arreglo `errors` con el detalle po
 | 401 | `INVALID_REFRESH_TOKEN` | El refresh token es inválido, expiró o ya fue usado |
 | 401 | `UNAUTHORIZED` | Falta el header `Authorization` o el access token es inválido/expirado |
 | 404 | `NOT_FOUND` | Ruta inexistente |
+| 404 | `USER_NOT_FOUND` | El usuario del token ya no existe |
 | 409 | `EMAIL_ALREADY_REGISTERED` | El email ya está registrado |
 | 500 | `INTERNAL_SERVER_ERROR` | Error inesperado del servidor |
 
@@ -53,6 +54,7 @@ Los errores `400 VALIDATION_ERROR` agregan un arreglo `errors` con el detalle po
 |--------|------|------|-------|
 | POST | `/api/v1/auth/register` | No | 201 |
 | POST | `/api/v1/auth/login` | No | 200 |
+| GET | `/api/v1/auth/me` | Bearer access token | 200 |
 | POST | `/api/v1/auth/refresh` | No (el refresh token es la credencial) | 200 |
 | POST | `/api/v1/auth/logout` | No (el refresh token es la credencial) | 200 |
 | GET | `/api/v1/health` | No | 200 |
@@ -130,7 +132,34 @@ Inicia sesión y devuelve un par de tokens.
 
 ---
 
-## 5. POST `/api/v1/auth/refresh`
+## 5. GET `/api/v1/auth/me`
+
+Devuelve el perfil del usuario autenticado. Es la forma de restaurar la sesión
+al recargar y de validar que el `accessToken` sigue vigente.
+
+**Auth:** requiere `Authorization: Bearer <accessToken>`. No recibe body ni query.
+
+**200 OK**
+
+```json
+{
+  "id": "clx123abc...",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "juan@test.com"
+}
+```
+
+**Errores**
+
+- `401 UNAUTHORIZED` — falta el header `Authorization`, no empieza con `Bearer `, o el token es inválido/expirado.
+- `404 USER_NOT_FOUND` — el `sub` del token no corresponde a un usuario existente.
+
+> Nunca se devuelve `passwordHash`.
+
+---
+
+## 6. POST `/api/v1/auth/refresh`
 
 Renueva la sesión. Es público: el propio `refreshToken` es la credencial.
 
@@ -162,7 +191,7 @@ Renueva la sesión. Es público: el propio `refreshToken` es la credencial.
 
 ---
 
-## 6. POST `/api/v1/auth/logout`
+## 7. POST `/api/v1/auth/logout`
 
 Cierra la sesión y **revoca el refresh token** en el servidor (server-side).
 
@@ -192,7 +221,7 @@ Cierra la sesión y **revoca el refresh token** en el servidor (server-side).
 
 ---
 
-## 7. GET `/api/v1/health`
+## 8. GET `/api/v1/health`
 
 Health check del backend.
 
@@ -208,7 +237,7 @@ Health check del backend.
 
 ---
 
-## 8. Tokens
+## 9. Tokens
 
 **Access token (JWT)**
 
@@ -234,7 +263,7 @@ Health check del backend.
 
 ---
 
-## 9. Reglas de seguridad aplicadas
+## 10. Reglas de seguridad aplicadas
 
 - Contraseñas hasheadas con **bcrypt** (`BCRYPT_SALT_ROUNDS`, por defecto 12). Nunca se devuelve el hash.
 - Rate limit solo en `/api/v1/auth`: **100 requests / 15 min por IP**.
@@ -243,7 +272,7 @@ Health check del backend.
 
 ---
 
-## 10. Ejemplo de consumo (TypeScript)
+## 11. Ejemplo de consumo (TypeScript)
 
 ```ts
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
@@ -283,23 +312,43 @@ export function refresh(refreshToken: string): Promise<TokenPair> {
 export async function logout(refreshToken: string): Promise<void> {
   await request<{ message: string }>("/auth/logout", { refreshToken });
 }
+
+export interface Me {
+  id: string;
+  nombre: string;
+  apellido: string;
+  email: string;
+}
+
+export async function me(accessToken: string): Promise<Me> {
+  const res = await fetch(`${API_URL}/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const { error } = (await res.json()) as ApiError;
+    throw new Error(error.message);
+  }
+
+  return (await res.json()) as Me;
+}
 ```
 
 ---
 
-## 11. Diferencias con el contrato general
+## 12. Diferencias con el contrato general
 
 | Tema | Contrato general | Implementación actual |
 |------|------------------|------------------------|
 | `register` respuesta | `{id, nombre, apellido, email, accessToken}` (auto-login) | `{message, userId}` (sin token) |
 | `login` respuesta | `{accessToken, refreshToken}` | Igual |
 | `POST /auth/refresh` (con rotación) | Definido | Igual (rotación + detección de reuso) |
-| `GET /auth/me` | Definido | No implementado |
+| `GET /auth/me` | Definido | Igual (`401 UNAUTHORIZED` / `404 USER_NOT_FOUND`) |
 | `POST /auth/logout` | No definido | Implementado (pedido por frontend); revoca el refresh token server-side |
 | `errors[]` por campo en 400 | `{errors:[{campo,mensaje}]}` | Igual |
 | Código 500 | `INTERNAL_SERVER_ERROR` | Igual |
 
-Pendientes conocidos: `GET /auth/me` y auto-login en `register`.
+Pendientes conocidos: auto-login en `register`.
 
 Cualquier cambio en esta tabla debe acordarse en un issue/PR antes de modificar el consumo del frontend.
 
@@ -309,6 +358,7 @@ Cualquier cambio en esta tabla debe acordarse en un issue/PR antes de modificar 
 
 | Fecha | Versión | Cambio |
 |-------|---------|--------|
+| 2026-09-14 | 0.4.0 | `GET /auth/me` devuelve el perfil del usuario autenticado |
 | 2026-09-11 | 0.3.0 | `POST /auth/logout` revoca el refresh token server-side (recibe `refreshToken` en el body) |
 | 2026-09-11 | 0.2.0 | `POST /auth/refresh` con rotación y detección de reuso; `login` devuelve `refreshToken`; `errors[]` en 400; código `INTERNAL_SERVER_ERROR` |
 | 2026-09-11 | 0.1.0 | Documento inicial de la API de auth implementada |
