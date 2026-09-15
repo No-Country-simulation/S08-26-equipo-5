@@ -92,7 +92,7 @@ describe("stream.service", () => {
 
       expect(result).toEqual({ streamRoomId: mockCid });
       expect(mockGetOrCreate).toHaveBeenCalledWith({
-        data: { custom: { name: "Sala Reunión" } },
+        data: { custom: { name: "Sala Reunión" }, created_by_id: "system" },
       });
     });
 

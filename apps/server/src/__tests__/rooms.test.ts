@@ -1,5 +1,18 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import request from "supertest";
+import { vi } from "vitest";
+
+// ─── Mock env module BEFORE any other imports ───────────────
+vi.mock("../config/env.js", () => ({
+  env: {
+    port: 4000,
+    nodeEnv: "test",
+    corsOrigin: "*",
+    databaseUrl: "postgresql://test:test@localhost:5432/test",
+    jwtSecret: "test-jwt-secret",
+    jwtExpiresIn: "15m",
+    refreshTokenTtlDays: 7,
+    bcryptSaltRounds: 12,
+  },
+}));
 
 // ─── Mock Prisma ──────────────────────────────────────────
 const { mockSalaCreate, mockSalaFindUnique } = vi.hoisted(() => ({
@@ -16,51 +29,37 @@ vi.mock("@prisma/client", () => ({
   })),
 }));
 
-// ─── Mock @stream-io/node-sdk ──────────────────────────────
-const { mockGetOrCreate, mockGenerateCallToken } = vi.hoisted(() => ({
-  mockGetOrCreate: vi.fn(),
-  mockGenerateCallToken: vi.fn(),
+// ─── Mock stream.service ──────────────────────────────────
+const { mockCreateRoom, mockGenerateToken } = vi.hoisted(() => ({
+  mockCreateRoom: vi.fn(),
+  mockGenerateToken: vi.fn(),
 }));
 
-vi.mock("@stream-io/node-sdk", () => ({
-  StreamClient: vi.fn().mockImplementation(() => ({
-    video: {
-      call: vi.fn().mockReturnValue({
-        getOrCreate: mockGetOrCreate,
-      }),
-    },
-    generateCallToken: mockGenerateCallToken,
-  })),
+vi.mock("../services/stream.service.js", () => ({
+  createRoom: (...args: unknown[]) => mockCreateRoom(...args),
+  generateToken: (...args: unknown[]) => mockGenerateToken(...args),
+  resetStreamClient: vi.fn(),
 }));
 
 // ─── Imports después de los mocks ──────────────────────────
-import app from "../app.js";
-import { resetStreamClient } from "../services/stream.service.js";
+import { describe, it, expect, beforeEach } from "vitest";
+import request from "supertest";
+import { createApp } from "../app.js";
+
+const app = createApp();
 
 describe("Rooms API — Integración", () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    resetStreamClient();
-    process.env = {
-      ...originalEnv,
-      GETSTREAM_API_KEY: "test-key",
-      GETSTREAM_API_SECRET: "test-secret",
-    };
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  // ─── GET /health ────────────────────────────────────────
-  describe("GET /health", () => {
-    it("debería retornar 200 con status ok", async () => {
-      const res = await request(app).get("/health");
+  // ─── GET /api/v1/health ─────────────────────────────────
+  describe("GET /api/v1/health", () => {
+    it("debería retornar 200 con status success", async () => {
+      const res = await request(app).get("/api/v1/health");
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe("ok");
+      expect(res.body.status).toBe("success");
       expect(res.body.timestamp).toBeDefined();
     });
   });
@@ -75,9 +74,7 @@ describe("Rooms API — Integración", () => {
     };
 
     beforeEach(() => {
-      mockGetOrCreate.mockResolvedValue({
-        call: { cid: mockCid, id: "abc-123", type: "default" },
-      });
+      mockCreateRoom.mockResolvedValue({ streamRoomId: mockCid });
       mockSalaCreate.mockResolvedValue(mockSala);
     });
 
@@ -92,7 +89,7 @@ describe("Rooms API — Integración", () => {
         streamRoomId: mockCid,
         name: "Reunión Q4",
       });
-      expect(mockGetOrCreate).toHaveBeenCalled();
+      expect(mockCreateRoom).toHaveBeenCalledWith("Reunión Q4", undefined);
       expect(mockSalaCreate).toHaveBeenCalledWith({
         data: {
           nombre: "Reunión Q4",
@@ -111,7 +108,7 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("name");
-      expect(mockGetOrCreate).not.toHaveBeenCalled();
+      expect(mockCreateRoom).not.toHaveBeenCalled();
       expect(mockSalaCreate).not.toHaveBeenCalled();
     });
 
@@ -122,12 +119,12 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("100");
-      expect(mockGetOrCreate).not.toHaveBeenCalled();
+      expect(mockCreateRoom).not.toHaveBeenCalled();
       expect(mockSalaCreate).not.toHaveBeenCalled();
     });
 
     it("debería retornar 500 si GetStream falla", async () => {
-      mockGetOrCreate.mockRejectedValue(new Error("Rate limit exceeded"));
+      mockCreateRoom.mockRejectedValue(new Error("GetStream createCall failed: Rate limit exceeded"));
 
       const res = await request(app)
         .post("/api/rooms")
@@ -149,7 +146,7 @@ describe("Rooms API — Integración", () => {
     };
 
     beforeEach(() => {
-      mockGenerateCallToken.mockReturnValue(mockToken);
+      mockGenerateToken.mockReturnValue(mockToken);
     });
 
     it("debería generar token exitosamente (200)", async () => {
@@ -161,11 +158,7 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.token).toBe(mockToken);
-      expect(mockGenerateCallToken).toHaveBeenCalledWith({
-        user_id: "user-789",
-        call_cids: ["default:abc-123"],
-        role: "admin",
-      });
+      expect(mockGenerateToken).toHaveBeenCalledWith("user-789", "HOST", "default:abc-123");
     });
 
     it("debería generar token para PARTICIPANTE (200)", async () => {
@@ -177,11 +170,7 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.token).toBe(mockToken);
-      expect(mockGenerateCallToken).toHaveBeenCalledWith({
-        user_id: "user-456",
-        call_cids: ["default:abc-123"],
-        role: "user",
-      });
+      expect(mockGenerateToken).toHaveBeenCalledWith("user-456", "PARTICIPANTE", "default:abc-123");
     });
 
     it("debería retornar 404 si sala no existe", async () => {
@@ -193,7 +182,7 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(404);
       expect(res.body.error).toContain("Sala no encontrada");
-      expect(mockGenerateCallToken).not.toHaveBeenCalled();
+      expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 
     it("debería retornar 400 si userId está vacío", async () => {
@@ -205,7 +194,7 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("userId");
-      expect(mockGenerateCallToken).not.toHaveBeenCalled();
+      expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 
     it("debería retornar 400 si role es inválido", async () => {
@@ -219,7 +208,7 @@ describe("Rooms API — Integración", () => {
       expect(res.body.error).toContain("role");
       expect(res.body.error).toContain("HOST");
       expect(res.body.error).toContain("PARTICIPANTE");
-      expect(mockGenerateCallToken).not.toHaveBeenCalled();
+      expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 
     it("debería retornar 409 si streamRoomId es null", async () => {
@@ -234,7 +223,7 @@ describe("Rooms API — Integración", () => {
 
       expect(res.status).toBe(409);
       expect(res.body.error).toContain("no sincronizada");
-      expect(mockGenerateCallToken).not.toHaveBeenCalled();
+      expect(mockGenerateToken).not.toHaveBeenCalled();
     });
   });
 
@@ -244,7 +233,10 @@ describe("Rooms API — Integración", () => {
       const res = await request(app).get("/api/no-existe");
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe("Route not found");
+      expect(res.body.error).toEqual({
+        code: "NOT_FOUND",
+        message: "Recurso no encontrado",
+      });
     });
   });
 });
