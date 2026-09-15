@@ -1,11 +1,98 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+
+  --ux-color-primary-50: #eff6ff;
+  --ux-color-primary-100: #dbeafe;
+  --ux-color-primary-500: #3b82f6;
+  --ux-color-primary-600: #2563eb;
+  --ux-color-primary-700: #1d4ed8;
+  --ux-color-neutral-50: #f8fafc;
+  --ux-color-neutral-100: #f1f5f9;
+  --ux-color-neutral-200: #e2e8f0;
+  --ux-color-neutral-500: #64748b;
+  --ux-color-neutral-700: #334155;
+  --ux-color-neutral-900: #0f172a;
+  --ux-color-success-600: #16a34a;
+  --ux-color-danger-600: #dc2626;
+
+
+  --ux-color-background: var(--ux-color-neutral-50);
+  --ux-color-surface: #ffffff;
+  --ux-color-foreground: var(--ux-color-neutral-900);
+  --ux-color-muted-foreground: var(--ux-color-neutral-500);
+  --ux-color-border: var(--ux-color-neutral-200);
+  --ux-color-primary: var(--ux-color-primary-600);
+  --ux-color-primary-foreground: #ffffff;
+
+  --ux-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --ux-font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --ux-space-1: 0.25rem;
+  --ux-space-2: 0.5rem;
+  --ux-space-3: 0.75rem;
+  --ux-space-4: 1rem;
+  --ux-space-6: 1.5rem;
+  --ux-space-8: 2rem;
+  --ux-radius-sm: 0.375rem;
+  --ux-radius-md: 0.5rem;
+  --ux-radius-button: var(--ux-radius-md);
+  --ux-radius-card: 0.75rem;
+  --ux-shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.1);
+  --ux-shadow-focus: 0 0 0 3px rgb(59 130 246 / 0.3);
+}
+
+@theme inline {
+  --color-background: var(--ux-color-background);
+  --color-surface: var(--ux-color-surface);
+  --color-foreground: var(--ux-color-foreground);
+  --color-muted-foreground: var(--ux-color-muted-foreground);
+  --color-border: var(--ux-color-border);
+  --color-primary: var(--ux-color-primary);
+  --color-primary-50: var(--ux-color-primary-50);
+  --color-primary-100: var(--ux-color-primary-100);
+  --color-primary-500: var(--ux-color-primary-500);
+  --color-primary-700: var(--ux-color-primary-700);
+  --color-primary-foreground: var(--ux-color-primary-foreground);
+  --color-success: var(--ux-color-success-600);
+  --color-danger: var(--ux-color-danger-600);
+  --color-neutral-50: var(--ux-color-neutral-50);
+  --color-neutral-100: var(--ux-color-neutral-100);
+  --color-neutral-200: var(--ux-color-neutral-200);
+  --color-neutral-500: var(--ux-color-neutral-500);
+  --color-neutral-700: var(--ux-color-neutral-700);
+  --color-neutral-900: var(--ux-color-neutral-900);
+  --font-sans: var(--ux-font-sans);
+  --font-mono: var(--ux-font-mono);
+  --spacing-1: var(--ux-space-1);
+  --spacing-2: var(--ux-space-2);
+  --spacing-3: var(--ux-space-3);
+  --spacing-4: var(--ux-space-4);
+  --spacing-6: var(--ux-space-6);
+  --spacing-8: var(--ux-space-8);
+  --radius-button: var(--ux-radius-button);
+  --radius-card: var(--ux-radius-card);
+  --shadow-card: var(--ux-shadow-card);
+  --shadow-focus: var(--ux-shadow-focus);
+}
+
+@layer base {
+  * {
+    border-color: var(--ux-color-border);
+  }
+
+  body {
+    background: var(--ux-color-background);
+    color: var(--ux-color-foreground);
+    font-family: var(--ux-font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ux-color-primary);
+    outline-offset: 2px;
+    box-shadow: var(--ux-shadow-focus);
+  }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  margin: 0;
 }
