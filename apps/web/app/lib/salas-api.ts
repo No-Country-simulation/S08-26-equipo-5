@@ -8,12 +8,6 @@ export type Sala = {
   estado: string;
 };
 
-export type JoinParticipantResponse = {
-  participanteId: string;
-  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO";
-  message?: string;
-};
-
 type ApiErrorResponse = {
   error?: {
     message?: string;
@@ -22,10 +16,6 @@ type ApiErrorResponse = {
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
-
-export function getRealtimeUrl() {
-  return new URL(API_URL).origin;
-}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
@@ -56,21 +46,4 @@ export function createSala(input: {
 
 export function getSalaByCode(code: string): Promise<Sala> {
   return request<Sala>(`/salas/${encodeURIComponent(code)}`);
-}
-
-export function requestSalaJoin(
-  code: string,
-  input: {
-    nombre: string;
-    apellido: string;
-    email: string;
-  },
-): Promise<JoinParticipantResponse> {
-  return request<JoinParticipantResponse>(
-    `/salas/${encodeURIComponent(code)}/join`,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
 }
