@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
@@ -30,7 +31,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export default function WaitingRoomPage() {
+function WaitingRoomContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get("code")?.trim().toUpperCase() ?? "";
   const isDemo = searchParams.get("demo") === "true" || code === "DEMO-123";
@@ -136,6 +137,7 @@ export default function WaitingRoomPage() {
             ),
           );
         }
+
       }
     }
 
@@ -152,6 +154,7 @@ export default function WaitingRoomPage() {
       return;
     }
 
+    const salaCode = sala.codigo;
     const socket = io(`${getRealtimeUrl()}/reuniones`, {
       transports: ["websocket"],
       autoConnect: false,
@@ -159,7 +162,7 @@ export default function WaitingRoomPage() {
     socketRef.current = socket;
 
     function belongsToSala(payload: { sala?: { codigo?: string } }) {
-      return !payload.sala?.codigo || payload.sala.codigo === sala.codigo;
+      return !payload.sala?.codigo || payload.sala.codigo === salaCode;
     }
 
     socket.on("join:approved", (payload: JoinApprovedPayload) => {
@@ -413,5 +416,13 @@ export default function WaitingRoomPage() {
         </div>
       )}
     </section>
+  );
+}
+
+export default function WaitingRoomPage() {
+  return (
+    <Suspense fallback={<section>Cargando waiting room...</section>}>
+      <WaitingRoomContent />
+    </Suspense>
   );
 }

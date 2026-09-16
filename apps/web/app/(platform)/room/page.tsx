@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { useEffect, useRef, useState } from "react";
 
-export default function RoomPage() {
+function RoomContent() {
   const searchParams = useSearchParams();
   const isDemo = searchParams.get("demo") === "true" || searchParams.get("code") === "DEMO-123";
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -139,5 +140,13 @@ export default function RoomPage() {
         </aside>
       </div>
     </section>
+  );
+}
+
+export default function RoomPage() {
+  return (
+    <Suspense fallback={<section>Cargando sala...</section>}>
+      <RoomContent />
+    </Suspense>
   );
 }
