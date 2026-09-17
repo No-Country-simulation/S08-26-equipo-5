@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { env } from "./config/env.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
+import roomsRoutes from "./routes/rooms.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { AppError } from "./utils/AppError.js";
@@ -23,13 +24,17 @@ export function createApp() {
     legacyHeaders: false,
   });
 
+  // ─── API Routes ──────────────────────────────────────────
   app.use("/api/v1", healthRoutes);
   app.use("/api/v1/auth", authLimiter, authRoutes);
+  app.use("/api", roomsRoutes);
 
+  // ─── 404 handler ─────────────────────────────────────────
   app.use((_req, _res, next) => {
     next(new AppError(404, "NOT_FOUND", "Recurso no encontrado"));
   });
 
+  // ─── Error handler ───────────────────────────────────────
   app.use(errorMiddleware);
 
   return app;

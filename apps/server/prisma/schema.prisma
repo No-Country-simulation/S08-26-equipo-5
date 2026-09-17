@@ -63,6 +63,7 @@ model Sala {
   fechaInicio    DateTime
   fechaFin       DateTime?
   estado         EstadoSala
+  streamRoomId   String?          // GetStream room ID
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   participantes  Participante[]
