@@ -51,6 +51,16 @@ docker compose up --build
 
 El CI (`.github/workflows/docker.yml`) construye los targets de desarrollo y producción en cada PR que toque `apps/`.
 
+## Despliegue continuo (CD)
+
+Al hacer merge a `main` (con cambios en `apps/`), `.github/workflows/deploy.yml`:
+
+- aplica las migraciones de Prisma contra Neon,
+- despliega la API en **Render** (`render.yaml`, Docker target `runner`),
+- despliega el frontend en **Vercel** (CLI, plan Hobby).
+
+Guía completa, secrets requeridos y notas del plan gratuito: [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 
 ## Ramas / Flujo de trabajo
 
