@@ -1,0 +1,38 @@
+[
+  {
+    "id": "agenda-001",
+    "title": "Daily de producto",
+    "description": "Seguimiento del avance del equipo y próximos entregables.",
+    "startAt": "2026-09-17T09:00:00-03:00",
+    "endAt": "2026-09-17T09:30:00-03:00",
+    "status": "completed",
+    "roomCode": "PRO-901"
+  },
+  {
+    "id": "agenda-002",
+    "title": "Planning sprint S2",
+    "description": "Definición de objetivos y tareas del próximo sprint.",
+    "startAt": "2026-09-17T15:00:00-03:00",
+    "endAt": "2026-09-17T16:00:00-03:00",
+    "status": "scheduled",
+    "roomCode": "SPR-204"
+  },
+  {
+    "id": "agenda-003",
+    "title": "Revisión de diseño",
+    "description": "Revisión de la nueva experiencia del dashboard.",
+    "startAt": "2026-09-18T11:30:00-03:00",
+    "endAt": "2026-09-18T12:15:00-03:00",
+    "status": "scheduled",
+    "roomCode": "UXD-318"
+  },
+  {
+    "id": "agenda-004",
+    "title": "Demo con stakeholders",
+    "description": "Presentación de avances y recopilación de feedback.",
+    "startAt": "2026-09-19T10:00:00-03:00",
+    "endAt": "2026-09-19T11:00:00-03:00",
+    "status": "scheduled",
+    "roomCode": "DEM-442"
+  }
+]
