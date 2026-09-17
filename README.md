@@ -51,9 +51,16 @@ docker compose up --build
 
 El CI (`.github/workflows/docker.yml`) construye los targets de desarrollo y producción en cada PR que toque `apps/`.
 
+## Despliegues
+
+| Componente | URL |
+| ---------- | --- |
+| Frontend (Vercel) | https://web-ruddy-mu-22.vercel.app |
+| API health (Render) | https://meetflow-server-tm9i.onrender.com/api/v1/health |
+
 ## Despliegue continuo (CD)
 
-Al hacer merge a `main` (con cambios en `apps/`), `.github/workflows/deploy.yml`:
+Al hacer push a `develop` (con cambios en `apps/`), `.github/workflows/deploy.yml`:
 
 - aplica las migraciones de Prisma contra Neon,
 - despliega la API en **Render** (`render.yaml`, Docker target `runner`),
