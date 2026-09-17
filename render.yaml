@@ -1,0 +1,41 @@
+# Render Blueprint - CD del backend (Docker).
+# Docs: https://render.com/docs/blueprint-spec
+#
+# El frontend se despliega en Vercel (apps/web/vercel.json + workflow).
+# Este Blueprint crea el Web Service del backend usando el target `runner`
+# del Dockerfile. El deploy lo dispara GitHub Actions
+# (.github/workflows/deploy.yml) DESPUES de aplicar las migraciones de Prisma.
+#
+# Los valores `sync: false` se piden una vez al crear el Blueprint desde el
+# dashboard de Render (no se versionan secretos en este archivo).
+
+services:
+  - type: web
+    name: meetflow-server
+    runtime: docker
+    plan: free
+    branch: develop
+    region: oregon # cambia a la region mas cercana a tu base de Neon
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: ./apps/server
+    healthCheckPath: /api/v1/health
+    autoDeployTrigger: off # el deploy lo dispara el deploy hook desde CI
+    buildFilter:
+      paths:
+        - apps/server/**
+        - render.yaml
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        sync: false # URL de produccion de Vercel, ej. https://meetflow-web.vercel.app
+      - key: DATABASE_URL
+        sync: false # connection string de Neon (con sslmode=require)
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: "7"
+      - key: BCRYPT_SALT_ROUNDS
+        value: "12"
