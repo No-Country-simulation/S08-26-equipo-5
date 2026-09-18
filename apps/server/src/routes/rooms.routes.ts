@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { verifyToken } from "../middlewares/verifyToken.js";
 import {
   createSala,
@@ -15,50 +15,50 @@ import {
 const router = Router();
 
 // ─── Rutas públicas (sin auth) ────────────────────────────
-router.get("/salas/:code", (req, res, next) => {
-  getSalaByCode(req, res).catch(next);
+router.get("/salas/:code", (req: Request, res: Response, next) => {
+  getSalaByCode(req as Request<{ code: string }>, res).catch(next);
 });
 
 // ─── Rutas protegidas (requieren auth JWT) ────────────────
 
 // Crear sala
-router.post("/salas", verifyToken, (req, res, next) => {
+router.post("/salas", verifyToken, (req: Request, res: Response, next) => {
   createSala(req, res).catch(next);
 });
 
 // Mis salas (donde soy HOST)
-router.get("/salas/mis-salas/list", verifyToken, (req, res, next) => {
+router.get("/salas/mis-salas/list", verifyToken, (req: Request, res: Response, next) => {
   getMisSalas(req, res).catch(next);
 });
 
 // Salas programadas/futuras
-router.get("/salas/programadas/list", verifyToken, (req, res, next) => {
+router.get("/salas/programadas/list", verifyToken, (req: Request, res: Response, next) => {
   getSalasProgramadas(req, res).catch(next);
 });
 
 // Detalle de sala (con participantes)
-router.get("/salas/:id/detalle", verifyToken, (req, res, next) => {
-  getSalaDetalle(req, res).catch(next);
+router.get("/salas/:id/detalle", verifyToken, (req: Request, res: Response, next) => {
+  getSalaDetalle(req as Request<{ id: string }>, res).catch(next);
 });
 
 // Actualizar sala (solo HOST)
-router.put("/salas/:id", verifyToken, (req, res, next) => {
-  updateSala(req, res).catch(next);
+router.put("/salas/:id", verifyToken, (req: Request, res: Response, next) => {
+  updateSala(req as Request<{ id: string }>, res).catch(next);
 });
 
 // Cancelar sala (solo HOST)
-router.delete("/salas/:id", verifyToken, (req, res, next) => {
-  deleteSala(req, res).catch(next);
+router.delete("/salas/:id", verifyToken, (req: Request, res: Response, next) => {
+  deleteSala(req as Request<{ id: string }>, res).catch(next);
 });
 
 // Lista de participantes
-router.get("/salas/:id/participantes", verifyToken, (req, res, next) => {
-  getParticipantes(req, res).catch(next);
+router.get("/salas/:id/participantes", verifyToken, (req: Request, res: Response, next) => {
+  getParticipantes(req as Request<{ id: string }>, res).catch(next);
 });
 
 // ─── Rutas legacy ─────────────────────────────────────────
-router.post("/rooms/:id/token", (req, res, next) => {
-  generateToken(req, res).catch(next);
+router.post("/rooms/:id/token", (req: Request, res: Response, next) => {
+  generateToken(req as Request<{ id: string }>, res).catch(next);
 });
 
 export default router;
