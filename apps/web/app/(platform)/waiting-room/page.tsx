@@ -419,6 +419,8 @@ function WaitingRoomContent() {
   );
 }
 
+
+
 export default function WaitingRoomPage() {
   return (
     <Suspense fallback={<section>Cargando waiting room...</section>}>
