@@ -1,0 +1,212 @@
+{
+  "type": "collection",
+  "name": "MeetFlow API — Salas & Agenda",
+  "collectionId": "meetflow-salas-agenda",
+  "requests": [
+    {
+      "id": "auth-register",
+      "name": "POST /auth/register — Registrar usuario",
+      "method": "POST",
+      "endpoint": "{{baseUrl}}/auth/register",
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"nombre\": \"Juan\",\n  \"apellido\": \"Pérez\",\n  \"email\": \"host@test.com\",\n  \"password\": \"Password123!\"}"
+      },
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 201) {\n  console.log('✅ Usuario registrado');\n}"
+    },
+    {
+      "id": "auth-login",
+      "name": "POST /auth/login — Obtener token",
+      "method": "POST",
+      "endpoint": "{{baseUrl}}/auth/login",
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"email\": \"host@test.com\",\n  \"password\": \"Password123!\"}"
+      },
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  pw.env.set('token', body.accessToken);\n  console.log('✅ Token obtenido: ' + body.accessToken.substring(0, 20) + '...');\n}"
+    },
+    {
+      "id": "crear-sala",
+      "name": "POST /salas — Crear sala",
+      "method": "POST",
+      "endpoint": "{{baseUrl}}/salas",
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"nombre\": \"Reunión Q4\",\n  \"resumen\": \"Presentación de resultados del trimestre\",\n  \"fechaInicio\": \"2026-09-20T10:00:00Z\"}"
+      },
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 201) {\n  const body = pw.response.body;\n  pw.env.set('salaId', body.salaId);\n  pw.env.set('salaCodigo', body.codigo);\n  console.log('✅ Sala creada: ' + body.codigo);\n  console.log('🔗 Enlace: ' + body.enlace);\n}"
+    },
+    {
+      "id": "sala-publica",
+      "name": "GET /salas/:code — Consulta pública",
+      "method": "GET",
+      "endpoint": "{{baseUrl}}/salas/{{salaCodigo}}",
+      "body": null,
+      "headers": [],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Sala encontrada: ' + body.nombre);\n  console.log('📊 Estado: ' + body.estado);\n  console.log('👥 Participantes: ' + body.totalParticipantes);\n}"
+    },
+    {
+      "id": "mis-salas",
+      "name": "GET /salas/mis-salas/list — Mis salas (HOST)",
+      "method": "GET",
+      "endpoint": "{{baseUrl}}/salas/mis-salas/list",
+      "body": null,
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Salas donde soy HOST: ' + body.salas.length);\n  body.salas.forEach(s => console.log('  - ' + s.nombre + ' (' + s.codigo + ')'));\n}"
+    },
+    {
+      "id": "salas-programadas",
+      "name": "GET /salas/programadas/list — Salas futuras",
+      "method": "GET",
+      "endpoint": "{{baseUrl}}/salas/programadas/list",
+      "body": null,
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Salas programadas: ' + body.salas.length);\n  body.salas.forEach(s => console.log('  - ' + s.nombre + ' | ' + s.fechaInicio));\n}"
+    },
+    {
+      "id": "detalle-sala",
+      "name": "GET /salas/:id/detalle — Detalle completo",
+      "method": "GET",
+      "endpoint": "{{baseUrl}}/salas/{{salaId}}/detalle",
+      "body": null,
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Detalle de sala: ' + body.nombre);\n  console.log('🔗 Enlace: ' + body.enlace);\n  console.log('👥 Participantes: ' + body.totalParticipantes);\n  console.log('👤 Creador: ' + body.creador.nombre + ' ' + body.creador.apellido);\n  body.participantes.forEach(p => console.log('  - ' + p.nombre + ' (' + p.rol + ')'));\n}"
+    },
+    {
+      "id": "actualizar-sala",
+      "name": "PUT /salas/:id — Actualizar sala",
+      "method": "PUT",
+      "endpoint": "{{baseUrl}}/salas/{{salaId}}",
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"nombre\": \"Reunión Q4 - Actualizada\",\n  \"resumen\": \"Nuevo resumen de la reunión\"}"
+      },
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Sala actualizada: ' + body.nombre);\n}"
+    },
+    {
+      "id": "cancelar-sala",
+      "name": "DELETE /salas/:id — Cancelar sala",
+      "method": "DELETE",
+      "endpoint": "{{baseUrl}}/salas/{{salaId}}",
+      "body": null,
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ ' + body.message);\n}"
+    },
+    {
+      "id": "participantes",
+      "name": "GET /salas/:id/participantes — Lista participantes",
+      "method": "GET",
+      "endpoint": "{{baseUrl}}/salas/{{salaId}}/participantes",
+      "body": null,
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer {{token}}"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Participantes de: ' + body.salaNombre);\n  console.log('👥 Total: ' + body.total);\n  body.participantes.forEach(p => console.log('  - ' + p.nombre + ' ' + p.apellido + ' (' + p.rol + ') [' + p.estado + ']'));\n}"
+    },
+    {
+      "id": "generar-token",
+      "name": "POST /rooms/:id/token — Generar token (Legacy)",
+      "method": "POST",
+      "endpoint": "{{baseUrl}}/rooms/{{salaId}}/token",
+      "body": {
+        "contentType": "application/json",
+        "body": "{\n  \"userId\": \"user-123\",\n  \"role\": \"HOST\"}"
+      },
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "preRequestScript": "",
+      "testScript": "if (pw.response.status === 200) {\n  const body = pw.response.body;\n  console.log('✅ Token generado');\n  console.log('🔑 Token: ' + body.token.substring(0, 50) + '...');\n}"
+    }
+  ],
+  "auth": {
+    "authType": "bearer",
+    "bearerToken": "{{token}}"
+  },
+  "variables": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api/v1"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "salaId",
+      "value": ""
+    },
+    {
+      "key": "salaCodigo",
+      "value": ""
+    }
+  ]
+}
