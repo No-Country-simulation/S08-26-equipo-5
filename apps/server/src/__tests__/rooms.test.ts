@@ -48,7 +48,7 @@ import { createApp } from "../app.js";
 
 const app = createApp();
 
-describe("Rooms API — Integración", () => {
+describe("Rooms API — Integración (legacy)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -64,80 +64,8 @@ describe("Rooms API — Integración", () => {
     });
   });
 
-  // ─── POST /api/rooms ────────────────────────────────────
-  describe("POST /api/rooms", () => {
-    const mockCid = "default:abc-123";
-    const mockSala = {
-      id: "sala-uuid-123",
-      nombre: "Reunión Q4",
-      streamRoomId: mockCid,
-    };
-
-    beforeEach(() => {
-      mockCreateRoom.mockResolvedValue({ streamRoomId: mockCid });
-      mockSalaCreate.mockResolvedValue(mockSala);
-    });
-
-    it("debería crear sala exitosamente (201)", async () => {
-      const res = await request(app)
-        .post("/api/rooms")
-        .send({ name: "Reunión Q4" });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toEqual({
-        salaId: "sala-uuid-123",
-        streamRoomId: mockCid,
-        name: "Reunión Q4",
-      });
-      expect(mockCreateRoom).toHaveBeenCalledWith("Reunión Q4", undefined);
-      expect(mockSalaCreate).toHaveBeenCalledWith({
-        data: {
-          nombre: "Reunión Q4",
-          codigo: "abc-123",
-          fechaInicio: expect.any(Date),
-          estado: "PROGRAMADA",
-          streamRoomId: mockCid,
-        },
-      });
-    });
-
-    it("debería retornar 400 si name está vacío", async () => {
-      const res = await request(app)
-        .post("/api/rooms")
-        .send({ name: "" });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain("name");
-      expect(mockCreateRoom).not.toHaveBeenCalled();
-      expect(mockSalaCreate).not.toHaveBeenCalled();
-    });
-
-    it("debería retornar 400 si name excede 100 caracteres", async () => {
-      const res = await request(app)
-        .post("/api/rooms")
-        .send({ name: "A".repeat(101) });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain("100");
-      expect(mockCreateRoom).not.toHaveBeenCalled();
-      expect(mockSalaCreate).not.toHaveBeenCalled();
-    });
-
-    it("debería retornar 500 si GetStream falla", async () => {
-      mockCreateRoom.mockRejectedValue(new Error("GetStream createCall failed: Rate limit exceeded"));
-
-      const res = await request(app)
-        .post("/api/rooms")
-        .send({ name: "Sala Test" });
-
-      expect(res.status).toBe(500);
-      expect(res.body.error).toBeDefined();
-      expect(mockSalaCreate).not.toHaveBeenCalled();
-    });
-  });
-
-  // ─── POST /api/rooms/:id/token ──────────────────────────
-  describe("POST /api/rooms/:id/token", () => {
+  // ─── POST /api/v1/rooms/:id/token ──────────────────────
+  describe("POST /api/v1/rooms/:id/token", () => {
     const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock";
     const mockSala = {
       id: "sala-uuid-123",
@@ -153,7 +81,7 @@ describe("Rooms API — Integración", () => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
 
       const res = await request(app)
-        .post("/api/rooms/sala-uuid-123/token")
+        .post("/api/v1/rooms/sala-uuid-123/token")
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(200);
@@ -165,7 +93,7 @@ describe("Rooms API — Integración", () => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
 
       const res = await request(app)
-        .post("/api/rooms/sala-uuid-123/token")
+        .post("/api/v1/rooms/sala-uuid-123/token")
         .send({ userId: "user-456", role: "PARTICIPANTE" });
 
       expect(res.status).toBe(200);
@@ -177,7 +105,7 @@ describe("Rooms API — Integración", () => {
       mockSalaFindUnique.mockResolvedValue(null);
 
       const res = await request(app)
-        .post("/api/rooms/999/token")
+        .post("/api/v1/rooms/999/token")
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(404);
@@ -189,7 +117,7 @@ describe("Rooms API — Integración", () => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
 
       const res = await request(app)
-        .post("/api/rooms/sala-uuid-123/token")
+        .post("/api/v1/rooms/sala-uuid-123/token")
         .send({ userId: "", role: "HOST" });
 
       expect(res.status).toBe(400);
@@ -201,7 +129,7 @@ describe("Rooms API — Integración", () => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
 
       const res = await request(app)
-        .post("/api/rooms/sala-uuid-123/token")
+        .post("/api/v1/rooms/sala-uuid-123/token")
         .send({ userId: "user-789", role: "INVALID" });
 
       expect(res.status).toBe(400);
@@ -218,7 +146,7 @@ describe("Rooms API — Integración", () => {
       });
 
       const res = await request(app)
-        .post("/api/rooms/sala-uuid-123/token")
+        .post("/api/v1/rooms/sala-uuid-123/token")
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(409);

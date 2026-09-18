@@ -1,0 +1,277 @@
+{
+  "info": {
+    "name": "MeetFlow API — S2-01 Salas",
+    "description": "Endpoints para creación y consulta de salas (US-01)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api/v1"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "salaCodigo",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth — Login (obtener token)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/auth/login",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"host@test.com\",\n  \"password\": \"Password123!\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Login exitoso', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.accessToken).to.exist;",
+              "    pm.environment.set('token', body.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /salas — Crear sala (auth requerido)",
+      "item": [
+        {
+          "name": "201 — Sala creada exitosamente",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Reunión Q4\",\n  \"resumen\": \"Presentación de resultados del trimestre\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sala creada (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.salaId).to.exist;",
+                  "    pm.expect(body.codigo).to.have.length(8);",
+                  "    pm.expect(body.nombre).to.equal('Reunión Q4');",
+                  "    pm.expect(body.enlace).to.contain('/sala/');",
+                  "    pm.expect(body.streamRoomId).to.exist;",
+                  "    pm.environment.set('salaCodigo', body.codigo);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 — Sin token",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sala Sin Auth\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Unauthorized (401)', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 — Token inválido",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer token-invalido-aqui"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sala Token Mal\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Unauthorized (401)', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — Nombre vacío",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Bad Request (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.contain('nombre');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GET /salas/:code — Consulta pública",
+      "item": [
+        {
+          "name": "200 — Sala encontrada",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/salas/{{salaCodigo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["salas", "{{salaCodigo}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sala encontrada (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.codigo).to.equal(pm.environment.get('salaCodigo'));",
+                  "    pm.expect(body.nombre).to.be.a('string');",
+                  "    pm.expect(body.estado).to.be.oneOf(['PROGRAMADA', 'ACTIVA', 'FINALIZADA', 'CANCELADA']);",
+                  "    pm.expect(body.totalParticipantes).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Código inexistente",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/salas/NOEXISTE",
+              "host": ["{{baseUrl}}"],
+              "path": ["salas", "NOEXISTE"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Not Found (404)', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.contain('Sala no encontrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "POST /rooms/:id/token — Generar token (legacy)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/rooms/{{salaId}}/token",
+          "host": ["{{baseUrl}}"],
+          "path": ["rooms", "{{salaId}}", "token"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"user-123\",\n  \"role\": \"HOST\"}"
+        }
+      }
+    }
+  ]
+}
