@@ -14,19 +14,28 @@ type EventMap = {
 type Listener<T> = (payload: T) => void;
 
 class MockSocketBus {
-  private listeners: { [K in keyof EventMap]?: Array<Listener<EventMap[K]>> } = {};
+  private listeners = new Map<
+    keyof EventMap,
+    Array<Listener<EventMap[keyof EventMap]>>
+  >();
   private log: LogEntry[] = [];
   private logListeners: Array<(log: LogEntry[]) => void> = [];
 
   on<K extends keyof EventMap>(event: K, fn: Listener<EventMap[K]>) {
-    (this.listeners[event] ??= [] as Array<Listener<EventMap[K]>>).push(fn as Listener<EventMap[K]>);
+    const listeners = this.listeners.get(event) ?? [];
+    listeners.push(fn as Listener<EventMap[keyof EventMap]>);
+    this.listeners.set(event, listeners);
     return () => this.off(event, fn);
   }
 
   off<K extends keyof EventMap>(event: K, fn: Listener<EventMap[K]>) {
-    this.listeners[event] = (this.listeners[event] as Array<Listener<EventMap[K]>> | undefined)?.filter(
-      (l) => l !== fn
-    ) as typeof this.listeners[K];
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      this.listeners.set(
+        event,
+        listeners.filter((listener) => listener !== fn)
+      );
+    }
   }
 
   emit<K extends keyof EventMap>(event: K, payload: EventMap[K], origin: "host" | "participant" | "server") {
@@ -43,9 +52,7 @@ class MockSocketBus {
 
     // Dispatch to listeners with a micro-delay to simulate network
     setTimeout(() => {
-      (this.listeners[event] as Array<Listener<EventMap[K]>> | undefined)?.forEach((fn) =>
-        fn(payload)
-      );
+      this.listeners.get(event)?.forEach((fn) => fn(payload));
     }, 120);
   }
 
