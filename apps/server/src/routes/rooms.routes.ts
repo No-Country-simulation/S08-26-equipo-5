@@ -3,8 +3,7 @@ import { verifyToken } from "../middlewares/verifyToken.js";
 import {
   createSala,
   getSalaByCode,
-  getMisSalas,
-  getSalasProgramadas,
+  getMisParticipaciones,
   getSalaDetalle,
   updateSala,
   deleteSala,
@@ -26,14 +25,9 @@ router.post("/salas", verifyToken, (req: Request, res: Response, next) => {
   createSala(req, res).catch(next);
 });
 
-// Mis salas (donde soy HOST)
-router.get("/salas/mis-salas/list", verifyToken, (req: Request, res: Response, next) => {
-  getMisSalas(req, res).catch(next);
-});
-
-// Salas programadas/futuras
-router.get("/salas/programadas/list", verifyToken, (req: Request, res: Response, next) => {
-  getSalasProgramadas(req, res).catch(next);
+// Mis participaciones (todas las salas donde soy participante)
+router.get("/salas/mis-participaciones", verifyToken, (req: Request, res: Response, next) => {
+  getMisParticipaciones(req, res).catch(next);
 });
 
 // Detalle de sala (con participantes)
