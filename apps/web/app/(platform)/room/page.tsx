@@ -7,7 +7,11 @@ import { useEffect, useRef, useState } from "react";
 
 function RoomContent() {
   const searchParams = useSearchParams();
-  const isDemo = searchParams.get("demo") === "true" || searchParams.get("code") === "DEMO-123";
+  const code = searchParams.get("code") ?? "";
+  const callId = searchParams.get("callId") ?? "";
+  const isDemo = searchParams.get("demo") === "true" || code === "DEMO-123";
+  const hasRealAccess = Boolean(code && !isDemo);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [mediaError, setMediaError] = useState("");
@@ -15,9 +19,7 @@ function RoomContent() {
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true);
 
   useEffect(() => {
-    if (!isDemo) {
-      return;
-    }
+    if (!isDemo && !hasRealAccess) return;
 
     let cancelled = false;
     navigator.mediaDevices
@@ -28,21 +30,18 @@ function RoomContent() {
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled)
           setMediaError("No se pudo acceder a la cámara o al micrófono.");
-        }
       });
 
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [isDemo]);
+  }, [isDemo, hasRealAccess]);
 
   useEffect(() => {
     streamRef.current?.getVideoTracks().forEach((track) => {
@@ -56,12 +55,17 @@ function RoomContent() {
     });
   }, [microphoneEnabled]);
 
-  if (!isDemo) {
+  // No code → not accessed correctly
+  if (!code) {
     return (
       <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 shadow-sm">
         <h1 className="text-3xl font-bold text-slate-950">Sala de reunión</h1>
         <p className="mt-4 text-slate-600">
-          La sala real requiere la aprobación del backend y un token de GetStream.
+          No se encontró el código de sala. Ingresá desde la{" "}
+          <Link href="/home" className="font-semibold text-blue-600 hover:underline">
+            página de inicio
+          </Link>
+          .
         </p>
       </section>
     );
@@ -71,17 +75,31 @@ function RoomContent() {
     <section className="space-y-8">
       <div>
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">
-          Modo demo local
+          {isDemo ? "Modo demo local" : "Sala de reunión"}
         </p>
         <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950">
           Sala de reunión
         </h1>
-        <p className="mt-4 text-lg text-slate-600">
-          Esta vista prueba el preview y los controles sin conectarse al backend.
-        </p>
+        {code && (
+          <p className="mt-2 text-sm text-slate-500">
+            Código: <strong className="font-mono tracking-widest text-slate-950">{code}</strong>
+            {callId && (
+              <>
+                {" · "}Call ID:{" "}
+                <span className="font-mono text-slate-400">{callId}</span>
+              </>
+            )}
+          </p>
+        )}
+        {isDemo && (
+          <p className="mt-3 text-slate-600">
+            Esta vista prueba el preview y los controles sin conectarse al backend.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]">
+        {/* Video preview */}
         <div className="overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
           <div className="relative aspect-video">
             <video
@@ -89,6 +107,7 @@ function RoomContent() {
               autoPlay
               muted
               playsInline
+              aria-label="Vista previa de tu cámara"
               className={`h-full w-full object-cover ${cameraEnabled ? "" : "hidden"}`}
             />
             {!cameraEnabled && (
@@ -103,14 +122,16 @@ function RoomContent() {
           <div className="flex flex-wrap gap-3 p-4">
             <button
               type="button"
-              onClick={() => setCameraEnabled((value) => !value)}
+              id="toggle-camera-btn"
+              onClick={() => setCameraEnabled((v) => !v)}
               className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             >
               {cameraEnabled ? "Apagar cámara" : "Encender cámara"}
             </button>
             <button
               type="button"
-              onClick={() => setMicrophoneEnabled((value) => !value)}
+              id="toggle-mic-btn"
+              onClick={() => setMicrophoneEnabled((v) => !v)}
               className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             >
               {microphoneEnabled ? "Silenciar micrófono" : "Activar micrófono"}
@@ -118,24 +139,30 @@ function RoomContent() {
           </div>
         </div>
 
+        {/* Sidebar */}
         <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-950">Participantes</h2>
           <div className="mt-4 space-y-3">
-            <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Vos · conectado</p>
+            <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+              Vos · conectado
+            </p>
             <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-              Host demo · conectado
+              {isDemo ? "Host demo · conectado" : "Esperando a otros participantes…"}
             </p>
           </div>
+
           {mediaError && (
             <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
               {mediaError}
             </p>
           )}
+
           <Link
-            href="/waiting-room?code=DEMO-123&demo=true"
+            href={`/waiting-room?code=${encodeURIComponent(code)}${isDemo ? "&demo=true" : ""}`}
+            id="back-to-waiting-room-btn"
             className="mt-6 inline-flex w-full justify-center rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-900 hover:bg-slate-50"
           >
-            Volver a waiting-room
+            ← Volver a sala de espera
           </Link>
         </aside>
       </div>
@@ -145,7 +172,7 @@ function RoomContent() {
 
 export default function RoomPage() {
   return (
-    <Suspense fallback={<section>Cargando sala...</section>}>
+    <Suspense fallback={<section>Cargando sala…</section>}>
       <RoomContent />
     </Suspense>
   );

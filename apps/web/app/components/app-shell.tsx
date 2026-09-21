@@ -11,6 +11,7 @@ const navigation = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/agenda", label: "Agenda" },
   { href: "/historial", label: "Historial" },
+  { href: "/demo-sala", label: "🧪 Demo" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
