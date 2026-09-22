@@ -1,0 +1,99 @@
+@host = http://localhost:4000/api/v1
+@email = agenda.test@test.com
+@password = password123
+
+# Flujo pensado para probar Salas + Agenda de punta a punta (S2-API — issue #33).
+# Los requests dependen del estado que dejan los anteriores (variables @name):
+#   register -> login -> crearSala -> getPorCodigo -> misParticipaciones -> detalle -> actualizar -> participantes -> cancelar
+# Ejecútalos en orden.
+
+### 0. Register (solo si @email no existe todavía) -> 201 (si repites, da 409)
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "apellido": "Gómez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 1. Login -> 200 (guarda accessToken)
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 2. POST /salas — Crear sala -> 201 (guarda salaId y codigo)
+# @name crearSala
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+{
+  "nombre": "Daily Backend",
+  "resumen": "Revisión del sprint y bloqueos",
+  "fechaInicio": "2026-09-15T18:00:00.000Z"
+}
+
+### 3. POST /salas sin nombre -> 400 VALIDATION_ERROR
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+{
+  "resumen": "Sin nombre, debe fallar"
+}
+
+### 4. POST /salas sin token -> 401 UNAUTHORIZED
+POST {{host}}/salas
+Content-Type: application/json
+
+{
+  "nombre": "Sala sin auth"
+}
+
+### 5. GET /salas/:code — Consulta pública -> 200 (no requiere auth)
+GET {{host}}/salas/{{crearSala.response.body.$.codigo}}
+
+### 6. GET /salas/:code con código inexistente -> 404 NOT_FOUND
+GET {{host}}/salas/ZZZZ0000
+
+### 7. GET /salas/mis-participaciones — Agenda del usuario -> 200
+# (issue #33: "GET /agenda"; implementado como /salas/mis-participaciones, ver docs/API.md)
+# @name misParticipaciones
+GET {{host}}/salas/mis-participaciones
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### 8. GET /salas/mis-participaciones sin token -> 401 UNAUTHORIZED
+GET {{host}}/salas/mis-participaciones
+
+### 9. GET /salas/:id/detalle -> 200 (con lista de participantes y creador)
+GET {{host}}/salas/{{crearSala.response.body.$.salaId}}/detalle
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### 10. PUT /salas/:id — Actualizar sala (solo HOST) -> 200
+PUT {{host}}/salas/{{crearSala.response.body.$.salaId}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+{
+  "nombre": "Daily Backend + Demo",
+  "resumen": "Sprint review y demo"
+}
+
+### 11. GET /salas/:id/participantes -> 200
+GET {{host}}/salas/{{crearSala.response.body.$.salaId}}/participantes
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### 12. DELETE /salas/:id — Cancelar sala (solo HOST) -> 200
+DELETE {{host}}/salas/{{crearSala.response.body.$.salaId}}
+Authorization: Bearer {{login.response.body.$.accessToken}}
+
+### 13. DELETE /salas/:id repetido -> 400 (ya está cancelada)
+DELETE {{host}}/salas/{{crearSala.response.body.$.salaId}}
+Authorization: Bearer {{login.response.body.$.accessToken}}
