@@ -13,22 +13,27 @@ import {
 
 const router = Router();
 
-// ─── Rutas públicas (sin auth) ────────────────────────────
-router.get("/salas/:code", (req: Request, res: Response, next) => {
-  getSalaByCode(req as Request<{ code: string }>, res).catch(next);
-});
-
-// ─── Rutas protegidas (requieren auth JWT) ────────────────
+// ─── Rutas protegidas con path literal (auth JWT) ─────────
+// IMPORTANTE: deben registrarse ANTES de "/salas/:code" (público),
+// porque Express matchea rutas en orden y ":code" capturaría literales
+// como "mis-participaciones" (ver issue #33 — bug de agenda inalcanzable).
 
 // Crear sala
 router.post("/salas", verifyToken, (req: Request, res: Response, next) => {
   createSala(req, res).catch(next);
 });
 
-// Mis participaciones (todas las salas donde soy participante)
+// Agenda del usuario: todas las salas donde participo (HOST o PARTICIPANTE)
 router.get("/salas/mis-participaciones", verifyToken, (req: Request, res: Response, next) => {
   getMisParticipaciones(req, res).catch(next);
 });
+
+// ─── Rutas públicas (sin auth) ────────────────────────────
+router.get("/salas/:code", (req: Request, res: Response, next) => {
+  getSalaByCode(req as Request<{ code: string }>, res).catch(next);
+});
+
+// ─── Rutas protegidas con parámetros dinámicos ────────────
 
 // Detalle de sala (con participantes)
 router.get("/salas/:id/detalle", verifyToken, (req: Request, res: Response, next) => {

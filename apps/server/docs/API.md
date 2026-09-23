@@ -2,6 +2,10 @@
 
 Base URL: `http://localhost:4000/api/v1`
 
+📖 **Swagger interactivo:** `GET /api/v1/docs` (UI) · `GET /api/v1/docs.json` (spec crudo) — fuente de verdad con schemas y ejemplos, generado desde `src/docs/openapi.ts`.
+
+🧪 **Colección `.http` (REST Client):** `apps/server/api_salas_agenda.http` (Salas + Agenda) y `apps/server/api_auth.http` (Auth).
+
 ---
 
 ## Salas
@@ -66,7 +70,17 @@ Retorna datos públicos de una sala por su código. No requiere autenticación.
 
 ---
 
-### GET /salas/mis-participaciones — Mis participaciones
+---
+
+## Agenda
+
+### GET /salas/mis-participaciones — Agenda del usuario
+
+> ⚠️ **Nota histórica (issue #33):** la tarjeta original pedía documentar `GET /agenda`. Durante
+> S2-01/S2-03 esa funcionalidad se consolidó en este endpoint (se eliminaron los borradores
+> `GET /salas/mis-salas/list` y `GET /salas/programadas/list` del contrato de Hoppscotch). No hay
+> una ruta `/agenda` separada: el frontend arma la agenda pidiendo esta lista y filtrando por `rol`
+> y `estado`.
 
 Retorna todas las salas donde el usuario autenticado es participante (HOST o PARTICIPANTE). El frontend usa el campo `rol` para filtrar.
 
@@ -268,6 +282,24 @@ Genera un token GetStream para un participante.
 
 ## Webhooks
 
+> ⚠️ **Los webhooks NO usan el Base URL de arriba.** Se montan en la raíz
+> (`app.use("/webhooks", ...)` en `src/app.ts`), sin el prefijo `/api/v1`.
+
 ### POST /webhooks/getstream — GetStream webhook
 
+URL completa: `http://localhost:4000/webhooks/getstream` (sin `/api/v1`).
+
 Recibe eventos de GetStream (call.ended, session_ended) y marca salas como FINALIZADA.
+
+> ⚠️ **Nota de seguridad**: la verificación de firma HMAC (`X-Signature`) está
+> implementada en `webhook.controller.ts` pero actualmente **comentada/deshabilitada**
+> para desarrollo. Antes de producción hay que descomentarla (ver TODO en el código).
+
+---
+
+## Changelog
+
+| Fecha | Cambio |
+|-------|--------|
+| 2026-09-22 | Documentado en Swagger (`src/docs/openapi.ts` + `/api/v1/docs`) con ejemplos y schemas: `POST /salas`, `GET /salas/:code`, `GET /salas/mis-participaciones` (Agenda). Agregado `api_salas_agenda.http` (REST Client). Ver issue #33. |
+| 2026-09-21 | Documento inicial (PR #74): CRUD de salas, participantes, webhook GetStream. |
