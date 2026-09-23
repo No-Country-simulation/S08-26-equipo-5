@@ -7,8 +7,8 @@ on:
       - "apps/server/**"
       - ".github/workflows/ci.yml"
   # Sin `paths` en pull_request: si la rama protegida exige este check, los PRs
-  // solo-web nunca lo reportarían y quedarían stuck. En `push` se mantiene
-  // `paths` para no ejecutar el job en cambios ajenos al server en develop.
+  # solo-web nunca lo reportarían y quedarían stuck. En `push` se mantiene
+  # `paths` para no ejecutar el job en cambios ajenos al server en develop.
   pull_request:
     branches: [develop]
 
