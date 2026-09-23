@@ -188,6 +188,35 @@ Cancela una sala (cambia estado a CANCELADA). Solo el HOST puede cancelar.
 
 ---
 
+### POST /salas/:id/transfer-host — Transferir rol HOST
+
+Transfiere el rol de HOST a otro participante de la sala. Solo el HOST actual puede transferir. El caller queda como PARTICIPANTE y el target pasa a HOST (se preserva el `estado` de ambos). Cualquier participante existente califica (PENDIENTE o APROBADO).
+
+**Auth:** JWT requerido
+
+**Request body:**
+```json
+{
+  "nuevoHostId": "uuid-del-usuario"
+}
+```
+
+**Response 200:**
+```json
+{
+  "message": "Rol de HOST transferido exitosamente",
+  "host": { "usuarioId": "uuid" },
+  "previousHost": { "usuarioId": "uuid" }
+}
+```
+
+**Errores:**
+- 400 — `nuevoHostId` ausente o auto-transferencia
+- 403 — Solo el HOST puede transferir el rol
+- 404 — Sala no encontrada / nuevo host no es participante de la sala
+
+---
+
 ### GET /salas/:id/participantes — Lista de participantes
 
 Retorna la lista de participantes de una sala.

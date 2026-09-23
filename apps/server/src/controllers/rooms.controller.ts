@@ -21,6 +21,8 @@ import type {
   UpdateSalaBody,
   UpdateSalaResponse,
   ParticipantesResponse,
+  TransferHostBody,
+  TransferHostResponse,
 } from "../types/stream.js";
 
 const prisma = new PrismaClient();
@@ -412,6 +414,77 @@ export async function deleteSala(
   });
 
   res.status(200).json({ message: "Sala cancelada exitosamente" });
+}
+
+// ─── POST /salas/:id/transfer-host — Transferir rol HOST ─
+
+/**
+ * Transfiere el rol de HOST a otro participante de la sala.
+ * Solo el HOST actual puede transferir. El caller queda PARTICIPANTE
+ * y el target pasa a HOST, preservando el `estado` de ambos.
+ * Cualquier participante existente califica (PENDIENTE o APROBADO).
+ * Requiere: Authorization: Bearer <jwt>
+ */
+export async function transferHost(
+  req: Request<{ id: string }, unknown, TransferHostBody>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const { nuevoHostId } = req.body;
+  const userId = req.user?.sub;
+
+  if (!userId) {
+    throw new ValidationError("Usuario no autenticado");
+  }
+
+  if (!nuevoHostId || typeof nuevoHostId !== "string") {
+    throw new ValidationError("El campo 'nuevoHostId' es requerido");
+  }
+
+  // Verificar que la sala existe
+  const sala = await prisma.sala.findUnique({ where: { id } });
+  if (!sala) {
+    throw new NotFoundError("Sala no encontrada");
+  }
+
+  // Verificar que el usuario es HOST
+  const userIsHost = await isHost(id, userId);
+  if (!userIsHost) {
+    throw new ForbiddenError("Solo el HOST puede transferir el rol");
+  }
+
+  // No permitir auto-transferencia
+  if (nuevoHostId === userId) {
+    throw new ValidationError("No puedes transferir el rol a ti mismo");
+  }
+
+  // El nuevo host debe ser participante existente de la sala
+  const target = await prisma.participante.findUnique({
+    where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
+  });
+  if (!target) {
+    throw new NotFoundError("El nuevo host debe ser participante de la sala");
+  }
+
+  // Demover caller y promover target en una sola transacción
+  await prisma.$transaction(async (tx) => {
+    await tx.participante.update({
+      where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+      data: { rol: "PARTICIPANTE" },
+    });
+    await tx.participante.update({
+      where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
+      data: { rol: "HOST" },
+    });
+  });
+
+  const response: TransferHostResponse = {
+    message: "Rol de HOST transferido exitosamente",
+    host: { usuarioId: nuevoHostId },
+    previousHost: { usuarioId: userId },
+  };
+
+  res.status(200).json(response);
 }
 
 // ─── GET /salas/:id/participantes — Lista de participantes ─

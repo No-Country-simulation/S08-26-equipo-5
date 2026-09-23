@@ -9,6 +9,7 @@ import {
   deleteSala,
   getParticipantes,
   generateToken,
+  transferHost,
 } from "../controllers/rooms.controller.js";
 
 const router = Router();
@@ -43,6 +44,11 @@ router.put("/salas/:id", verifyToken, (req: Request, res: Response, next) => {
 // Cancelar sala (solo HOST)
 router.delete("/salas/:id", verifyToken, (req: Request, res: Response, next) => {
   deleteSala(req as Request<{ id: string }>, res).catch(next);
+});
+
+// Transferir rol HOST (solo HOST actual)
+router.post("/salas/:id/transfer-host", verifyToken, (req: Request, res: Response, next) => {
+  transferHost(req as Request<{ id: string }>, res).catch(next);
 });
 
 // Lista de participantes

@@ -249,6 +249,116 @@ describe("S2-01 — Salas API", () => {
     });
   });
 
+  // ─── POST /api/v1/salas/:id/transfer-host ───────────────
+  describe("POST /api/v1/salas/:id/transfer-host", () => {
+    const salaId = "sala-uuid-777";
+    const hostId = "user-host-1";
+    const targetId = "user-target-2";
+    const hostToken = createToken(hostId, "host@test.com");
+
+    const mockSala = { id: salaId, codigo: "TRAN1234", nombre: "Sala Transfer" };
+    let mockTxParticipanteUpdate: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockTxParticipanteUpdate = vi.fn().mockResolvedValue({});
+      mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<any>) => {
+        const tx = {
+          participante: { update: mockTxParticipanteUpdate },
+        };
+        return fn(tx);
+      });
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+        }
+        return { salaId, usuarioId: targetId, rol: "PARTICIPANTE", estado: "APROBADO" };
+      });
+    });
+
+    it("200 — HOST transfiere el rol a otro participante", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: "Rol de HOST transferido exitosamente",
+        host: { usuarioId: targetId },
+        previousHost: { usuarioId: hostId },
+      });
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(2);
+      expect(mockTxParticipanteUpdate).toHaveBeenNthCalledWith(1, {
+        where: { salaId_usuarioId: { salaId, usuarioId: hostId } },
+        data: { rol: "PARTICIPANTE" },
+      });
+      expect(mockTxParticipanteUpdate).toHaveBeenNthCalledWith(2, {
+        where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
+        data: { rol: "HOST" },
+      });
+    });
+
+    it("403 — Caller no es HOST y no se ejecuta transacción", async () => {
+      mockParticipanteFindUnique.mockResolvedValue({
+        salaId,
+        usuarioId: hostId,
+        rol: "PARTICIPANTE",
+        estado: "APROBADO",
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain("Solo el HOST puede transferir el rol");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("404 — Target no es participante de la sala y no se ejecuta transacción", async () => {
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+        }
+        return null;
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: "user-no-existe" });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain("participante de la sala");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("400 — Auto-transferencia y no se ejecuta transacción", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: hostId });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("ti mismo");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("401 — Sin token de autenticación", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(401);
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── POST /api/v1/rooms/:id/token (legacy) ──────────────
   describe("POST /api/v1/rooms/:id/token", () => {
     const mockToken = "eyJhbGciOiJIUzI1NiIs.mock";
