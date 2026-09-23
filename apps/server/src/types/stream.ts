@@ -1,6 +1,19 @@
 export type RoomRole = "HOST" | "PARTICIPANTE";
 export type EstadoSala = "PROGRAMADA" | "ACTIVA" | "FINALIZADA" | "CANCELADA";
 
+// ─── GET /salas/mis-participaciones ────────────────────────
+export interface SalaResumen {
+  id: string;
+  codigo: string;
+  nombre: string;
+  resumen: string | null;
+  fechaInicio: string;
+  fechaFin: string | null;
+  estado: EstadoSala;
+  totalParticipantes: number;
+  rol: RoomRole;
+}
+
 // ─── POST /salas ─────────────────────────────────────────
 export interface CreateSalaBody {
   nombre: string;
@@ -25,19 +38,6 @@ export interface SalaPublica {
   fechaInicio: string;
   estado: string;
   totalParticipantes: number;
-}
-
-// ─── GET /salas/mis-salas ────────────────────────────────
-export interface SalaResumen {
-  id: string;
-  codigo: string;
-  nombre: string;
-  resumen: string | null;
-  fechaInicio: string;
-  fechaFin: string | null;
-  estado: EstadoSala;
-  totalParticipantes: number;
-  esHost: boolean;
 }
 
 // ─── GET /salas/:id/detalle ──────────────────────────────

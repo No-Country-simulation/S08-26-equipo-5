@@ -116,7 +116,7 @@ export async function createSala(
           nombre: nombre.trim(),
           resumen: resumen?.trim() || null,
           fechaInicio: fechaInicio ? new Date(fechaInicio) : new Date(),
-          estado: "PROGRAMADA",
+          estado: fechaInicio ? "PROGRAMADA" : "ACTIVA",
           streamRoomId,
         },
       });
@@ -166,13 +166,13 @@ export async function createSala(
   }
 }
 
-// ─── GET /salas/mis-salas — Salas donde soy HOST ──────────
+// ─── GET /salas/mis-participaciones — Todas mis salas ─────
 
 /**
- * Retorna las salas donde el usuario autenticado es HOST.
+ * Retorna todas las salas donde el usuario autenticado es participante (HOST o PARTICIPANTE).
  * Requiere: Authorization: Bearer <jwt>
  */
-export async function getMisSalas(
+export async function getMisParticipaciones(
   req: Request,
   res: Response
 ): Promise<void> {
@@ -182,11 +182,10 @@ export async function getMisSalas(
     throw new ValidationError("Usuario no autenticado");
   }
 
-  // Buscar salas donde el usuario es HOST
+  // Buscar todas las salas donde el usuario participa
   const participantes = await prisma.participante.findMany({
     where: {
       usuarioId: userId,
-      rol: "HOST",
     },
     include: {
       sala: {
@@ -211,62 +210,10 @@ export async function getMisSalas(
     fechaFin: p.sala.fechaFin?.toISOString() || null,
     estado: p.sala.estado,
     totalParticipantes: p.sala._count.participantes,
-    esHost: true,
+    rol: p.rol,
   }));
 
   res.status(200).json({ salas });
-}
-
-// ─── GET /salas/programadas — Salas futuras ───────────────
-
-/**
- * Retorna salas con fecha de inicio futura o当天 (estado PROGRAMADA o ACTIVA).
- * Requiere: Authorization: Bearer <jwt>
- */
-export async function getSalasProgramadas(
-  req: Request,
-  res: Response
-): Promise<void> {
-  const userId = req.user?.sub;
-
-  if (!userId) {
-    throw new ValidationError("Usuario no autenticado");
-  }
-
-  const now = new Date();
-
-  // Buscar salas programadas o activas
-  const salas = await prisma.sala.findMany({
-    where: {
-      estado: { in: ["PROGRAMADA", "ACTIVA"] },
-      fechaInicio: { gte: now },
-    },
-    include: {
-      _count: {
-        select: { participantes: true },
-      },
-      participantes: {
-        where: { usuarioId: userId },
-        select: { rol: true },
-      },
-    },
-    orderBy: { fechaInicio: "asc" },
-    take: 20, // Limitar a 20 salas próximas
-  });
-
-  const salasResponse: SalaResumen[] = salas.map((sala) => ({
-    id: sala.id,
-    codigo: sala.codigo,
-    nombre: sala.nombre,
-    resumen: sala.resumen,
-    fechaInicio: sala.fechaInicio.toISOString(),
-    fechaFin: sala.fechaFin?.toISOString() || null,
-    estado: sala.estado,
-    totalParticipantes: sala._count.participantes,
-    esHost: sala.participantes.some((p) => p.rol === "HOST"),
-  }));
-
-  res.status(200).json({ salas: salasResponse });
 }
 
 // ─── GET /salas/:id/detalle — Detalle completo ────────────

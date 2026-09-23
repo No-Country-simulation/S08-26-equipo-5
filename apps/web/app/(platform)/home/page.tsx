@@ -200,10 +200,11 @@ export default function HomePage() {
             </p>
           )}
           <Link
-            href={`/waiting-room?code=${encodeURIComponent((createdSala ?? joinedSala)!.codigo)}`}
+            href={`/waiting-room?code=${encodeURIComponent((createdSala ?? joinedSala)!.codigo)}${createdSala ? "&host=true" : ""}`}
+            id="go-to-waiting-room-btn"
             className="mt-5 inline-flex rounded-lg bg-green-700 px-4 py-2.5 font-semibold text-white hover:bg-green-800"
           >
-            Continuar a la sala de espera
+            {createdSala ? "Abrir sala de espera como anfitrión" : "Continuar a la sala de espera"}
           </Link>
         </div>
       )}
