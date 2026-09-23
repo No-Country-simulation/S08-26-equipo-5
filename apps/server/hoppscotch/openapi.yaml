@@ -1,7 +1,10 @@
 openapi: 3.0.3
 info:
   title: MeetFlow API — Salas & Agenda
-  description: API completa para gestión de salas y agenda
+  description: >
+    ⚠️ DEPRECADO — artefacto previo a la consolidación de Agenda (PR #74),
+    puede contener endpoints que ya no existen. Fuente de verdad actual:
+    src/docs/openapi.ts (servida en GET /api/v1/docs). Ver issue #33.
   version: 1.0.0
 
 servers:

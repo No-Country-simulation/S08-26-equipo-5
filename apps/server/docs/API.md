@@ -282,9 +282,18 @@ Genera un token GetStream para un participante.
 
 ## Webhooks
 
+> ⚠️ **Los webhooks NO usan el Base URL de arriba.** Se montan en la raíz
+> (`app.use("/webhooks", ...)` en `src/app.ts`), sin el prefijo `/api/v1`.
+
 ### POST /webhooks/getstream — GetStream webhook
 
+URL completa: `http://localhost:4000/webhooks/getstream` (sin `/api/v1`).
+
 Recibe eventos de GetStream (call.ended, session_ended) y marca salas como FINALIZADA.
+
+> ⚠️ **Nota de seguridad**: la verificación de firma HMAC (`X-Signature`) está
+> implementada en `webhook.controller.ts` pero actualmente **comentada/deshabilitada**
+> para desarrollo. Antes de producción hay que descomentarla (ver TODO en el código).
 
 ---
 

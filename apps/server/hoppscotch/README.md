@@ -1,5 +1,11 @@
 # Hoppscotch — Importar Endpoints MeetFlow
 
+> ⚠️ **DEPRECADO**: esta colección y `openapi.yaml` son artefactos previos a la
+> consolidación de Agenda (PR #74) y contienen endpoints que ya no existen
+> (`GET /salas/mis-salas/list`, `GET /salas/programadas/list`). La fuente de
+> verdad actual es `src/docs/openapi.ts`, servida en `GET /api/v1/docs`
+> (ver issue #33 y `docs/API.md`). No usar esta carpeta para probar la API.
+
 ## Opción 1: Importar colección JSON (recomendado)
 
 1. Abrir Hoppscotch: https://hoppscotch.io

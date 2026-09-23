@@ -599,6 +599,10 @@ export const openApiSpec = {
       },
     },
     "/webhooks/getstream": {
+      // Override del servidor global: esta ruta se monta en app.ts SIN el
+      // prefijo /api/v1, así que necesita su propia base para que "Try it out"
+      // en Swagger UI le pegue a la URL correcta.
+      servers: [{ url: "http://localhost:4000", description: "Local (sin prefijo /api/v1)" }],
       post: {
         tags: ["Webhooks"],
         summary: "Recibir eventos de GetStream (verificados por firma HMAC)",
