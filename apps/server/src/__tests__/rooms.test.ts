@@ -120,6 +120,9 @@ describe("Rooms API — Integración (legacy)", () => {
 
       expect(res.status).toBe(401);
       expect(res.body.error.code).toBe("UNAUTHORIZED");
+      // Sensible al middleware: este message solo lo emite verifyToken.
+      // Sin middleware, el fallback del controller responde "Usuario no autenticado".
+      expect(res.body.error.message).toBe("Token ausente, inválido o expirado");
       expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 

@@ -466,12 +466,21 @@ export async function transferHost(
     throw new NotFoundError("El nuevo host debe ser participante de la sala");
   }
 
-  // Demover caller y promover target en una sola transacción
+  // Demover caller y promover target en una sola transacción.
+  // Guard anti-TOCTOU: el pre-check isHost() ocurre fuera de la tx; aquí el
+  // demote exige `rol: "HOST"` vía updateMany y count === 1. Dos transfers
+  // concurrentes pasan el pre-check, pero solo una demote gana (count 1);
+  // la otra recibe count 0 → 403 y rollback antes de promover (evita doble HOST).
+  // El promote queda como `update` simple: solo corre si el demote ganó la
+  // carrera, así que no necesita condición propia.
   await prisma.$transaction(async (tx) => {
-    await tx.participante.update({
-      where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+    const demoted = await tx.participante.updateMany({
+      where: { salaId: id, usuarioId: userId, rol: "HOST" },
       data: { rol: "PARTICIPANTE" },
     });
+    if (demoted.count !== 1) {
+      throw new ForbiddenError("Solo el HOST puede transferir el rol");
+    }
     await tx.participante.update({
       where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
       data: { rol: "HOST" },

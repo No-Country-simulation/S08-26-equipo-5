@@ -258,13 +258,18 @@ describe("S2-01 — Salas API", () => {
 
     const mockSala = { id: salaId, codigo: "TRAN1234", nombre: "Sala Transfer" };
     let mockTxParticipanteUpdate: ReturnType<typeof vi.fn>;
+    let mockTxParticipanteUpdateMany: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
       mockTxParticipanteUpdate = vi.fn().mockResolvedValue({});
+      mockTxParticipanteUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
       mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<any>) => {
         const tx = {
-          participante: { update: mockTxParticipanteUpdate },
+          participante: {
+            update: mockTxParticipanteUpdate,
+            updateMany: mockTxParticipanteUpdateMany,
+          },
         };
         return fn(tx);
       });
@@ -290,15 +295,34 @@ describe("S2-01 — Salas API", () => {
         previousHost: { usuarioId: hostId },
       });
       expect(mockTransaction).toHaveBeenCalledTimes(1);
-      expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(2);
-      expect(mockTxParticipanteUpdate).toHaveBeenNthCalledWith(1, {
-        where: { salaId_usuarioId: { salaId, usuarioId: hostId } },
+      expect(mockTxParticipanteUpdateMany).toHaveBeenCalledTimes(1);
+      expect(mockTxParticipanteUpdateMany).toHaveBeenCalledWith({
+        where: { salaId, usuarioId: hostId, rol: "HOST" },
         data: { rol: "PARTICIPANTE" },
       });
-      expect(mockTxParticipanteUpdate).toHaveBeenNthCalledWith(2, {
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(1);
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
         where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
         data: { rol: "HOST" },
       });
+    });
+
+    it("403 — demote con count 0 (carrera concurrente): target NO es promovido", async () => {
+      // Simula que otra transferencia ya demovió al HOST: updateMany no matchea.
+      mockTxParticipanteUpdateMany.mockResolvedValue({ count: 0 });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain("Solo el HOST puede transferir el rol");
+      expect(mockTxParticipanteUpdateMany).toHaveBeenCalledWith({
+        where: { salaId, usuarioId: hostId, rol: "HOST" },
+        data: { rol: "PARTICIPANTE" },
+      });
+      expect(mockTxParticipanteUpdate).not.toHaveBeenCalled();
     });
 
     it("403 — Caller no es HOST y no se ejecuta transacción", async () => {

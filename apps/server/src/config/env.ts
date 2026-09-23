@@ -9,9 +9,16 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function parseBool(value: string | undefined): boolean | undefined {
-  if (value === undefined || value === "") return undefined;
-  return value === "true" || value === "1";
+// Parseo estricto (fail-closed): solo "true"|"1" → true, "false"|"0" → false,
+// undefined/"" → null (cae al default por NODE_ENV). Cualquier otro valor
+// ("True", "yes", ...) revienta al boot en vez de silenciar el flag.
+function parseBool(name: string, value: string | undefined): boolean | null {
+  if (value === undefined || value === "") return null;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw new Error(
+    `Valor inválido para ${name}: "${value}". Valores permitidos: "true" | "1" | "false" | "0"`
+  );
 }
 
 export const env = {
@@ -25,8 +32,8 @@ export const env = {
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS ?? 12),
   // Firma HMAC de los webhooks GetStream (fail-closed): requerida por
   // defecto solo en producción; en dev/test se puede forzar con
-  // WEBHOOK_SIGNATURE_REQUIRED=true|false.
+  // WEBHOOK_SIGNATURE_REQUIRED=true|1|false|0 (valores no canónicos → error al boot).
   webhookSignatureRequired:
-    parseBool(process.env.WEBHOOK_SIGNATURE_REQUIRED) ??
+    parseBool("WEBHOOK_SIGNATURE_REQUIRED", process.env.WEBHOOK_SIGNATURE_REQUIRED) ??
     (process.env.NODE_ENV === "production"),
 };
