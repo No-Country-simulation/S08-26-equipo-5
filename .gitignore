@@ -37,3 +37,4 @@ Thumbs.db
 
 # Pruebas locales de API (REST Client de VS Code)
 api.http
+apps/server/test-sockets.html
