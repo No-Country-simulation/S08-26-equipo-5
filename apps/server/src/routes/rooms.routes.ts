@@ -51,7 +51,8 @@ router.get("/salas/:id/participantes", verifyToken, (req: Request, res: Response
 });
 
 // ─── Rutas legacy ─────────────────────────────────────────
-router.post("/rooms/:id/token", (req: Request, res: Response, next) => {
+// Generar token GetStream (requiere JWT; rol resuelto en DB)
+router.post("/rooms/:id/token", verifyToken, (req: Request, res: Response, next) => {
   generateToken(req as Request<{ id: string }>, res).catch(next);
 });
 

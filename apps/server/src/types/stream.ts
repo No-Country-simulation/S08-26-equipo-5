@@ -97,12 +97,7 @@ export interface ParticipantesResponse {
 }
 
 // ─── POST /rooms/:id/token (legacy) ──────────────────────
-export interface GenerateTokenBody {
-  userId: string;
-  role: RoomRole;
-  callCid: string;
-}
-
+// El body ya no se usa: userId sale del JWT y el rol de la DB.
 export interface GenerateTokenResponse {
   token: string;
 }

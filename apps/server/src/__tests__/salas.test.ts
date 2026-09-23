@@ -20,12 +20,14 @@ const {
   mockSalaFindUnique,
   mockUsuarioFindUnique,
   mockParticipanteCreate,
+  mockParticipanteFindUnique,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockSalaCreate: vi.fn(),
   mockSalaFindUnique: vi.fn(),
   mockUsuarioFindUnique: vi.fn(),
   mockParticipanteCreate: vi.fn(),
+  mockParticipanteFindUnique: vi.fn(),
   mockTransaction: vi.fn(),
 }));
 
@@ -40,9 +42,15 @@ vi.mock("@prisma/client", () => ({
     },
     participante: {
       create: mockParticipanteCreate,
+      findUnique: mockParticipanteFindUnique,
     },
     $transaction: mockTransaction,
   })),
+  EstadoParticipante: {
+    PENDIENTE: "PENDIENTE",
+    APROBADO: "APROBADO",
+    RECHAZADO: "RECHAZADO",
+  },
 }));
 
 // ─── Mock stream.service ──────────────────────────────────
@@ -244,6 +252,7 @@ describe("S2-01 — Salas API", () => {
   // ─── POST /api/v1/rooms/:id/token (legacy) ──────────────
   describe("POST /api/v1/rooms/:id/token", () => {
     const mockToken = "eyJhbGciOiJIUzI1NiIs.mock";
+    const tokenUserId = "user-uuid-token";
     const mockSala = {
       id: "sala-uuid-123",
       streamRoomId: "default:abc-123",
@@ -253,15 +262,37 @@ describe("S2-01 — Salas API", () => {
       mockGenerateToken.mockReturnValue(mockToken);
     });
 
-    it("200 — Generar token exitosamente", async () => {
+    it("200 — Generar token exitosamente con JWT y rol de DB", async () => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: "part-1",
+        salaId: mockSala.id,
+        usuarioId: tokenUserId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
 
       const res = await request(app)
         .post("/api/v1/rooms/sala-uuid-123/token")
+        .set("Authorization", `Bearer ${createToken(tokenUserId, "user@test.com")}`)
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(200);
       expect(res.body.token).toBe(mockToken);
+      expect(mockGenerateToken).toHaveBeenCalledWith(
+        tokenUserId,
+        "HOST",
+        "default:abc-123"
+      );
+    });
+
+    it("401 — Sin token de autenticación no obtiene token GetStream", async () => {
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .send({ userId: "user-789", role: "HOST" });
+
+      expect(res.status).toBe(401);
+      expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 
     it("404 — Sala no existe", async () => {
@@ -269,6 +300,7 @@ describe("S2-01 — Salas API", () => {
 
       const res = await request(app)
         .post("/api/v1/rooms/999/token")
+        .set("Authorization", `Bearer ${createToken(tokenUserId, "user@test.com")}`)
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(404);

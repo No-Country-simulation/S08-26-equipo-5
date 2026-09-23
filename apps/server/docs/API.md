@@ -218,20 +218,22 @@ Retorna la lista de participantes de una sala.
 
 ### POST /rooms/:id/token — Generar token GetStream (legacy)
 
-Genera un token GetStream para un participante.
+Genera un token GetStream para el usuario autenticado. El `userId` se toma del JWT (`req.user.sub`) y el rol de la DB (`participante.rol`); el body se ignora.
 
-**Request body:**
-```json
-{
-  "userId": "user-uuid",
-  "role": "HOST"
-}
-```
+**Auth:** JWT requerido (Bearer token). El usuario debe ser participante **APROBADO** de la sala (`estado = APROBADO`).
+
+**Request body:** ignorado (se acepta por compatibilidad, pero `userId`/`role` no se usan).
 
 **Response 200:**
 ```json
 { "token": "eyJhbGciOi..." }
 ```
+
+**Errores:**
+- 401 — Sin token, sin claim `sub`, expirado o firma inválida
+- 403 — El usuario no es participante aprobado de la sala (PENDIENTE/RECHAZADO)
+- 404 — Sala no encontrada
+- 409 — Sala no sincronizada con GetStream
 
 ---
 

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { EstadoParticipante, PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import {
   ValidationError,
@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   StreamServiceError,
 } from "../errors/index.js";
+import { AppError } from "../utils/AppError.js";
 import {
   createRoom as createRoomService,
   generateToken as generateTokenService,
@@ -20,7 +21,6 @@ import type {
   UpdateSalaBody,
   UpdateSalaResponse,
   ParticipantesResponse,
-  GenerateTokenBody,
 } from "../types/stream.js";
 
 const prisma = new PrismaClient();
@@ -468,24 +468,22 @@ export async function getParticipantes(
 // ─── POST /rooms/:id/token — Generar token (legacy) ───────
 
 /**
- * Genera un token GetStream para un participante.
+ * Genera un token GetStream para el usuario autenticado.
+ * El userId sale del JWT (verifyToken → req.user.sub) y el rol de la DB
+ * (participante.rol). El body se ignora por completo: nunca se confía
+ * en userId/role enviados por el cliente.
+ * Requiere: Authorization: Bearer <jwt> y ser participante APROBADO.
  */
 export async function generateToken(
-  req: Request<{ id: string }, unknown, GenerateTokenBody>,
+  req: Request<{ id: string }>,
   res: Response
 ): Promise<void> {
   const { id } = req.params;
-  const { userId, role } = req.body;
+  const userId = req.user?.sub;
 
-  // ── Validación ──────────────────────────────────────────
-  if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
-    throw new ValidationError("El campo 'userId' es requerido y no puede estar vacío");
-  }
-
-  if (!role || !["HOST", "PARTICIPANTE"].includes(role)) {
-    throw new ValidationError(
-      "El campo 'role' es requerido. Valores válidos: HOST, PARTICIPANTE"
-    );
+  // ── Validación de auth ───────────────────────────────────
+  if (!userId) {
+    throw new AppError(401, "UNAUTHORIZED", "Usuario no autenticado");
   }
 
   // ── Buscar sala ─────────────────────────────────────────
@@ -495,12 +493,25 @@ export async function generateToken(
     throw new NotFoundError("Sala no encontrada");
   }
 
+  // ── Autorización server-side: debe ser participante ─────
+  const participante = await prisma.participante.findUnique({
+    where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+  });
+
+  if (!participante) {
+    throw new ForbiddenError("Solo los participantes aprobados pueden obtener token");
+  }
+
+  if (participante.estado !== EstadoParticipante.APROBADO) {
+    throw new ForbiddenError("Solo los participantes aprobados pueden obtener token");
+  }
+
   if (!sala.streamRoomId) {
     throw new StreamServiceError("Sala no sincronizada con GetStream", 409);
   }
 
-  // ── Generar token ───────────────────────────────────────
-  const token = generateTokenService(userId.trim(), role, sala.streamRoomId);
+  // ── Generar token con el rol guardado en DB ─────────────
+  const token = generateTokenService(userId, participante.rol, sala.streamRoomId);
 
   res.status(200).json({ token });
 }
