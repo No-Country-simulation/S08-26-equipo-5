@@ -1,9 +1,35 @@
 import { PrismaClient, Participante, RolParticipante, EstadoParticipante } from "@prisma/client";
 
+/**
+ * Datos de la sala que necesita el flujo de ingreso. Incluye la referencia al
+ * call de GetStream: sin streamCallType/streamCallId no se puede emitir un
+ * token ni decirle al cliente a qué call unirse.
+ */
+export interface SalaDelParticipante {
+    id: string;
+    codigo: string;
+    estado: string;
+    streamRoomId: string | null;
+    streamCallType: string | null;
+    streamCallId: string | null;
+}
+
+export type ParticipanteConSala = Participante & { sala: SalaDelParticipante };
+
+const SALA_SELECT = {
+    id: true,
+    codigo: true,
+    estado: true,
+    streamRoomId: true,
+    streamCallType: true,
+    streamCallId: true,
+} as const;
+
 export interface IParticipanteRepository {
     findHost(salaId: string, usuarioId: string): Promise<Participante | null>;
-    findById(participanteId: string): Promise<(Participante & { sala: { id: string; codigo: string; estado: string } }) | null>;
-    findPendienteByEmail(salaId: string, email: string): Promise<Participante | null>;
+    findById(participanteId: string): Promise<ParticipanteConSala | null>;
+    /** Busca por email en cualquier estado (necesario para el reingreso). */
+    findByEmail(salaId: string, email: string): Promise<Participante | null>;
     createPendiente(data: {
         salaId: string;
         usuarioId: string | null;
@@ -14,7 +40,7 @@ export interface IParticipanteRepository {
     updateEstado(
         participanteId: string,
         estado: EstadoParticipante,
-        fechaIngreso?: Date
+        fechaIngreso?: Date | null
     ): Promise<Participante>;
     findAprobadosBySala(salaId: string): Promise<Pick<Participante, "id" | "nombre" | "estado">[]>;
 }
@@ -31,13 +57,21 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
     async findById(participanteId: string) {
         return this.prisma.participante.findUnique({
             where: { id: participanteId },
-            include: { sala: { select: { id: true, codigo: true, estado: true } } },
+            include: { sala: { select: SALA_SELECT } },
         });
     }
 
-    async findPendienteByEmail(salaId: string, email: string) {
+    /**
+     * Búsqueda case-insensitive: los emails nuevos se guardan en minúsculas,
+     * pero pueden existir filas anteriores con otra capitalización y el unique
+     * [salaId, email] de Postgres sí distingue mayúsculas.
+     */
+    async findByEmail(salaId: string, email: string) {
         return this.prisma.participante.findFirst({
-            where: { salaId, email, estado: EstadoParticipante.PENDIENTE },
+            where: {
+                salaId,
+                email: { equals: email.trim(), mode: "insensitive" },
+            },
         });
     }
 
@@ -49,14 +83,26 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
         email: string;
     }) {
         return this.prisma.participante.create({
-            data: { ...data, estado: EstadoParticipante.PENDIENTE, rol: RolParticipante.PARTICIPANTE },
+            data: {
+                ...data,
+                email: data.email.trim().toLowerCase(),
+                estado: EstadoParticipante.PENDIENTE,
+                rol: RolParticipante.PARTICIPANTE,
+            },
         });
     }
 
-    async updateEstado(participanteId: string, estado: EstadoParticipante, fechaIngreso?: Date) {
+    async updateEstado(
+        participanteId: string,
+        estado: EstadoParticipante,
+        fechaIngreso?: Date | null
+    ) {
         return this.prisma.participante.update({
             where: { id: participanteId },
-            data: { estado, fechaIngreso },
+            data: {
+                estado,
+                ...(fechaIngreso !== undefined ? { fechaIngreso } : {}),
+            },
         });
     }
 
