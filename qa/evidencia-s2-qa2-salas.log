@@ -1,0 +1,250 @@
+
+---------------------
+
+=== 1. Register host -> 201 ===
+
+POST http://localhost:4000/api/v1/auth/register
+=> 201 (323 ms, 717 B)
+✓ register host 201
+
+---------------------
+
+=== 2. Login host -> 200 ===
+
+POST http://localhost:4000/api/v1/auth/login
+=> 200 (315 ms, 970 B)
+✓ login host 200
+
+---------------------
+
+=== 3. Register invitado -> 201 ===
+
+POST http://localhost:4000/api/v1/auth/register
+=> 201 (316 ms, 717 B)
+✓ register guest 201
+
+---------------------
+
+=== 4. Login invitado -> 200 ===
+
+POST http://localhost:4000/api/v1/auth/login
+=> 200 (317 ms, 970 B)
+✓ login guest 200
+
+---------------------
+
+=== 5. POST /salas -> 201 ===
+
+POST http://localhost:4000/api/v1/salas
+=> 201 (730 ms, 760 B)
+✓ crear sala 201
+
+---------------------
+
+=== 6. POST /salas sin nombre -> 400 ===
+
+POST http://localhost:4000/api/v1/salas
+=> 400 (5 ms, 622 B)
+✓ crear sala 400
+
+---------------------
+
+=== 7. POST /salas sin token -> 401 ===
+
+POST http://localhost:4000/api/v1/salas
+=> 401 (2 ms, 637 B)
+✓ crear sala 401
+
+---------------------
+
+=== 8. GET /salas/:code -> 200 ===
+
+GET http://localhost:4000/api/v1/salas/WNVG8678
+=> 200 (59 ms, 766 B)
+✓ sala pública 200
+
+---------------------
+
+=== 8b. GET /salas/:code en minúsculas -> 200 ===
+
+GET http://localhost:4000/api/v1/salas/wnvg8678
+=> 200 (58 ms, 766 B)
+✓ código normalizado
+
+---------------------
+
+=== 8c. POST /salas nombre de 151 -> 400 ===
+
+POST http://localhost:4000/api/v1/salas
+=> 400 (3 ms, 617 B)
+✓ nombre 151 es 400
+
+---------------------
+
+=== 9. GET /salas/:code inexistente -> 404 ===
+
+GET http://localhost:4000/api/v1/salas/ZZZZ0000
+=> 404 (57 ms, 586 B)
+✓ sala pública 404
+
+---------------------
+
+=== 10. GET /salas/mis-participaciones -> 200 ===
+
+GET http://localhost:4000/api/v1/salas/mis-participaciones
+=> 200 (111 ms, 807 B)
+✓ agenda 200
+
+---------------------
+
+=== 11. GET /salas/mis-participaciones sin token -> 401 ===
+
+GET http://localhost:4000/api/v1/salas/mis-participaciones
+=> 401 (3 ms, 637 B)
+✓ agenda 401
+
+---------------------
+
+=== 12. GET /salas/:id/detalle -> 200 ===
+
+GET http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b/detalle
+=> 200 (164 ms, 1.24 kB)
+✓ detalle 200
+
+---------------------
+
+=== 13. GET /salas/:id/detalle sin token -> 401 ===
+
+GET http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b/detalle
+=> 401 (3 ms, 637 B)
+✓ detalle 401
+
+---------------------
+
+=== 14. GET /salas/:id/detalle inexistente -> 404 ===
+
+GET http://localhost:4000/api/v1/salas/00000000-0000-4000-8000-000000000099/detalle
+=> 404 (58 ms, 586 B)
+✓ detalle 404
+
+---------------------
+
+=== 15. PUT /salas/:id host -> 200 ===
+
+PUT http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b
+=> 200 (168 ms, 728 B)
+✓ update 200
+
+---------------------
+
+=== 16. PUT /salas/:id invitado -> 403 ===
+
+PUT http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b
+=> 403 (112 ms, 605 B)
+✓ update 403
+
+---------------------
+
+=== 17. PUT /salas/:id sin token -> 401 ===
+
+PUT http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b
+=> 401 (3 ms, 637 B)
+✓ update 401
+
+---------------------
+
+=== 18. PUT /salas/:id inexistente -> 404 ===
+
+PUT http://localhost:4000/api/v1/salas/00000000-0000-4000-8000-000000000099
+=> 404 (57 ms, 586 B)
+✓ update 404
+
+---------------------
+
+=== 19. GET participantes -> 200 ===
+
+GET http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b/participantes
+=> 200 (113 ms, 869 B)
+✓ participantes 200
+
+---------------------
+
+=== 20. GET participantes sin token -> 401 ===
+
+GET http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b/participantes
+=> 401 (2 ms, 637 B)
+✓ participantes 401
+
+---------------------
+
+=== 21. GET participantes inexistente -> 404 ===
+
+GET http://localhost:4000/api/v1/salas/00000000-0000-4000-8000-000000000099/participantes
+=> 404 (56 ms, 586 B)
+✓ participantes 404
+
+---------------------
+
+=== 22. DELETE sin token -> 401 ===
+
+DELETE http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b
+=> 401 (2 ms, 637 B)
+✓ delete 401
+
+---------------------
+
+=== 23. DELETE invitado -> 403 ===
+
+DELETE http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b
+=> 403 (113 ms, 603 B)
+✓ delete 403
+
+---------------------
+
+=== 24. DELETE inexistente -> 404 ===
+
+DELETE http://localhost:4000/api/v1/salas/00000000-0000-4000-8000-000000000099
+=> 404 (57 ms, 586 B)
+✓ delete 404
+
+---------------------
+
+=== 25. DELETE host -> 200 ===
+
+DELETE http://localhost:4000/api/v1/salas/2dc2238e-cff5-4cc7-ba5a-52b389dd5f0b
+=> 200 (168 ms, 597 B)
+✓ delete 200
+
+---------------------
+
+=== 26. POST /salas con fechaInicio en el pasado -> S2-QA2 (sala "expirada") ===
+
+POST http://localhost:4000/api/v1/salas
+=> 201 (536 ms, 762 B)
+✓ crear sala con fecha pasada sigue devolviendo 201 (BUG-04)
+
+---------------------
+
+=== 27. GET /salas/:code de la sala "vencida" -> sigue resolviendo (BUG-04) ===
+
+GET http://localhost:4000/api/v1/salas/SNGN6826
+=> 200 (57 ms, 750 B)
+✓ sala vencida sigue resolviendo 200 (BUG-04, no hay expiración real)
+
+---------------------
+
+=== 28. GET /salas/:code con código con formato inválido -> 404 (no 400) ===
+
+GET http://localhost:4000/api/v1/salas/@@@---123
+=> 404 (55 ms, 586 B)
+✓ codigo con formato invalido da 404, no 400
+
+---------------------
+
+=== 29. GET /salas/:id/detalle con id que no es UUID -> BUG-07: revienta con 500 ===
+
+GET http://localhost:4000/api/v1/salas/no-es-un-uuid/detalle
+=> 500 (7 ms, 636 B)
+✓ detalle con id no-UUID devuelve 500 en vez de 400/404 (BUG-07)
+
+31 requests processed (31 succeeded)
