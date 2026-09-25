@@ -136,11 +136,13 @@ La respuesta ahora incluye `stream` además de `streamRoomId`:
 
 `GET /salas/:id/detalle` también devuelve `stream` (o `null`).
 
-### Eliminado: `POST /rooms/:id/token`
+### `POST /rooms/:id/token` — alias legacy, deprecated
 
-Era público y aceptaba `userId` y `role` del body: cualquiera podía emitir un
-token con rol `admin` para cualquier sala. Ahora responde `404`. Reemplazarlo
-por `POST /salas/:salaId/stream-token`.
+Se mantiene por compatibilidad (`apps/web` todavía le pega a esta ruta), pero
+es un **alias** de `POST /salas/:salaId/stream-token`: usa el mismo middleware
+`authParticipante`, así que el body (`userId`, `role`) se ignora igual que en
+el endpoint nuevo — el rol y el usuario siempre salen de la DB/JWT. Preferir
+`POST /salas/:salaId/stream-token` en integraciones nuevas.
 
 ---
 
@@ -239,7 +241,7 @@ lea el nuevo shape de la respuesta (`salaId`, y `accessToken` cuando venga).
 ```bash
 STREAM_TOKEN_TTL_SECONDS=3600        # vigencia del token de GetStream
 PARTICIPANT_TOKEN_TTL_SECONDS=7200   # vigencia del guest JWT y ventana de reingreso
-WEBHOOK_VERIFY_SIGNATURE=true        # on por defecto fuera de development
+WEBHOOK_SIGNATURE_REQUIRED=true      # on por defecto salvo NODE_ENV=development
 ```
 
 `GETSTREAM_API_KEY` y `GETSTREAM_API_SECRET` ahora son obligatorias: el servidor

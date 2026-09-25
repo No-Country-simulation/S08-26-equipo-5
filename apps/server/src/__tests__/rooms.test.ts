@@ -255,7 +255,12 @@ describe("Rooms API — Integración", () => {
     });
 
     it("409 — streamRoomId es null (sala no sincronizada con GetStream)", async () => {
-      const salaSinStream = { ...mockSala, streamCallType: null, streamCallId: null };
+      const salaSinStream = {
+        ...mockSala,
+        streamRoomId: null,
+        streamCallType: null,
+        streamCallId: null,
+      };
       mockSalaFindUnique.mockResolvedValue(salaSinStream);
       mockParticipanteFindFirst.mockResolvedValue({
         id: "part-1",
