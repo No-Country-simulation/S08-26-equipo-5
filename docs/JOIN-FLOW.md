@@ -50,7 +50,17 @@ vinculado a su usuario; si no, entra como invitado.
 { "nombre": "Ana", "apellido": "Pérez", "email": "ana@test.com" }
 
 // 200 — caso normal
-{ "participanteId": "uuid", "estado": "PENDIENTE", "salaId": "uuid" }
+// accessToken: guest JWT del invitado. Se emite también en PENDIENTE (no
+// solo cuando ya está APROBADO): sirve para autenticar el socket con
+// `auth: { token: accessToken }` antes de suscribirse a sus eventos. No da
+// acceso de más — stream-token y las acciones del host siguen exigiendo
+// APROBADO por su cuenta.
+{
+  "participanteId": "uuid",
+  "estado": "PENDIENTE",
+  "salaId": "uuid",
+  "accessToken": "<guest jwt>"
+}
 
 // 200 — ya estaba aprobado y su aprobación sigue vigente (reingreso / F5)
 {
@@ -162,6 +172,16 @@ guest JWT. Con guest JWT el socket queda suscrito solo a sus rooms.
 | `participant:reject` | `{ participanteId }` | host |
 
 Todos aceptan un callback de ack: `{ ok: true, ... }` o `{ ok: false, error: { code, message } }`.
+
+**`join:subscribe` exige ser dueño del participante.** El socket tiene que
+conectarse con `auth: { token: accessToken }` (el guest JWT que devuelve
+`POST /salas/:code/join`, incluso en PENDIENTE) **antes** de mandar
+`join:subscribe`. Si el socket es anónimo, o trae el token de otro
+participante, o un usuario logueado que no es el dueño, la respuesta es
+`{ ok: false, error: { code: "FORBIDDEN", ... } }` y no se hace `join` a
+ningún room. Antes de este fix, `join:subscribe` no validaba nada: cualquiera
+podía mandar un `participanteId` ajeno y quedar suscripto a su
+`join:approved` (que incluye el accessToken de esa persona).
 
 ### Servidor → cliente
 

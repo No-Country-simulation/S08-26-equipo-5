@@ -41,7 +41,9 @@ function emitError(socket: Socket, error: unknown, ack?: Ack) {
 
 export function registerWaitingRoomHandlers(
     _nsp: Namespace,
-    socket: Socket & { data: { userId?: string } },
+    socket: Socket & {
+        data: { userId?: string; participanteId?: string };
+    },
     deps: WaitingRoomDeps
 ) {
     const { participantes } = deps;
@@ -82,6 +84,13 @@ export function registerWaitingRoomHandlers(
     /**
      * Permite que un participante ya dado de alta (por HTTP, por ejemplo)
      * se suscriba a sus rooms sin volver a crear el registro.
+     *
+     * OJO: acá se entrega join:approved (con el accessToken del invitado) a
+     * quien esté en el room `participante:<id>`. Sin este chequeo, cualquier
+     * socket podía mandar un participanteId ajeno y quedarse escuchando la
+     * credencial de otra persona. Solo puede suscribirse:
+     *   - el propio invitado (su guest JWT trae `socket.data.participanteId`), o
+     *   - el usuario logueado dueño de ese participante (`participante.usuarioId`).
      */
     socket.on(
         "join:subscribe",
@@ -93,6 +102,20 @@ export function registerWaitingRoomHandlers(
                         404,
                         "NOT_FOUND",
                         "Participante no encontrado"
+                    );
+                }
+
+                const esDueño =
+                    (socket.data.participanteId !== undefined &&
+                        socket.data.participanteId === participante.id) ||
+                    (socket.data.userId !== undefined &&
+                        socket.data.userId === participante.usuarioId);
+
+                if (!esDueño) {
+                    throw new AppError(
+                        403,
+                        "FORBIDDEN",
+                        "No podés suscribirte a este participante"
                     );
                 }
 

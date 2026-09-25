@@ -151,6 +151,7 @@ describe("POST /api/v1/salas/:code/join", () => {
       participanteId: PARTICIPANTE_ID,
       estado: "PENDIENTE",
       salaId: SALA_ID,
+      accessToken: expect.any(String),
     });
     // El email se normaliza a minúsculas antes de persistir
     expect(mockParticipanteCreate).toHaveBeenCalledWith(
@@ -158,8 +159,10 @@ describe("POST /api/v1/salas/:code/join", () => {
         data: expect.objectContaining({ email: "ana@test.com" }),
       }),
     );
-    // Sin token hasta que el host apruebe
-    expect(res.body.accessToken).toBeUndefined();
+    // El PENDIENTE recibe guest JWT (solo para autenticar el socket: los
+    // endpoints protegidos siguen exigiendo APROBADO por su cuenta), pero NO
+    // stream: sin aprobación no hay call al que unirse.
+    expect(res.body.stream).toBeUndefined();
   });
 
   it("200 — reingreso de un aprobado reciente devuelve accessToken", async () => {
@@ -181,7 +184,7 @@ describe("POST /api/v1/salas/:code/join", () => {
     expect(mockParticipanteCreate).not.toHaveBeenCalled();
   });
 
-  it("200 — una aprobación vencida vuelve a PENDIENTE sin token", async () => {
+  it("200 — una aprobación vencida vuelve a PENDIENTE con guest JWT nuevo", async () => {
     mockSalaFindUnique.mockResolvedValue(salaActiva);
     mockParticipanteFindFirst.mockResolvedValue(
       participante({ fechaIngreso: new Date(Date.now() - 24 * 60 * 60 * 1000) }),
@@ -196,7 +199,7 @@ describe("POST /api/v1/salas/:code/join", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.estado).toBe("PENDIENTE");
-    expect(res.body.accessToken).toBeUndefined();
+    expect(res.body.accessToken).toBeTypeOf("string");
   });
 
   it("403 — participante rechazado", async () => {

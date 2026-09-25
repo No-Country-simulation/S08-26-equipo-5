@@ -264,3 +264,80 @@ describe("requestJoin — reingreso", () => {
     ).rejects.toBeInstanceOf(AppError);
   });
 });
+
+describe("requestJoin — accessToken también para PENDIENTE", () => {
+  // BLOCKER de seguridad: antes, un PENDIENTE no recibía ningún token, así
+  // que el único modo de "autenticar" su socket para join:subscribe era
+  // mandar el participanteId a pelo — cualquiera podía suscribirse a
+  // cualquier participante y recibir su join:approved (con el accessToken
+  // de otro invitado adentro). Ahora el guest JWT se emite también en
+  // PENDIENTE: stream-token y mi-estado ya lo gatean por estado (authParticipante),
+  // así que emitirlo temprano no da acceso de más, solo permite autenticar
+  // el socket con `auth: { token }` antes de pedir la suscripción.
+  it("un participante nuevo (PENDIENTE) recibe accessToken", async () => {
+    const deps = makeDeps({
+      createPendiente: vitest.fn().mockResolvedValue({
+        id: "participante-nuevo",
+        salaId: SALA_ID,
+        rol: "PARTICIPANTE",
+        estado: "PENDIENTE",
+      }),
+    });
+
+    const result = await requestJoin(deps, {
+      salaCodigo: "ABCD1234",
+      nombre: "Ana",
+      apellido: "Pérez",
+      email: "ana@test.com",
+    });
+
+    expect(result.estado).toBe("PENDIENTE");
+    expect(result.accessToken).toBeTypeOf("string");
+
+    const claims = verifyParticipantToken(result.accessToken!);
+    expect(claims?.sub).toBe("participante-nuevo");
+    expect(claims?.salaId).toBe(SALA_ID);
+  });
+
+  it("un PENDIENTE que reintenta el join también recibe accessToken", async () => {
+    const deps = makeDeps({
+      findByEmail: vitest.fn().mockResolvedValue(pendiente),
+    });
+
+    const result = await requestJoin(deps, {
+      salaCodigo: "ABCD1234",
+      nombre: "Ana",
+      apellido: "Pérez",
+      email: "ana@test.com",
+    });
+
+    expect(result.estado).toBe("PENDIENTE");
+    expect(result.accessToken).toBeTypeOf("string");
+    expect(verifyParticipantToken(result.accessToken!)?.sub).toBe(pendiente.id);
+  });
+
+  it("una aprobación vencida vuelve a PENDIENTE y también recibe accessToken", async () => {
+    const deps = makeDeps({
+      findByEmail: vitest.fn().mockResolvedValue({
+        ...pendiente,
+        estado: "APROBADO",
+        fechaIngreso: new Date(Date.now() - 999 * 60 * 60 * 1000),
+      }),
+      updateEstado: vitest.fn().mockResolvedValue({
+        ...pendiente,
+        estado: "PENDIENTE",
+        fechaIngreso: null,
+      }),
+    });
+
+    const result = await requestJoin(deps, {
+      salaCodigo: "ABCD1234",
+      nombre: "Ana",
+      apellido: "Pérez",
+      email: "ana@test.com",
+    });
+
+    expect(result.estado).toBe("PENDIENTE");
+    expect(result.accessToken).toBeTypeOf("string");
+  });
+});

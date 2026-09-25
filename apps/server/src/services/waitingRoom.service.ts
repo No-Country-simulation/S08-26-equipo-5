@@ -171,6 +171,11 @@ export async function requestJoin(
         participanteId: reiniciado.id,
         estado: EstadoParticipante.PENDIENTE,
         salaId: sala.id,
+        accessToken: signParticipantToken({
+          participanteId: reiniciado.id,
+          salaId: sala.id,
+          rol: reiniciado.rol as RoomRole,
+        }),
       };
     }
 
@@ -180,6 +185,11 @@ export async function requestJoin(
       participanteId: existente.id,
       estado: EstadoParticipante.PENDIENTE,
       salaId: sala.id,
+      accessToken: signParticipantToken({
+        participanteId: existente.id,
+        salaId: sala.id,
+        rol: existente.rol as RoomRole,
+      }),
     };
   }
 
@@ -198,6 +208,17 @@ export async function requestJoin(
     participanteId: participante.id,
     estado: EstadoParticipante.PENDIENTE,
     salaId: sala.id,
+    // El PENDIENTE también recibe un guest JWT. No da acceso de más: los
+    // endpoints protegidos (stream-token, participant:approve, etc.) siguen
+    // exigiendo estado APROBADO por su cuenta (authParticipante,
+    // resolveParticipant). Sirve para que el socket se autentique con
+    // `auth: { token }` antes de suscribirse a sus propios eventos
+    // (join:subscribe), en vez de mandar el participanteId a pelo.
+    accessToken: signParticipantToken({
+      participanteId: participante.id,
+      salaId: sala.id,
+      rol: participante.rol as RoomRole,
+    }),
   };
 }
 
