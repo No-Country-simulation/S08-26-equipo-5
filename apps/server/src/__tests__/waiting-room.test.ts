@@ -448,6 +448,41 @@ describe("requestJoin — el HOST entra a su propia sala con otro email", () => 
     expect(deps.participantes.updateEstado).not.toHaveBeenCalled();
   });
 
+  // Defensivo: un HOST "no debería" estar nunca en otro estado que no sea
+  // APROBADO (transferHost ahora lo garantiza), pero si por datos viejos o
+  // un bug futuro aparece una fila HOST no-APROBADO, requestJoin no puede
+  // devolver un accessToken + estado APROBADO mentiroso: authParticipante
+  // igual la rechazaría en stream-token (403 JOIN_NOT_APPROVED) con un
+  // accessToken que el cliente ya cree válido. Corrige el dato antes de
+  // responder.
+  it("HOST con estado no-APROBADO: lo corrige a APROBADO antes de devolver el resultado", async () => {
+    const hostPendiente = { ...hostRow, estado: "PENDIENTE", fechaIngreso: null };
+    const hostActualizado = { ...hostPendiente, estado: "APROBADO", fechaIngreso: new Date() };
+
+    const deps = makeDeps({
+      findByEmail: vitest.fn().mockResolvedValue(null),
+      findByUsuario: vitest.fn().mockResolvedValue(hostPendiente),
+      updateEstado: vitest.fn().mockResolvedValue(hostActualizado),
+    });
+
+    const result = await requestJoin(deps, {
+      salaCodigo: "ABCD1234",
+      nombre: "El Host",
+      apellido: "",
+      email: "otro-email-cualquiera@gmail.com",
+      usuarioId: "usuario-host",
+    });
+
+    expect(deps.participantes.updateEstado).toHaveBeenCalledWith(
+      "participante-host",
+      "APROBADO",
+      expect.any(Date),
+    );
+    expect(result.estado).toBe("APROBADO");
+    expect(result.participanteId).toBe("participante-host");
+    expect(result.accessToken).toBeTypeOf("string");
+  });
+
   it("propaga el 409 ALREADY_PARTICIPANT que el repo mapea de un P2002 (carrera concurrente)", async () => {
     // El mapeo P2002 → AppError vive en PrismaParticipanteRepository.createPendiente
     // (ver participante.repository.test.ts); acá solo verificamos que

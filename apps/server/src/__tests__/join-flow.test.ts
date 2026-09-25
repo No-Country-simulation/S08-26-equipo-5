@@ -309,6 +309,25 @@ describe("POST /api/v1/salas/:salaId/stream-token", () => {
     );
   });
 
+  // Regresión: transferHost promovía a HOST sin garantizar estado APROBADO.
+  // authParticipante() exige APROBADO para emitir token — un HOST recién
+  // transferido (fila con rol=HOST y estado=APROBADO, como ahora garantiza
+  // transferHost) tiene que poder pedir su token de video sin 403.
+  it("200 — un HOST recién promovido (estado APROBADO) obtiene su token", async () => {
+    mockParticipanteFindFirst.mockResolvedValue({
+      ...participante({ rol: "HOST", usuarioId: HOST_USER_ID, estado: "APROBADO" }),
+      sala: salaActiva,
+    });
+    mockSalaFindUnique.mockResolvedValue(salaActiva);
+
+    const res = await request(app)
+      .post(`/api/v1/salas/${SALA_ID}/stream-token`)
+      .set("Authorization", `Bearer ${userToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.rol).toBe("HOST");
+  });
+
   it("403 — el guest JWT no puede pedir un rol distinto al de la DB", async () => {
     mockParticipanteFindUnique.mockResolvedValue({
       ...participante(),

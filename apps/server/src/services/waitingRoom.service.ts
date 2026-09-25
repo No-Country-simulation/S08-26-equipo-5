@@ -196,14 +196,29 @@ export async function requestJoin(
   // El HOST siempre puede volver a entrar: no lo sometemos a la ventana de
   // reingreso (pensada para invitados sin cuenta) ni creamos una fila nueva.
   if (existentePorUsuario && existentePorUsuario.rol === RolParticipante.HOST) {
+    // Defensivo: un HOST no puede estar PENDIENTE/RECHAZADO (transferHost ya
+    // garantiza esto al promover), pero si una fila vieja quedó en otro
+    // estado no podemos devolver "estado: APROBADO" de mentira — el
+    // accessToken que armamos acá sería inútil porque authParticipante lee
+    // el estado real de la DB y rechazaría el stream-token con 403
+    // JOIN_NOT_APPROVED. Se corrige antes de responder.
+    const hostRow =
+      existentePorUsuario.estado === EstadoParticipante.APROBADO
+        ? existentePorUsuario
+        : await deps.participantes.updateEstado(
+            existentePorUsuario.id,
+            EstadoParticipante.APROBADO,
+            existentePorUsuario.fechaIngreso ?? new Date(),
+          );
+
     return {
-      participanteId: existentePorUsuario.id,
+      participanteId: hostRow.id,
       estado: EstadoParticipante.APROBADO,
       salaId: sala.id,
       accessToken: signParticipantToken({
-        participanteId: existentePorUsuario.id,
+        participanteId: hostRow.id,
         salaId: sala.id,
-        rol: existentePorUsuario.rol as RoomRole,
+        rol: hostRow.rol as RoomRole,
       }),
       stream: getStreamCallRef(sala) ?? undefined,
     };

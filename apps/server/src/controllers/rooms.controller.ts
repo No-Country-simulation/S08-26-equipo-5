@@ -497,6 +497,13 @@ export async function transferHost(
   // la otra recibe count 0 → 403 y rollback antes de promover (evita doble HOST).
   // El promote queda como `update` simple: solo corre si el demote ganó la
   // carrera, así que no necesita condición propia.
+  //
+  // El promote también fuerza estado APROBADO (y fechaIngreso si no tenía):
+  // un HOST no puede quedar PENDIENTE. Si el target era un participante
+  // PENDIENTE (por ejemplo, todavía no lo había aprobado nadie) y no
+  // corrigiéramos esto acá, authParticipante rechazaría su propio
+  // stream-token con 403 JOIN_NOT_APPROVED — el nuevo host jamás podría
+  // pedir su token de video.
   await prisma.$transaction(async (tx) => {
     const demoted = await tx.participante.updateMany({
       where: { salaId: id, usuarioId: userId, rol: "HOST" },
@@ -507,7 +514,11 @@ export async function transferHost(
     }
     await tx.participante.update({
       where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
-      data: { rol: "HOST" },
+      data: {
+        rol: "HOST",
+        estado: "APROBADO",
+        fechaIngreso: target.fechaIngreso ?? new Date(),
+      },
     });
   });
 

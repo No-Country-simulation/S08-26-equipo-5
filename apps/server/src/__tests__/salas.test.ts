@@ -295,13 +295,19 @@ describe("S2-01 — Salas API", () => {
       mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
         const uid = where.salaId_usuarioId.usuarioId;
         if (uid === hostId) {
-          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01") };
         }
-        return { salaId, usuarioId: targetId, rol: "PARTICIPANTE", estado: "APROBADO" };
+        return {
+          salaId,
+          usuarioId: targetId,
+          rol: "PARTICIPANTE",
+          estado: "APROBADO",
+          fechaIngreso: new Date("2026-01-02"),
+        };
       });
     });
 
-    it("200 — HOST transfiere el rol a otro participante", async () => {
+    it("200 — HOST transfiere el rol a otro participante (ya APROBADO: no pisa fechaIngreso)", async () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
@@ -322,7 +328,46 @@ describe("S2-01 — Salas API", () => {
       expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(1);
       expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
         where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
-        data: { rol: "HOST" },
+        data: {
+          rol: "HOST",
+          estado: "APROBADO",
+          fechaIngreso: new Date("2026-01-02"),
+        },
+      });
+    });
+
+    // Regresión: transferHost podía promover a HOST a un participante
+    // PENDIENTE sin cambiar su estado. authParticipante exige APROBADO para
+    // stream-token, así que el nuevo host quedaba sin poder pedir su token
+    // de video (403 JOIN_NOT_APPROVED) — un HOST no puede estar pendiente.
+    it("200 — promueve a un participante PENDIENTE y lo deja APROBADO con fechaIngreso", async () => {
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01") };
+        }
+        return {
+          salaId,
+          usuarioId: targetId,
+          rol: "PARTICIPANTE",
+          estado: "PENDIENTE",
+          fechaIngreso: null,
+        };
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(200);
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
+        where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
+        data: {
+          rol: "HOST",
+          estado: "APROBADO",
+          fechaIngreso: expect.any(Date),
+        },
       });
     });
 
