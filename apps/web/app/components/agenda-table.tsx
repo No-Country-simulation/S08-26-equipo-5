@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import agendaData from "../data/agenda.json";
+import { useEffect, useMemo, useState } from "react";
+import { getMisParticipaciones, type SalaResumen } from "../lib/salas-api";
 
 type MeetingStatus = "completed" | "scheduled" | "in_progress";
 type AgendaFilter = "all" | "upcoming" | "past";
@@ -15,9 +15,9 @@ type Meeting = {
   endAt: string;
   status: MeetingStatus;
   roomCode: string;
+  salaId: string;
+  role: "HOST" | "PARTICIPANTE";
 };
-
-const meetings = agendaData as Meeting[];
 
 const dateFormatter = new Intl.DateTimeFormat("es-AR", {
   weekday: "short",
@@ -34,6 +34,27 @@ function isPast(meeting: Meeting) {
   return meeting.status === "completed";
 }
 
+function toMeeting(sala: SalaResumen): Meeting {
+  const status: MeetingStatus =
+    sala.estado === "FINALIZADA" || sala.estado === "CANCELADA"
+      ? "completed"
+      : sala.estado === "ACTIVA"
+        ? "in_progress"
+        : "scheduled";
+
+  return {
+    id: sala.id,
+    title: sala.nombre,
+    description: sala.resumen ?? "Sin descripción",
+    startAt: sala.fechaInicio,
+    endAt: sala.fechaFin ?? sala.fechaInicio,
+    status,
+    roomCode: sala.codigo,
+    salaId: sala.id,
+    role: sala.rol,
+  };
+}
+
 function formatDate(value: string) {
   return dateFormatter.format(new Date(value)).replace(".", "");
 }
@@ -45,6 +66,10 @@ function formatTimeRange(meeting: Meeting) {
 }
 
 function getJoinHref(meeting: Meeting) {
+  if (meeting.role === "HOST") {
+    return `/room?code=${encodeURIComponent(meeting.roomCode)}&host=true&salaId=${encodeURIComponent(meeting.salaId)}`;
+  }
+
   const destination = meeting.status === "in_progress" ? "room" : "waiting-room";
   return `/${destination}?code=${encodeURIComponent(meeting.roomCode)}`;
 }
@@ -70,6 +95,35 @@ function StatusBadge({ status }: { status: MeetingStatus }) {
 
 export function AgendaTable() {
   const [filter, setFilter] = useState<AgendaFilter>("all");
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    void getMisParticipaciones()
+      .then(({ salas }) => {
+        if (active) setMeetings(salas.map(toMeeting));
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "No se pudieron cargar tus reuniones.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const nextMeeting = useMemo(
     () => meetings.find((meeting) => !isPast(meeting)),
     [],
@@ -119,6 +173,18 @@ export function AgendaTable() {
           ))}
         </div>
       </div>
+
+      {loading && (
+        <p role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+          Cargando tus reuniones…
+        </p>
+      )}
+
+      {error && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
       {nextMeeting && filter !== "past" && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
