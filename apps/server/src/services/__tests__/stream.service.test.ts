@@ -16,6 +16,11 @@ vi.mock("@stream-io/node-sdk", () => ({
   })),
 }));
 
+// randomUUID determinístico para poder aserir el callId generado por createRoom.
+vi.mock("node:crypto", () => ({
+  randomUUID: vi.fn(() => "abc-123"),
+}));
+
 // ─── Imports después del mock ────────────────────────────────
 import {
   initStreamClient,
@@ -38,35 +43,19 @@ describe("stream.service", () => {
   });
 
   // ─── initStreamClient ─────────────────────────────────────
+  // Nota: GETSTREAM_API_KEY/SECRET se validan una sola vez al arrancar el
+  // proceso (config/env.ts → requireEnv, fail-fast). initStreamClient ya no
+  // lee process.env directamente, así que no tiene sentido testear que
+  // falle "por variable faltante" mutando process.env en caliente.
   describe("initStreamClient", () => {
-    it("debería crear cliente con env vars válidas", () => {
-      process.env.GETSTREAM_API_KEY = "test-key";
-      process.env.GETSTREAM_API_SECRET = "test-secret";
-
+    it("debería crear cliente con las credenciales configuradas", () => {
       const client = initStreamClient();
 
       expect(client).toBeDefined();
       expect(client.video).toBeDefined();
     });
 
-    it("debería fallar si falta GETSTREAM_API_KEY", () => {
-      delete process.env.GETSTREAM_API_KEY;
-      process.env.GETSTREAM_API_SECRET = "test-secret";
-
-      expect(() => initStreamClient()).toThrow("GETSTREAM_API_KEY");
-    });
-
-    it("debería fallar si falta GETSTREAM_API_SECRET", () => {
-      process.env.GETSTREAM_API_KEY = "test-key";
-      delete process.env.GETSTREAM_API_SECRET;
-
-      expect(() => initStreamClient()).toThrow("GETSTREAM_API_SECRET");
-    });
-
     it("debería retornar la misma instancia en llamadas sucesivas", () => {
-      process.env.GETSTREAM_API_KEY = "test-key";
-      process.env.GETSTREAM_API_SECRET = "test-secret";
-
       const client1 = initStreamClient();
       const client2 = initStreamClient();
 
@@ -79,18 +68,19 @@ describe("stream.service", () => {
     const mockCid = "default:abc-123";
 
     beforeEach(() => {
-      process.env.GETSTREAM_API_KEY = "test-key";
-      process.env.GETSTREAM_API_SECRET = "test-secret";
-
       mockGetOrCreate.mockResolvedValue({
         call: { cid: mockCid, id: "abc-123", type: "default" },
       });
     });
 
-    it("debería crear sala y retornar streamRoomId", async () => {
+    it("debería crear sala y retornar streamRoomId, callType y callId", async () => {
       const result = await createRoom("Sala Reunión");
 
-      expect(result).toEqual({ streamRoomId: mockCid });
+      expect(result).toEqual({
+        streamRoomId: mockCid,
+        callType: "default",
+        callId: "abc-123",
+      });
       expect(mockGetOrCreate).toHaveBeenCalledWith({
         data: { custom: { name: "Sala Reunión" }, created_by_id: "system" },
       });
@@ -110,31 +100,32 @@ describe("stream.service", () => {
     const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock";
 
     beforeEach(() => {
-      process.env.GETSTREAM_API_KEY = "test-key";
-      process.env.GETSTREAM_API_SECRET = "test-secret";
-
       mockGenerateCallToken.mockReturnValue(mockToken);
     });
 
     it("debería generar token para HOST", () => {
-      const token = generateToken("user-123", "HOST", "default:room-1");
+      const result = generateToken("user-123", "HOST", "default:room-1");
 
-      expect(token).toBe(mockToken);
+      expect(result.token).toBe(mockToken);
+      expect(result.expiresAt).toBeInstanceOf(Date);
       expect(mockGenerateCallToken).toHaveBeenCalledWith({
         user_id: "user-123",
         call_cids: ["default:room-1"],
         role: "admin",
+        validity_in_seconds: expect.any(Number),
       });
     });
 
     it("debería generar token para PARTICIPANTE", () => {
-      const token = generateToken("user-456", "PARTICIPANTE", "default:room-1");
+      const result = generateToken("user-456", "PARTICIPANTE", "default:room-1");
 
-      expect(token).toBe(mockToken);
+      expect(result.token).toBe(mockToken);
+      expect(result.expiresAt).toBeInstanceOf(Date);
       expect(mockGenerateCallToken).toHaveBeenCalledWith({
         user_id: "user-456",
         call_cids: ["default:room-1"],
         role: "user",
+        validity_in_seconds: expect.any(Number),
       });
     });
 

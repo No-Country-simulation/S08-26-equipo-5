@@ -63,13 +63,20 @@ model Sala {
   fechaInicio    DateTime
   fechaFin       DateTime?
   estado         EstadoSala
-  streamRoomId   String?          // GetStream room ID
+  // ── GetStream ──────────────────────────────────────────
+  // streamRoomId guarda el CID completo ("default:<uuid>"). Se conserva
+  // porque el webhook de GetStream busca la sala por este campo.
+  streamRoomId   String?
+  // El SDK del cliente necesita type e id por separado para call(type, id).
+  streamCallType String?          @db.VarChar(50)
+  streamCallId   String?          @db.VarChar(100)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   participantes  Participante[]
 
   @@index([fechaInicio])
   @@index([estado])
+  @@index([streamCallId])
 }
 
 model Participante {
