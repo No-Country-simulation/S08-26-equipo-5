@@ -51,6 +51,7 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
     findHost: vitest.fn().mockResolvedValue({ id: "host-participante" }),
     findById: vitest.fn(),
     findByEmail: vitest.fn().mockResolvedValue(null),
+    findByUsuario: vitest.fn().mockResolvedValue(null),
     createPendiente: vitest.fn(),
     updateEstado: vitest.fn().mockResolvedValue({}),
     findAprobadosBySala: vitest.fn().mockResolvedValue([]),
@@ -339,5 +340,71 @@ describe("requestJoin — accessToken también para PENDIENTE", () => {
 
     expect(result.estado).toBe("PENDIENTE");
     expect(result.accessToken).toBeTypeOf("string");
+  });
+});
+
+describe("requestJoin — el HOST entra a su propia sala con otro email", () => {
+  // Bug real: el HOST ya tiene una fila de Participante (única por
+  // [salaId, usuarioId]) desde que creó la sala. Si vuelve a pedir join con
+  // un email distinto al de su cuenta (findByEmail no la encuentra),
+  // createPendiente intentaba insertar una segunda fila para el mismo
+  // (salaId, usuarioId) → P2002 → 500 sin manejar.
+  const hostRow = {
+    id: "participante-host",
+    salaId: SALA_ID,
+    usuarioId: "usuario-host",
+    estado: "APROBADO",
+    rol: "HOST",
+    nombre: "El Host",
+    apellido: "",
+    email: "host@empresa.com",
+    fechaIngreso: new Date(Date.now() - 999 * 60 * 60 * 1000), // "vencido" si se mirara la ventana
+  };
+
+  it("reutiliza la fila del HOST en vez de crear una nueva (sin 500)", async () => {
+    const deps = makeDeps({
+      findByEmail: vitest.fn().mockResolvedValue(null),
+      findByUsuario: vitest.fn().mockResolvedValue(hostRow),
+    });
+
+    const result = await requestJoin(deps, {
+      salaCodigo: "ABCD1234",
+      nombre: "El Host",
+      apellido: "",
+      email: "otro-email-cualquiera@gmail.com",
+      usuarioId: "usuario-host",
+    });
+
+    expect(result.estado).toBe("APROBADO");
+    expect(result.participanteId).toBe("participante-host");
+    expect(result.accessToken).toBeTypeOf("string");
+    // El HOST no pasa por la ventana de reingreso (fechaIngreso vieja no lo
+    // baja a PENDIENTE) ni crea una fila nueva.
+    expect(deps.participantes.createPendiente).not.toHaveBeenCalled();
+    expect(deps.participantes.updateEstado).not.toHaveBeenCalled();
+  });
+
+  it("propaga el 409 ALREADY_PARTICIPANT que el repo mapea de un P2002 (carrera concurrente)", async () => {
+    // El mapeo P2002 → AppError vive en PrismaParticipanteRepository.createPendiente
+    // (ver participante.repository.test.ts); acá solo verificamos que
+    // requestJoin no se lo trague ni lo transforme en otra cosa.
+    const deps = makeDeps({
+      findByEmail: vitest.fn().mockResolvedValue(null),
+      findByUsuario: vitest.fn().mockResolvedValue(null),
+      createPendiente: vitest
+        .fn()
+        .mockRejectedValue(
+          new AppError(409, "ALREADY_PARTICIPANT", "Ya sos participante de esta sala"),
+        ),
+    });
+
+    await expect(
+      requestJoin(deps, {
+        salaCodigo: "ABCD1234",
+        nombre: "Ana",
+        apellido: "Pérez",
+        email: "concurrente@test.com",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409, code: "ALREADY_PARTICIPANT" });
   });
 });

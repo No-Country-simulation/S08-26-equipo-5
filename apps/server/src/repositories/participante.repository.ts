@@ -1,4 +1,5 @@
 import { PrismaClient, Participante, RolParticipante, EstadoParticipante } from "@prisma/client";
+import { AppError } from "../utils/AppError.js";
 
 /**
  * Datos de la sala que necesita el flujo de ingreso. Incluye la referencia al
@@ -30,6 +31,13 @@ export interface IParticipanteRepository {
     findById(participanteId: string): Promise<ParticipanteConSala | null>;
     /** Busca por email en cualquier estado (necesario para el reingreso). */
     findByEmail(salaId: string, email: string): Promise<Participante | null>;
+    /**
+     * Busca por (salaId, usuarioId) — el unique real de la tabla. Necesario
+     * para detectar que un usuario logueado (típicamente el HOST) ya es
+     * participante de la sala aunque pida el join con un email distinto al
+     * de su cuenta: `findByEmail` no lo encontraría.
+     */
+    findByUsuario(salaId: string, usuarioId: string): Promise<Participante | null>;
     createPendiente(data: {
         salaId: string;
         usuarioId: string | null;
@@ -75,6 +83,12 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
         });
     }
 
+    async findByUsuario(salaId: string, usuarioId: string) {
+        return this.prisma.participante.findUnique({
+            where: { salaId_usuarioId: { salaId, usuarioId } },
+        });
+    }
+
     async createPendiente(data: {
         salaId: string;
         usuarioId: string | null;
@@ -82,14 +96,34 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
         apellido: string;
         email: string;
     }) {
-        return this.prisma.participante.create({
-            data: {
-                ...data,
-                email: data.email.trim().toLowerCase(),
-                estado: EstadoParticipante.PENDIENTE,
-                rol: RolParticipante.PARTICIPANTE,
-            },
-        });
+        try {
+            return await this.prisma.participante.create({
+                data: {
+                    ...data,
+                    email: data.email.trim().toLowerCase(),
+                    estado: EstadoParticipante.PENDIENTE,
+                    rol: RolParticipante.PARTICIPANTE,
+                },
+            });
+        } catch (error) {
+            // P2002: violación del unique [salaId, usuarioId] (o [salaId, email]).
+            // Pasa cuando dos requests de join concurrentes para el mismo
+            // participante corren la carrera entre el findByEmail/findByUsuario
+            // y este create. Antes explotaba como 500 sin manejar.
+            if (
+                error &&
+                typeof error === "object" &&
+                "code" in error &&
+                (error as { code?: unknown }).code === "P2002"
+            ) {
+                throw new AppError(
+                    409,
+                    "ALREADY_PARTICIPANT",
+                    "Ya sos participante de esta sala",
+                );
+            }
+            throw error;
+        }
     }
 
     async updateEstado(

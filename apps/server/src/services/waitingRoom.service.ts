@@ -1,4 +1,4 @@
-import { EstadoParticipante, Participante } from "@prisma/client";
+import { EstadoParticipante, Participante, RolParticipante } from "@prisma/client";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
 import {
@@ -133,7 +133,33 @@ export async function requestJoin(
 
   assertSalaJoinable(sala.estado);
 
-  const existente = await deps.participantes.findByEmail(sala.id, input.email);
+  // El usuario logueado (típicamente el HOST) puede ya ser participante de
+  // esta sala bajo un email distinto al que mandó en el form — findByEmail
+  // no lo vería. Buscarlo también por (salaId, usuarioId), que es el unique
+  // real: crear una fila nueva ahí rompía con P2002 → 500.
+  const existentePorUsuario = input.usuarioId
+    ? await deps.participantes.findByUsuario(sala.id, input.usuarioId)
+    : null;
+
+  // El HOST siempre puede volver a entrar: no lo sometemos a la ventana de
+  // reingreso (pensada para invitados sin cuenta) ni creamos una fila nueva.
+  if (existentePorUsuario && existentePorUsuario.rol === RolParticipante.HOST) {
+    return {
+      participanteId: existentePorUsuario.id,
+      estado: EstadoParticipante.APROBADO,
+      salaId: sala.id,
+      accessToken: signParticipantToken({
+        participanteId: existentePorUsuario.id,
+        salaId: sala.id,
+        rol: existentePorUsuario.rol as RoomRole,
+      }),
+      stream: getStreamCallRef(sala) ?? undefined,
+    };
+  }
+
+  const existente =
+    (await deps.participantes.findByEmail(sala.id, input.email)) ??
+    existentePorUsuario;
 
   // ── Ya existe: decidir según su estado ────────────────────
   if (existente) {

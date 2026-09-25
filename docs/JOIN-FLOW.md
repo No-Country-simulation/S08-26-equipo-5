@@ -80,6 +80,12 @@ participantes. Una aprobación vencida (más de `PARTICIPANT_TOKEN_TTL_SECONDS`
 desde `fechaIngreso`) devuelve el participante a `PENDIENTE` y vuelve a avisar
 al host.
 
+Si el caller viene logueado (`Authorization: Bearer <access token>`) y ya es
+participante de la sala bajo otro email — típicamente el **HOST** volviendo a
+entrar —, se reutiliza esa fila en vez de intentar crear una nueva: el unique
+real es `(salaId, usuarioId)`, no el email. El HOST además nunca cae en la
+ventana de reingreso: siempre vuelve `APROBADO`.
+
 ### `POST /salas/:salaId/stream-token` — token de GetStream
 
 Requiere `Authorization: Bearer <token>`, que puede ser **cualquiera de los dos**:
