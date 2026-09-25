@@ -15,10 +15,12 @@ vi.mock("../config/env.js", () => ({
 }));
 
 // ─── Mock Prisma ──────────────────────────────────────────
-const { mockSalaCreate, mockSalaFindUnique } = vi.hoisted(() => ({
-  mockSalaCreate: vi.fn(),
-  mockSalaFindUnique: vi.fn(),
-}));
+const { mockSalaCreate, mockSalaFindUnique, mockParticipanteFindUnique } =
+  vi.hoisted(() => ({
+    mockSalaCreate: vi.fn(),
+    mockSalaFindUnique: vi.fn(),
+    mockParticipanteFindUnique: vi.fn(),
+  }));
 
 vi.mock("@prisma/client", () => ({
   PrismaClient: vi.fn().mockImplementation(() => ({
@@ -26,7 +28,15 @@ vi.mock("@prisma/client", () => ({
       create: mockSalaCreate,
       findUnique: mockSalaFindUnique,
     },
+    participante: {
+      findUnique: mockParticipanteFindUnique,
+    },
   })),
+  EstadoParticipante: {
+    PENDIENTE: "PENDIENTE",
+    APROBADO: "APROBADO",
+    RECHAZADO: "RECHAZADO",
+  },
 }));
 
 // ─── Mock stream.service ──────────────────────────────────
@@ -44,9 +54,15 @@ vi.mock("../services/stream.service.js", () => ({
 // ─── Imports después de los mocks ──────────────────────────
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import { createApp } from "../app.js";
 
 const app = createApp();
+const JWT_SECRET = "test-jwt-secret";
+
+function createToken(userId: string, email = "user@test.com"): string {
+  return jwt.sign({ sub: userId, email }, JWT_SECRET, { expiresIn: "15m" });
+}
 
 describe("Rooms API — Integración (legacy)", () => {
   beforeEach(() => {
@@ -72,33 +88,164 @@ describe("Rooms API — Integración (legacy)", () => {
       nombre: "Reunión Q4",
       streamRoomId: "default:abc-123",
     };
+    const userId = "user-uuid-123";
+    const authHeader = () => ({ Authorization: `Bearer ${createToken(userId)}` });
 
     beforeEach(() => {
       mockGenerateToken.mockReturnValue(mockToken);
     });
 
-    it("debería generar token exitosamente (200)", async () => {
-      mockSalaFindUnique.mockResolvedValue(mockSala);
-
+    it("401 — sin Authorization y el servicio NO es llamado", async () => {
       const res = await request(app)
         .post("/api/v1/rooms/sala-uuid-123/token")
         .send({ userId: "user-789", role: "HOST" });
 
-      expect(res.status).toBe(200);
-      expect(res.body.token).toBe(mockToken);
-      expect(mockGenerateToken).toHaveBeenCalledWith("user-789", "HOST", "default:abc-123");
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(mockSalaFindUnique).not.toHaveBeenCalled();
     });
 
-    it("debería generar token para PARTICIPANTE (200)", async () => {
-      mockSalaFindUnique.mockResolvedValue(mockSala);
+    it("401 — token expirado y el servicio NO es llamado", async () => {
+      const expired = jwt.sign(
+        { sub: userId, email: "user@test.com" },
+        JWT_SECRET,
+        { expiresIn: -3600 }
+      );
 
       const res = await request(app)
         .post("/api/v1/rooms/sala-uuid-123/token")
-        .send({ userId: "user-456", role: "PARTICIPANTE" });
+        .set("Authorization", `Bearer ${expired}`)
+        .send({ userId: "user-789", role: "HOST" });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
+      // Sensible al middleware: este message solo lo emite verifyToken.
+      // Sin middleware, el fallback del controller responde "Usuario no autenticado".
+      expect(res.body.error.message).toBe("Token ausente, inválido o expirado");
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+    });
+
+    it("401 — token firmado con secreto incorrecto y el servicio NO es llamado", async () => {
+      const wrongSecret = jwt.sign(
+        { sub: userId, email: "user@test.com" },
+        "otro-secreto",
+        { expiresIn: "15m" }
+      );
+
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .set("Authorization", `Bearer ${wrongSecret}`)
+        .send({ userId: "user-789", role: "HOST" });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+    });
+
+    it("200 — JWT válido + participante HOST genera token como HOST", async () => {
+      mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: "part-1",
+        salaId: mockSala.id,
+        usuarioId: userId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
+
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .set(authHeader())
+        .send({ userId: "impersonado", role: "HOST" });
 
       expect(res.status).toBe(200);
       expect(res.body.token).toBe(mockToken);
-      expect(mockGenerateToken).toHaveBeenCalledWith("user-456", "PARTICIPANTE", "default:abc-123");
+      expect(mockParticipanteFindUnique).toHaveBeenCalledWith({
+        where: { salaId_usuarioId: { salaId: "sala-uuid-123", usuarioId: userId } },
+      });
+      expect(mockGenerateToken).toHaveBeenCalledWith(
+        userId,
+        "HOST",
+        "default:abc-123"
+      );
+    });
+
+    it("200 — body role HOST ignorado: PARTICIPANTE recibe token PARTICIPANTE", async () => {
+      mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: "part-2",
+        salaId: mockSala.id,
+        usuarioId: userId,
+        rol: "PARTICIPANTE",
+        estado: "APROBADO",
+      });
+
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .set(authHeader())
+        .send({ userId: userId, role: "HOST" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.token).toBe(mockToken);
+      expect(mockGenerateToken).toHaveBeenCalledWith(
+        userId,
+        "PARTICIPANTE",
+        "default:abc-123"
+      );
+    });
+
+    it("403 — JWT válido pero el usuario NO es participante de la sala", async () => {
+      mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockParticipanteFindUnique.mockResolvedValue(null);
+
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .set(authHeader())
+        .send({ userId: userId, role: "HOST" });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain(
+        "Solo los participantes aprobados pueden obtener token"
+      );
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+    });
+
+    it("403 — participante PENDIENTE no obtiene token y el servicio NO es llamado", async () => {
+      mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: "part-3",
+        salaId: mockSala.id,
+        usuarioId: userId,
+        rol: "PARTICIPANTE",
+        estado: "PENDIENTE",
+      });
+
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .set(authHeader())
+        .send({ userId: userId, role: "HOST" });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain(
+        "Solo los participantes aprobados pueden obtener token"
+      );
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+    });
+
+    it("401 — JWT válido sin claim sub y el servicio NO es llamado", async () => {
+      const tokenSinSub = jwt.sign({ email: "user@test.com" }, JWT_SECRET, {
+        expiresIn: "15m",
+      });
+
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .set("Authorization", `Bearer ${tokenSinSub}`)
+        .send({ userId: userId, role: "HOST" });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
+      expect(mockGenerateToken).not.toHaveBeenCalled();
+      expect(mockSalaFindUnique).not.toHaveBeenCalled();
     });
 
     it("debería retornar 404 si sala no existe", async () => {
@@ -106,36 +253,11 @@ describe("Rooms API — Integración (legacy)", () => {
 
       const res = await request(app)
         .post("/api/v1/rooms/999/token")
-        .send({ userId: "user-789", role: "HOST" });
+        .set(authHeader())
+        .send({ userId: userId, role: "HOST" });
 
       expect(res.status).toBe(404);
       expect(res.body.error).toContain("Sala no encontrada");
-      expect(mockGenerateToken).not.toHaveBeenCalled();
-    });
-
-    it("debería retornar 400 si userId está vacío", async () => {
-      mockSalaFindUnique.mockResolvedValue(mockSala);
-
-      const res = await request(app)
-        .post("/api/v1/rooms/sala-uuid-123/token")
-        .send({ userId: "", role: "HOST" });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain("userId");
-      expect(mockGenerateToken).not.toHaveBeenCalled();
-    });
-
-    it("debería retornar 400 si role es inválido", async () => {
-      mockSalaFindUnique.mockResolvedValue(mockSala);
-
-      const res = await request(app)
-        .post("/api/v1/rooms/sala-uuid-123/token")
-        .send({ userId: "user-789", role: "INVALID" });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain("role");
-      expect(res.body.error).toContain("HOST");
-      expect(res.body.error).toContain("PARTICIPANTE");
       expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 
@@ -144,10 +266,18 @@ describe("Rooms API — Integración (legacy)", () => {
         ...mockSala,
         streamRoomId: null,
       });
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: "part-1",
+        salaId: mockSala.id,
+        usuarioId: userId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
 
       const res = await request(app)
         .post("/api/v1/rooms/sala-uuid-123/token")
-        .send({ userId: "user-789", role: "HOST" });
+        .set(authHeader())
+        .send({ userId: userId, role: "HOST" });
 
       expect(res.status).toBe(409);
       expect(res.body.error).toContain("no sincronizada");

@@ -202,6 +202,35 @@ Cancela una sala (cambia estado a CANCELADA). Solo el HOST puede cancelar.
 
 ---
 
+### POST /salas/:id/transfer-host — Transferir rol HOST
+
+Transfiere el rol de HOST a otro participante de la sala. Solo el HOST actual puede transferir. El caller queda como PARTICIPANTE y el target pasa a HOST (se preserva el `estado` de ambos). Cualquier participante existente califica (PENDIENTE o APROBADO).
+
+**Auth:** JWT requerido
+
+**Request body:**
+```json
+{
+  "nuevoHostId": "uuid-del-usuario"
+}
+```
+
+**Response 200:**
+```json
+{
+  "message": "Rol de HOST transferido exitosamente",
+  "host": { "usuarioId": "uuid" },
+  "previousHost": { "usuarioId": "uuid" }
+}
+```
+
+**Errores:**
+- 400 — `nuevoHostId` ausente o auto-transferencia
+- 403 — Solo el HOST puede transferir el rol
+- 404 — Sala no encontrada / nuevo host no es participante de la sala
+
+---
+
 ### GET /salas/:id/participantes — Lista de participantes
 
 Retorna la lista de participantes de una sala.
@@ -232,20 +261,22 @@ Retorna la lista de participantes de una sala.
 
 ### POST /rooms/:id/token — Generar token GetStream (legacy)
 
-Genera un token GetStream para un participante.
+Genera un token GetStream para el usuario autenticado. El `userId` se toma del JWT (`req.user.sub`) y el rol de la DB (`participante.rol`); el body se ignora.
 
-**Request body:**
-```json
-{
-  "userId": "user-uuid",
-  "role": "HOST"
-}
-```
+**Auth:** JWT requerido (Bearer token). El usuario debe ser participante **APROBADO** de la sala (`estado = APROBADO`).
+
+**Request body:** ignorado (se acepta por compatibilidad, pero `userId`/`role` no se usan).
 
 **Response 200:**
 ```json
 { "token": "eyJhbGciOi..." }
 ```
+
+**Errores:**
+- 401 — Sin token, sin claim `sub`, expirado o firma inválida
+- 403 — El usuario no es participante aprobado de la sala (PENDIENTE/RECHAZADO)
+- 404 — Sala no encontrada
+- 409 — Sala no sincronizada con GetStream
 
 ---
 

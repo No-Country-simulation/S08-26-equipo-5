@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { EstadoParticipante, PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import {
   ValidationError,
@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   StreamServiceError,
 } from "../errors/index.js";
+import { AppError } from "../utils/AppError.js";
 import {
   createRoom as createRoomService,
   generateToken as generateTokenService,
@@ -20,7 +21,8 @@ import type {
   UpdateSalaBody,
   UpdateSalaResponse,
   ParticipantesResponse,
-  GenerateTokenBody,
+  TransferHostBody,
+  TransferHostResponse,
 } from "../types/stream.js";
 
 const prisma = new PrismaClient();
@@ -414,6 +416,86 @@ export async function deleteSala(
   res.status(200).json({ message: "Sala cancelada exitosamente" });
 }
 
+// ─── POST /salas/:id/transfer-host — Transferir rol HOST ─
+
+/**
+ * Transfiere el rol de HOST a otro participante de la sala.
+ * Solo el HOST actual puede transferir. El caller queda PARTICIPANTE
+ * y el target pasa a HOST, preservando el `estado` de ambos.
+ * Cualquier participante existente califica (PENDIENTE o APROBADO).
+ * Requiere: Authorization: Bearer <jwt>
+ */
+export async function transferHost(
+  req: Request<{ id: string }, unknown, TransferHostBody>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const { nuevoHostId } = req.body;
+  const userId = req.user?.sub;
+
+  if (!userId) {
+    throw new ValidationError("Usuario no autenticado");
+  }
+
+  if (!nuevoHostId || typeof nuevoHostId !== "string") {
+    throw new ValidationError("El campo 'nuevoHostId' es requerido");
+  }
+
+  // Verificar que la sala existe
+  const sala = await prisma.sala.findUnique({ where: { id } });
+  if (!sala) {
+    throw new NotFoundError("Sala no encontrada");
+  }
+
+  // Verificar que el usuario es HOST
+  const userIsHost = await isHost(id, userId);
+  if (!userIsHost) {
+    throw new ForbiddenError("Solo el HOST puede transferir el rol");
+  }
+
+  // No permitir auto-transferencia
+  if (nuevoHostId === userId) {
+    throw new ValidationError("No puedes transferir el rol a ti mismo");
+  }
+
+  // El nuevo host debe ser participante existente de la sala
+  const target = await prisma.participante.findUnique({
+    where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
+  });
+  if (!target) {
+    throw new NotFoundError("El nuevo host debe ser participante de la sala");
+  }
+
+  // Demover caller y promover target en una sola transacción.
+  // Guard anti-TOCTOU: el pre-check isHost() ocurre fuera de la tx; aquí el
+  // demote exige `rol: "HOST"` vía updateMany y count === 1. Dos transfers
+  // concurrentes pasan el pre-check, pero solo una demote gana (count 1);
+  // la otra recibe count 0 → 403 y rollback antes de promover (evita doble HOST).
+  // El promote queda como `update` simple: solo corre si el demote ganó la
+  // carrera, así que no necesita condición propia.
+  await prisma.$transaction(async (tx) => {
+    const demoted = await tx.participante.updateMany({
+      where: { salaId: id, usuarioId: userId, rol: "HOST" },
+      data: { rol: "PARTICIPANTE" },
+    });
+    if (demoted.count !== 1) {
+      throw new ForbiddenError("Solo el HOST puede transferir el rol");
+    }
+    await tx.participante.update({
+      where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
+      data: { rol: "HOST" },
+    });
+  });
+
+  const response: TransferHostResponse = {
+    message: "Rol de HOST transferido exitosamente",
+    host: { usuarioId: nuevoHostId },
+    previousHost: { usuarioId: userId },
+  };
+
+  res.status(200).json(response);
+}
+
 // ─── GET /salas/:id/participantes — Lista de participantes ─
 
 /**
@@ -468,24 +550,22 @@ export async function getParticipantes(
 // ─── POST /rooms/:id/token — Generar token (legacy) ───────
 
 /**
- * Genera un token GetStream para un participante.
+ * Genera un token GetStream para el usuario autenticado.
+ * El userId sale del JWT (verifyToken → req.user.sub) y el rol de la DB
+ * (participante.rol). El body se ignora por completo: nunca se confía
+ * en userId/role enviados por el cliente.
+ * Requiere: Authorization: Bearer <jwt> y ser participante APROBADO.
  */
 export async function generateToken(
-  req: Request<{ id: string }, unknown, GenerateTokenBody>,
+  req: Request<{ id: string }>,
   res: Response
 ): Promise<void> {
   const { id } = req.params;
-  const { userId, role } = req.body;
+  const userId = req.user?.sub;
 
-  // ── Validación ──────────────────────────────────────────
-  if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
-    throw new ValidationError("El campo 'userId' es requerido y no puede estar vacío");
-  }
-
-  if (!role || !["HOST", "PARTICIPANTE"].includes(role)) {
-    throw new ValidationError(
-      "El campo 'role' es requerido. Valores válidos: HOST, PARTICIPANTE"
-    );
+  // ── Validación de auth ───────────────────────────────────
+  if (!userId) {
+    throw new AppError(401, "UNAUTHORIZED", "Usuario no autenticado");
   }
 
   // ── Buscar sala ─────────────────────────────────────────
@@ -495,12 +575,25 @@ export async function generateToken(
     throw new NotFoundError("Sala no encontrada");
   }
 
+  // ── Autorización server-side: debe ser participante ─────
+  const participante = await prisma.participante.findUnique({
+    where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+  });
+
+  if (!participante) {
+    throw new ForbiddenError("Solo los participantes aprobados pueden obtener token");
+  }
+
+  if (participante.estado !== EstadoParticipante.APROBADO) {
+    throw new ForbiddenError("Solo los participantes aprobados pueden obtener token");
+  }
+
   if (!sala.streamRoomId) {
     throw new StreamServiceError("Sala no sincronizada con GetStream", 409);
   }
 
-  // ── Generar token ───────────────────────────────────────
-  const token = generateTokenService(userId.trim(), role, sala.streamRoomId);
+  // ── Generar token con el rol guardado en DB ─────────────
+  const token = generateTokenService(userId, participante.rol, sala.streamRoomId);
 
   res.status(200).json({ token });
 }

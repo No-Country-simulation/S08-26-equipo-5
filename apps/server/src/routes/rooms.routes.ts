@@ -9,6 +9,7 @@ import {
   deleteSala,
   getParticipantes,
   generateToken,
+  transferHost,
 } from "../controllers/rooms.controller.js";
 
 const router = Router();
@@ -50,13 +51,19 @@ router.delete("/salas/:id", verifyToken, (req: Request, res: Response, next) => 
   deleteSala(req as Request<{ id: string }>, res).catch(next);
 });
 
+// Transferir rol HOST (solo HOST actual)
+router.post("/salas/:id/transfer-host", verifyToken, (req: Request, res: Response, next) => {
+  transferHost(req as Request<{ id: string }>, res).catch(next);
+});
+
 // Lista de participantes
 router.get("/salas/:id/participantes", verifyToken, (req: Request, res: Response, next) => {
   getParticipantes(req as Request<{ id: string }>, res).catch(next);
 });
 
 // ─── Rutas legacy ─────────────────────────────────────────
-router.post("/rooms/:id/token", (req: Request, res: Response, next) => {
+// Generar token GetStream (requiere JWT; rol resuelto en DB)
+router.post("/rooms/:id/token", verifyToken, (req: Request, res: Response, next) => {
   generateToken(req as Request<{ id: string }>, res).catch(next);
 });
 

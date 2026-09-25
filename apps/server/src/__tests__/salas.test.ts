@@ -20,12 +20,14 @@ const {
   mockSalaFindUnique,
   mockUsuarioFindUnique,
   mockParticipanteCreate,
+  mockParticipanteFindUnique,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockSalaCreate: vi.fn(),
   mockSalaFindUnique: vi.fn(),
   mockUsuarioFindUnique: vi.fn(),
   mockParticipanteCreate: vi.fn(),
+  mockParticipanteFindUnique: vi.fn(),
   mockTransaction: vi.fn(),
 }));
 
@@ -40,9 +42,15 @@ vi.mock("@prisma/client", () => ({
     },
     participante: {
       create: mockParticipanteCreate,
+      findUnique: mockParticipanteFindUnique,
     },
     $transaction: mockTransaction,
   })),
+  EstadoParticipante: {
+    PENDIENTE: "PENDIENTE",
+    APROBADO: "APROBADO",
+    RECHAZADO: "RECHAZADO",
+  },
 }));
 
 // ─── Mock stream.service ──────────────────────────────────
@@ -241,9 +249,144 @@ describe("S2-01 — Salas API", () => {
     });
   });
 
+  // ─── POST /api/v1/salas/:id/transfer-host ───────────────
+  describe("POST /api/v1/salas/:id/transfer-host", () => {
+    const salaId = "sala-uuid-777";
+    const hostId = "user-host-1";
+    const targetId = "user-target-2";
+    const hostToken = createToken(hostId, "host@test.com");
+
+    const mockSala = { id: salaId, codigo: "TRAN1234", nombre: "Sala Transfer" };
+    let mockTxParticipanteUpdate: ReturnType<typeof vi.fn>;
+    let mockTxParticipanteUpdateMany: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockTxParticipanteUpdate = vi.fn().mockResolvedValue({});
+      mockTxParticipanteUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+      mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<any>) => {
+        const tx = {
+          participante: {
+            update: mockTxParticipanteUpdate,
+            updateMany: mockTxParticipanteUpdateMany,
+          },
+        };
+        return fn(tx);
+      });
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+        }
+        return { salaId, usuarioId: targetId, rol: "PARTICIPANTE", estado: "APROBADO" };
+      });
+    });
+
+    it("200 — HOST transfiere el rol a otro participante", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        message: "Rol de HOST transferido exitosamente",
+        host: { usuarioId: targetId },
+        previousHost: { usuarioId: hostId },
+      });
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTxParticipanteUpdateMany).toHaveBeenCalledTimes(1);
+      expect(mockTxParticipanteUpdateMany).toHaveBeenCalledWith({
+        where: { salaId, usuarioId: hostId, rol: "HOST" },
+        data: { rol: "PARTICIPANTE" },
+      });
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(1);
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
+        where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
+        data: { rol: "HOST" },
+      });
+    });
+
+    it("403 — demote con count 0 (carrera concurrente): target NO es promovido", async () => {
+      // Simula que otra transferencia ya demovió al HOST: updateMany no matchea.
+      mockTxParticipanteUpdateMany.mockResolvedValue({ count: 0 });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain("Solo el HOST puede transferir el rol");
+      expect(mockTxParticipanteUpdateMany).toHaveBeenCalledWith({
+        where: { salaId, usuarioId: hostId, rol: "HOST" },
+        data: { rol: "PARTICIPANTE" },
+      });
+      expect(mockTxParticipanteUpdate).not.toHaveBeenCalled();
+    });
+
+    it("403 — Caller no es HOST y no se ejecuta transacción", async () => {
+      mockParticipanteFindUnique.mockResolvedValue({
+        salaId,
+        usuarioId: hostId,
+        rol: "PARTICIPANTE",
+        estado: "APROBADO",
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain("Solo el HOST puede transferir el rol");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("404 — Target no es participante de la sala y no se ejecuta transacción", async () => {
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+        }
+        return null;
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: "user-no-existe" });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain("participante de la sala");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("400 — Auto-transferencia y no se ejecuta transacción", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: hostId });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("ti mismo");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("401 — Sin token de autenticación", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(401);
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── POST /api/v1/rooms/:id/token (legacy) ──────────────
   describe("POST /api/v1/rooms/:id/token", () => {
     const mockToken = "eyJhbGciOiJIUzI1NiIs.mock";
+    const tokenUserId = "user-uuid-token";
     const mockSala = {
       id: "sala-uuid-123",
       streamRoomId: "default:abc-123",
@@ -253,15 +396,37 @@ describe("S2-01 — Salas API", () => {
       mockGenerateToken.mockReturnValue(mockToken);
     });
 
-    it("200 — Generar token exitosamente", async () => {
+    it("200 — Generar token exitosamente con JWT y rol de DB", async () => {
       mockSalaFindUnique.mockResolvedValue(mockSala);
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: "part-1",
+        salaId: mockSala.id,
+        usuarioId: tokenUserId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
 
       const res = await request(app)
         .post("/api/v1/rooms/sala-uuid-123/token")
+        .set("Authorization", `Bearer ${createToken(tokenUserId, "user@test.com")}`)
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(200);
       expect(res.body.token).toBe(mockToken);
+      expect(mockGenerateToken).toHaveBeenCalledWith(
+        tokenUserId,
+        "HOST",
+        "default:abc-123"
+      );
+    });
+
+    it("401 — Sin token de autenticación no obtiene token GetStream", async () => {
+      const res = await request(app)
+        .post("/api/v1/rooms/sala-uuid-123/token")
+        .send({ userId: "user-789", role: "HOST" });
+
+      expect(res.status).toBe(401);
+      expect(mockGenerateToken).not.toHaveBeenCalled();
     });
 
     it("404 — Sala no existe", async () => {
@@ -269,6 +434,7 @@ describe("S2-01 — Salas API", () => {
 
       const res = await request(app)
         .post("/api/v1/rooms/999/token")
+        .set("Authorization", `Bearer ${createToken(tokenUserId, "user@test.com")}`)
         .send({ userId: "user-789", role: "HOST" });
 
       expect(res.status).toBe(404);

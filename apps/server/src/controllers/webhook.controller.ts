@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
+import { env } from "../config/env.js";
+import {
+  processGetStreamEvent,
+  type GetStreamWebhookEvent,
+} from "../services/webhook.service.js";
 import { AppError } from "../utils/AppError.js";
-
-const prisma = new PrismaClient();
 
 /**
  * Verifica la firma HMAC del webhook de GetStream.
@@ -24,19 +26,23 @@ function verifyWebhookSignature(
     .update(rawBody)
     .digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  const signatureBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expectedSignature);
+
+  // timingSafeEqual THROWS si las longitudes difieren: comparar antes.
+  if (signatureBuf.length !== expectedBuf.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(signatureBuf, expectedBuf);
 }
 
 /**
  * POST /webhooks/getstream
- * 
+ *
  * Recibe eventos de GetStream y actualiza el estado de las salas.
- * 
- * Eventos soportados:
- * - call.ended: Marca la sala como FINALIZADA
+ * La lógica de negocio vive en webhook.service; acá solo se valida
+ * la firma HMAC y se delega.
  */
 export async function handleGetStreamWebhook(
   req: Request,
@@ -52,14 +58,14 @@ export async function handleGetStreamWebhook(
   // Obtener body raw para verificar firma
   // express.raw() guarda el body como Buffer en req.body
   let rawBody: string;
-  let event: any;
+  let event: GetStreamWebhookEvent;
 
   if (Buffer.isBuffer(req.body)) {
     // Viene de express.raw() - body es un Buffer
     rawBody = req.body.toString("utf8");
     try {
       event = JSON.parse(rawBody);
-    } catch (e) {
+    } catch {
       console.error("[Webhook] Failed to parse JSON body");
       throw new AppError(400, "BAD_REQUEST", "Invalid JSON");
     }
@@ -71,109 +77,27 @@ export async function handleGetStreamWebhook(
 
   const signature = req.headers["x-signature"] as string | undefined;
 
-  // Verificar firma (temporalmente deshabilitado para desarrollo)
-  // En producción, descomentar esta línea:
-  // if (!verifyWebhookSignature(rawBody, signature, apiSecret)) {
-  //   console.error("[Webhook] Invalid signature");
-  //   throw new AppError(401, "UNAUTHORIZED", "Firma inválida");
-  // }
+  // Firma HMAC: requerida por defecto en producción (fail-closed vía
+  // env.webhookSignatureRequired). Con WEBHOOK_SIGNATURE_REQUIRED=false
+  // (solo desarrollo local) se omite la verificación, como hasta ahora.
+  if (env.webhookSignatureRequired) {
+    if (!verifyWebhookSignature(rawBody, signature, apiSecret)) {
+      console.error("[Webhook] Invalid signature");
+      throw new AppError(401, "UNAUTHORIZED", "Firma inválida o ausente");
+    }
+  } else {
+    console.warn(
+      "[Webhook] Signature verification skipped (WEBHOOK_SIGNATURE_REQUIRED=false)"
+    );
+  }
 
   console.log("[Webhook] Event received:", {
     type: event.type,
-    callId: event.call?.id,
-    cid: event.call?.cid,
+    callId: event.call?.cid,
   });
 
-  // ─── Manejar eventos ────────────────────────────────────
-
-  switch (event.type) {
-    case "call.ended":
-      await handleCallEnded(event);
-      break;
-
-    case "call.session_ended":
-      await handleSessionEnded(event);
-      break;
-
-    default:
-      console.log(`[Webhook] Event ignored: ${event.type}`);
-  }
+  await processGetStreamEvent(event);
 
   // Responder 200 rápido (GetStream requiere respuesta rápida)
   res.status(200).json({ received: true });
-}
-
-/**
- * Maneja el evento call.ended
- * Marca la sala como FINALIZADA en la base de datos.
- */
-async function handleCallEnded(event: any): Promise<void> {
-  const callCid = event.call?.cid;
-
-  if (!callCid) {
-    console.error("[Webhook] call.ended missing call.cid");
-    return;
-  }
-
-  console.log(`[Webhook] Processing call.ended for CID: ${callCid}`);
-
-  // Buscar sala por streamRoomId
-  const sala = await prisma.sala.findFirst({
-    where: { streamRoomId: callCid },
-  });
-
-  if (!sala) {
-    console.warn(`[Webhook] Sala not found for streamRoomId: ${callCid}`);
-    return;
-  }
-
-  if (sala.estado === "FINALIZADA") {
-    console.log(`[Webhook] Sala ${sala.id} already finalized`);
-    return;
-  }
-
-  // Actualizar estado a FINALIZADA
-  await prisma.sala.update({
-    where: { id: sala.id },
-    data: {
-      estado: "FINALIZADA",
-      fechaFin: new Date(),
-    },
-  });
-
-  console.log(`[Webhook] Sala ${sala.id} finalized (was: ${sala.estado})`);
-}
-
-/**
- * Maneja el evento call.session_ended
- * Similar a call.ended pero para sesiones específicas.
- */
-async function handleSessionEnded(event: any): Promise<void> {
-  const callCid = event.call?.cid;
-
-  if (!callCid) {
-    console.error("[Webhook] call.session_ended missing call.cid");
-    return;
-  }
-
-  console.log(`[Webhook] Processing call.session_ended for CID: ${callCid}`);
-
-  // Lógica similar a handleCallEnded
-  const sala = await prisma.sala.findFirst({
-    where: { streamRoomId: callCid },
-  });
-
-  if (!sala || sala.estado === "FINALIZADA") {
-    return;
-  }
-
-  await prisma.sala.update({
-    where: { id: sala.id },
-    data: {
-      estado: "FINALIZADA",
-      fechaFin: new Date(),
-    },
-  });
-
-  console.log(`[Webhook] Sala ${sala.id} finalized via session_ended`);
 }
