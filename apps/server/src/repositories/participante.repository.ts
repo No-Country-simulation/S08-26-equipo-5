@@ -50,6 +50,18 @@ export interface IParticipanteRepository {
         estado: EstadoParticipante,
         fechaIngreso?: Date | null
     ): Promise<Participante>;
+    /**
+     * Update condicional (WHERE estado = PENDIENTE) para aprobar/rechazar sin
+     * pisar una resolución concurrente. Devuelve la cantidad de filas
+     * afectadas: 0 significa que alguien más ya lo resolvió primero (la
+     * lectura previa por findById quedó stale) y el caller debe tratarlo
+     * como conflicto, no reintentar el update.
+     */
+    resolveEstadoSiPendiente(
+        participanteId: string,
+        estado: EstadoParticipante,
+        fechaIngreso: Date | null
+    ): Promise<number>;
     findAprobadosBySala(salaId: string): Promise<Pick<Participante, "id" | "nombre" | "estado">[]>;
 }
 
@@ -138,6 +150,18 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
                 ...(fechaIngreso !== undefined ? { fechaIngreso } : {}),
             },
         });
+    }
+
+    async resolveEstadoSiPendiente(
+        participanteId: string,
+        estado: EstadoParticipante,
+        fechaIngreso: Date | null
+    ) {
+        const result = await this.prisma.participante.updateMany({
+            where: { id: participanteId, estado: EstadoParticipante.PENDIENTE },
+            data: { estado, fechaIngreso },
+        });
+        return result.count;
     }
 
     async findAprobadosBySala(salaId: string) {

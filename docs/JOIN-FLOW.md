@@ -177,6 +177,13 @@ guest JWT. Con guest JWT el socket queda suscrito solo a sus rooms.
 | `participant:approve` | `{ participanteId }` | host |
 | `participant:reject` | `{ participanteId }` | host |
 
+`participant:approve`/`participant:reject` resuelven con un UPDATE
+condicional (`WHERE estado = PENDIENTE`). Si dos resoluciones casi
+simultáneas apuntan al mismo participante (dos approve, o approve+reject),
+solo una gana; la otra recibe `{ ok: false, error: { code:
+"PARTICIPANT_STATE_CONFLICT" } }` por su ack y no dispara ningún evento —
+nadie más se entera de esa segunda resolución.
+
 Todos aceptan un callback de ack: `{ ok: true, ... }` o `{ ok: false, error: { code, message } }`.
 
 **`join:subscribe` exige ser dueño del participante.** El socket tiene que

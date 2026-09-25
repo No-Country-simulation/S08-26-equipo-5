@@ -55,6 +55,7 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
     findByUsuario: vitest.fn().mockResolvedValue(null),
     createPendiente: vitest.fn(),
     updateEstado: vitest.fn().mockResolvedValue({}),
+    resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(1),
     findAprobadosBySala: vitest.fn().mockResolvedValue([]),
     ...overrides,
   };
@@ -156,7 +157,7 @@ describe("resolveParticipant", () => {
     });
 
     expect(result.evento).toBe("join:approved");
-    expect(deps.participantes.updateEstado).toHaveBeenCalledWith(
+    expect(deps.participantes.resolveEstadoSiPendiente).toHaveBeenCalledWith(
       "participante-1",
       "APROBADO",
       expect.any(Date),
@@ -196,6 +197,8 @@ describe("resolveParticipant", () => {
   it("no re-resuelve un participante con estado final", async () => {
     const deps = makeDeps({
       findById: vitest.fn().mockResolvedValue({ ...pendiente, estado: "APROBADO" }),
+      // count 0: el update condicional (WHERE estado = PENDIENTE) no matcheó.
+      resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(0),
     });
 
     await expect(
@@ -204,7 +207,29 @@ describe("resolveParticipant", () => {
         hostUsuarioId: HOST_USER_ID,
         nuevoEstado: "APROBADO" as never,
       }),
-    ).rejects.toMatchObject({ code: "PARTICIPANT_STATE_CONFLICT" });
+    ).rejects.toMatchObject({ statusCode: 409, code: "PARTICIPANT_STATE_CONFLICT" });
+  });
+
+  // BLOCKER de carrera: approve y reject (o dos approve) disparados casi a
+  // la vez leían el mismo estado PENDIENTE por findById (TOCTOU) y los dos
+  // terminaban actualizando y emitiendo join:approved/join:rejected. Ahora
+  // la fuente de verdad es un UPDATE condicional (WHERE estado = PENDIENTE):
+  // solo una de las dos resoluciones concurrentes matchea (count 1), la
+  // otra recibe count 0 → 409 y el handler nunca llega a emitir nada para
+  // ella (ver waitingRoom.handlers.test.ts para el caso end-to-end del socket).
+  it("la segunda resolución concurrente (count 0) no devuelve un ResolveResult para emitir", async () => {
+    const deps = makeDeps({
+      findById: vitest.fn().mockResolvedValue(pendiente), // lectura stale: todavía PENDIENTE
+      resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(0),
+    });
+
+    await expect(
+      resolveParticipant(deps, {
+        participanteId: "participante-1",
+        hostUsuarioId: HOST_USER_ID,
+        nuevoEstado: "RECHAZADO" as never,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409, code: "PARTICIPANT_STATE_CONFLICT" });
   });
 
   it("409 si la sala no está sincronizada con GetStream", async () => {

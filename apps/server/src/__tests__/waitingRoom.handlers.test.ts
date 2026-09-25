@@ -62,8 +62,10 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
     findHost: vitest.fn(),
     findById: vitest.fn().mockResolvedValue(participanteConSala),
     findByEmail: vitest.fn(),
+    findByUsuario: vitest.fn(),
     createPendiente: vitest.fn(),
     updateEstado: vitest.fn(),
+    resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(1),
     findAprobadosBySala: vitest.fn().mockResolvedValue([]),
     ...overrides,
   };
@@ -210,5 +212,79 @@ describe("join:request — valida el payload igual que el HTTP", () => {
       error: expect.objectContaining({ code: "VALIDATION_ERROR" }),
     });
     expect(deps.participantes.createPendiente).not.toHaveBeenCalled();
+  });
+});
+
+describe("participant:approve / participant:reject — sin doble emisión en carrera", () => {
+  const salaConStream = {
+    id: SALA_ID,
+    codigo: "ABCD1234",
+    estado: "ACTIVA",
+    streamRoomId: "default:abc-123",
+    streamCallType: "default",
+    streamCallId: "abc-123",
+  };
+  const pendienteConSala = {
+    id: PARTICIPANTE_ID,
+    salaId: SALA_ID,
+    rol: "PARTICIPANTE",
+    estado: "PENDIENTE",
+    sala: salaConStream,
+  };
+
+  it("la segunda resolución (count 0) responde 409 por ack y NO emite nada", async () => {
+    // Simula la carrera: el update condicional ya lo ganó otra resolución,
+    // así que esta segunda llamada tiene que fallar sin tocar el socket.
+    const deps = makeDeps({
+      findById: vitest.fn().mockResolvedValue(pendienteConSala),
+      findHost: vitest.fn().mockResolvedValue({ id: "host-participante" }),
+      resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(0),
+    });
+    const socket = createFakeSocket({ userId: "host-user-1" });
+    registerWaitingRoomHandlers({} as never, socket as never, deps);
+
+    const ack = vitest.fn();
+    await socket.trigger(
+      "participant:approve",
+      { participanteId: PARTICIPANTE_ID },
+      ack,
+    );
+
+    expect(ack).toHaveBeenCalledWith({
+      ok: false,
+      error: expect.objectContaining({ code: "PARTICIPANT_STATE_CONFLICT" }),
+    });
+    // No hay evento de error hacia OTROS sockets ni join:approved: el único
+    // "emit" posible acá sería el de error de este mismo socket, y no debe
+    // haber ningún llamado a broadcastResolution (que requeriría el
+    // namespace real; si se hubiese invocado con este stub, hubiese tirado).
+    expect(socket.emit).toHaveBeenCalledTimes(1);
+    expect(socket.emit).toHaveBeenCalledWith(
+      "error",
+      expect.objectContaining({ code: "PARTICIPANT_STATE_CONFLICT" }),
+    );
+  });
+
+  it("la primera resolución (count 1) sí resuelve ok", async () => {
+    const deps = makeDeps({
+      findById: vitest.fn().mockResolvedValue(pendienteConSala),
+      findHost: vitest.fn().mockResolvedValue({ id: "host-participante" }),
+      resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(1),
+    });
+    const socket = createFakeSocket({ userId: "host-user-1" });
+    registerWaitingRoomHandlers({} as never, socket as never, deps);
+
+    const ack = vitest.fn();
+    await socket.trigger(
+      "participant:reject",
+      { participanteId: PARTICIPANTE_ID },
+      ack,
+    );
+
+    expect(ack).toHaveBeenCalledWith({ ok: true, estado: "RECHAZADO" });
+    expect(socket.emit).not.toHaveBeenCalledWith(
+      "error",
+      expect.anything(),
+    );
   });
 });

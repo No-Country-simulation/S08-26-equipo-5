@@ -370,14 +370,6 @@ export async function resolveParticipant(
     );
   }
 
-  if (participante.estado !== EstadoParticipante.PENDIENTE) {
-    throw new AppError(
-      409,
-      "PARTICIPANT_STATE_CONFLICT",
-      "El participante ya tiene un estado final",
-    );
-  }
-
   const aprobado = args.nuevoEstado === EstadoParticipante.APROBADO;
 
   if (aprobado && !getStreamCallRef(participante.sala)) {
@@ -388,11 +380,25 @@ export async function resolveParticipant(
     );
   }
 
-  await deps.participantes.updateEstado(
+  // Update condicional (WHERE estado = PENDIENTE): es la fuente de verdad
+  // contra la carrera de dos resoluciones casi simultáneas (dos approve, o
+  // approve+reject). El findById de arriba puede leer PENDIENTE y sin
+  // embargo perder la carrera acá — por eso no se decide el conflicto por
+  // ese read, sino por `count` devuelto por este update atómico. count 0
+  // significa que otra resolución ya ganó: no hay nada que emitir para esta.
+  const count = await deps.participantes.resolveEstadoSiPendiente(
     args.participanteId,
     args.nuevoEstado,
     aprobado ? new Date() : null,
   );
+
+  if (count === 0) {
+    throw new AppError(
+      409,
+      "PARTICIPANT_STATE_CONFLICT",
+      "El participante ya tiene un estado final",
+    );
+  }
 
   return {
     participante,
