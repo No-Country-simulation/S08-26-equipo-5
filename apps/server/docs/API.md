@@ -4,7 +4,11 @@ Base URL: `http://localhost:4000/api/v1`
 
 📖 **Swagger interactivo:** `GET /api/v1/docs` (UI) · `GET /api/v1/docs.json` (spec crudo) — fuente de verdad con schemas y ejemplos, generado desde `src/docs/openapi.ts`.
 
-🧪 **Colección `.http` (REST Client):** `apps/server/api_salas_agenda.http` (Salas + Agenda) y `apps/server/api_auth.http` (Auth).
+🧪 **Suite `.http` (REST Client / httpyac), contrato v1.0.1:** `api_auth.http`, `api_salas_agenda.http` y `api_waiting.http`. Cliente gráfico en el repo: `hoppscotch/meetflow-salas-agenda.json`.
+
+```bash
+npm run test:http
+```
 
 ---
 
@@ -332,5 +336,6 @@ Recibe eventos de GetStream (call.ended, session_ended) y marca salas como FINAL
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-09-24 | Contrato OpenAPI `1.0.1`. Suite `.http` con aserciones (auth, salas, waiting room) y colección Hoppscotch alineada a las rutas vigentes. |
 | 2026-09-22 | Documentado en Swagger (`src/docs/openapi.ts` + `/api/v1/docs`) con ejemplos y schemas: `POST /salas`, `GET /salas/:code`, `GET /salas/mis-participaciones` (Agenda). Agregado `api_salas_agenda.http` (REST Client). Ver issue #33. |
 | 2026-09-21 | Documento inicial (PR #74): CRUD de salas, participantes, webhook GetStream. |

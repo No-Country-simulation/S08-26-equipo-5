@@ -1,0 +1,50 @@
+
+---------------------
+
+=== 1. Register host -> 201 ===
+
+POST http://localhost:4000/api/v1/auth/register
+=> 201 (336 ms, 717 B)
+✓ register host 201
+
+---------------------
+
+=== 2. Login host -> 200 ===
+
+POST http://localhost:4000/api/v1/auth/login
+=> 200 (328 ms, 969 B)
+✓ login host 200
+
+---------------------
+
+=== 3. Register invitado -> 201 ===
+
+POST http://localhost:4000/api/v1/auth/register
+=> 201 (325 ms, 717 B)
+✓ register guest 201
+
+---------------------
+
+=== 4. Login invitado -> 200 ===
+
+POST http://localhost:4000/api/v1/auth/login
+=> 200 (331 ms, 977 B)
+✓ login guest 200
+
+---------------------
+
+=== 5. Crear sala -> 201 ===
+
+POST http://localhost:4000/api/v1/salas
+=> 201 (666 ms, 757 B)
+✓ crear sala 201
+
+---------------------
+
+=== 6. Waiting room Socket.IO ===
+
+GET http://localhost:4000/api/v1/health
+=> 200 (4 ms, 645 B)
+✓ waiting room
+
+6 requests processed (6 succeeded)

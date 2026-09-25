@@ -1,72 +1,21 @@
-# Hoppscotch — Importar Endpoints MeetFlow
+# Hoppscotch — MeetFlow API v1.0.1
 
-> ⚠️ **DEPRECADO**: esta colección y `openapi.yaml` son artefactos previos a la
-> consolidación de Agenda (PR #74) y contienen endpoints que ya no existen
-> (`GET /salas/mis-salas/list`, `GET /salas/programadas/list`). La fuente de
-> verdad actual es `src/docs/openapi.ts`, servida en `GET /api/v1/docs`
-> (ver issue #33 y `docs/API.md`). No usar esta carpeta para probar la API.
+Colección compartida en el repositorio y versionada por PR. Sustituye a Postman.
 
-## Opción 1: Importar colección JSON (recomendado)
+Fuente de verdad de schemas: `src/docs/openapi.ts`, servida en `GET /api/v1/docs`.
 
-1. Abrir Hoppscotch: https://hoppscotch.io
-2. Ir a **Collections** (panel izquierdo)
-3. Click en **Import** → **Import from File**
-4. Seleccionar: `meetflow-salas-agenda.json`
-5. La colección aparecerá con todos los endpoints
+## Importar
 
-## Opción 2: Importar OpenAPI (documentación interactiva)
+1. Abrir https://hoppscotch.io
+2. Collections → Import → Import from File
+3. Elegir `meetflow-salas-agenda.json`
+4. Variable `baseUrl` = `http://localhost:4000/api/v1`
 
-1. Abrir Hoppscotch
-2. Ir a **Collections** → **Import** → **Import from OpenAPI**
-3. Seleccionar: `openapi.yaml`
-4. Se creará la colección con schemas documentados
+## Orden
 
-## Variables automáticas
+1. `POST /auth/register`
+2. `POST /auth/login` (guarda `token` y `refreshToken`)
+3. `POST /salas` (guarda `salaId` y `salaCodigo`)
+4. El resto usa esas variables
 
-Al importar, estas variables se crean automáticamente:
-
-| Variable | Valor | Descripción |
-|----------|-------|-------------|
-| `baseUrl` | `http://localhost:4000/api/v1` | Base de la API |
-| `token` | `""` | Se llena al hacer login |
-| `salaId` | `""` | Se llena al crear sala |
-| `salaCodigo` | `""` | Se llena al crear sala |
-
-## Flujo de prueba rápido
-
-1. **Ejecutar** `POST /auth/login` → Guarda token automáticamente
-2. **Ejecutar** `POST /salas` → Guarda salaId y salaCodigo
-3. **Ejecutar** cualquier otro endpoint → Usa las variables
-
-## Scripts automáticos
-
-Cada request tiene un `testScript` que:
-- Imprime resultados en la consola
-- Guarda variables para siguientes requests
-- Muestra mensajes de éxito/error
-
-## Estructura de la colección
-
-```
-MeetFlow API — Salas & Agenda
-├── Auth
-│   ├── POST /auth/register
-│   └── POST /auth/login
-├── Salas
-│   ├── POST /salas
-│   ├── GET /salas/:code (público)
-│   ├── GET /salas/:id/detalle
-│   ├── PUT /salas/:id
-│   ├── DELETE /salas/:id
-│   └── GET /salas/:id/participantes
-├── Agenda
-│   ├── GET /salas/mis-salas/list
-│   └── GET /salas/programadas/list
-└── Legacy
-    └── POST /rooms/:id/token
-```
-
-## Archivos
-
-- `meetflow-salas-agenda.json` — Colección Hoppscotch
-- `openapi.yaml` — Documentación OpenAPI 3.0
+La suite automatizada es `npm run test:http` (`api_auth.http`, `api_salas_agenda.http`, `api_waiting.http`).

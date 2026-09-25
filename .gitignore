@@ -12,6 +12,8 @@ logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+# Excepcion: logs de evidencia QA, se versionan a proposito (ver qa/*.md)
+!qa/*.log
 
 # Variables de entorno
 .env

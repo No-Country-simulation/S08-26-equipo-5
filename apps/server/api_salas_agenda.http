@@ -1,13 +1,13 @@
 @host = http://localhost:4000/api/v1
-@email = agenda.test@test.com
+@email = qa-salas-{{$timestamp}}@test.com
+@guestEmail = qa-guest-{{$timestamp}}@test.com
 @password = password123
+@missingId = 00000000-0000-4000-8000-000000000099
 
-# Flujo pensado para probar Salas + Agenda de punta a punta (S2-API — issue #33).
-# Los requests dependen del estado que dejan los anteriores (variables @name):
-#   register -> login -> crearSala -> getPorCodigo -> misParticipaciones -> detalle -> actualizar -> participantes -> cancelar
-# Ejecútalos en orden.
+# Contrato v1.0.1. Host crea la sala; el invitado cubre 403 en PUT y DELETE.
+# GET /salas/:code es público: no aplica 401 ni 403; se afirma 200 y 404.
 
-### 0. Register (solo si @email no existe todavía) -> 201 (si repites, da 409)
+### 1. Register host -> 201
 POST {{host}}/auth/register
 Content-Type: application/json
 
@@ -18,7 +18,13 @@ Content-Type: application/json
   "password": "{{password}}"
 }
 
-### 1. Login -> 200 (guarda accessToken)
+> {%
+client.test("register host 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 2. Login host -> 200
 # @name login
 POST {{host}}/auth/login
 Content-Type: application/json
@@ -28,28 +34,86 @@ Content-Type: application/json
   "password": "{{password}}"
 }
 
-### 2. POST /salas — Crear sala -> 201 (guarda salaId y codigo)
+> {%
+client.test("login host 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("accessToken", response.body.accessToken);
+});
+%}
+
+### 3. Register invitado -> 201
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Luis",
+  "apellido": "Díaz",
+  "email": "{{guestEmail}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register guest 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 4. Login invitado -> 200
+# @name guest
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{guestEmail}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login guest 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("guestToken", response.body.accessToken);
+});
+%}
+
+### 5. POST /salas -> 201
 # @name crearSala
 POST {{host}}/salas
 Content-Type: application/json
-Authorization: Bearer {{login.response.body.$.accessToken}}
+Authorization: Bearer {{accessToken}}
 
 {
   "nombre": "Daily Backend",
-  "resumen": "Revisión del sprint y bloqueos",
-  "fechaInicio": "2026-09-15T18:00:00.000Z"
+  "resumen": "Revisión del sprint",
+  "fechaInicio": "2026-10-15T18:00:00.000Z"
 }
 
-### 3. POST /salas sin nombre -> 400 VALIDATION_ERROR
+> {%
+client.test("crear sala 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.assert(!!response.body.salaId, "falta salaId");
+  client.assert(!!response.body.codigo, "falta codigo");
+  client.global.set("salaId", response.body.salaId);
+  client.global.set("salaCodigo", response.body.codigo);
+  client.global.set("salaCodigoLower", String(response.body.codigo).toLowerCase());
+});
+%}
+
+### 6. POST /salas sin nombre -> 400
 POST {{host}}/salas
 Content-Type: application/json
-Authorization: Bearer {{login.response.body.$.accessToken}}
+Authorization: Bearer {{accessToken}}
 
 {
-  "resumen": "Sin nombre, debe fallar"
+  "resumen": "Sin nombre"
 }
 
-### 4. POST /salas sin token -> 401 UNAUTHORIZED
+> {%
+client.test("crear sala 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 7. POST /salas sin token -> 401
 POST {{host}}/salas
 Content-Type: application/json
 
@@ -57,43 +121,228 @@ Content-Type: application/json
   "nombre": "Sala sin auth"
 }
 
-### 5. GET /salas/:code — Consulta pública -> 200 (no requiere auth)
-GET {{host}}/salas/{{crearSala.response.body.$.codigo}}
+> {%
+client.test("crear sala 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+  client.assert(response.body.error.code === "UNAUTHORIZED", JSON.stringify(response.body));
+});
+%}
 
-### 6. GET /salas/:code con código inexistente -> 404 NOT_FOUND
-GET {{host}}/salas/ZZZZ0000
+### 8. GET /salas/:code -> 200
+GET {{host}}/salas/{{salaCodigo}}
 
-### 7. GET /salas/mis-participaciones — Agenda del usuario -> 200
-# (issue #33: "GET /agenda"; implementado como /salas/mis-participaciones, ver docs/API.md)
-# @name misParticipaciones
-GET {{host}}/salas/mis-participaciones
-Authorization: Bearer {{login.response.body.$.accessToken}}
+> {%
+client.test("sala pública 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.codigo, "falta codigo");
+});
+%}
 
-### 8. GET /salas/mis-participaciones sin token -> 401 UNAUTHORIZED
-GET {{host}}/salas/mis-participaciones
+### 8b. GET /salas/:code en minúsculas -> 200
+GET {{host}}/salas/{{salaCodigoLower}}
 
-### 9. GET /salas/:id/detalle -> 200 (con lista de participantes y creador)
-GET {{host}}/salas/{{crearSala.response.body.$.salaId}}/detalle
-Authorization: Bearer {{login.response.body.$.accessToken}}
+> {%
+client.test("código normalizado", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
 
-### 10. PUT /salas/:id — Actualizar sala (solo HOST) -> 200
-PUT {{host}}/salas/{{crearSala.response.body.$.salaId}}
+### 8c. POST /salas nombre de 151 -> 400
+POST {{host}}/salas
 Content-Type: application/json
-Authorization: Bearer {{login.response.body.$.accessToken}}
+Authorization: Bearer {{accessToken}}
 
 {
-  "nombre": "Daily Backend + Demo",
-  "resumen": "Sprint review y demo"
+  "nombre": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 }
 
-### 11. GET /salas/:id/participantes -> 200
-GET {{host}}/salas/{{crearSala.response.body.$.salaId}}/participantes
-Authorization: Bearer {{login.response.body.$.accessToken}}
+> {%
+client.test("nombre 151 es 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
 
-### 12. DELETE /salas/:id — Cancelar sala (solo HOST) -> 200
-DELETE {{host}}/salas/{{crearSala.response.body.$.salaId}}
-Authorization: Bearer {{login.response.body.$.accessToken}}
+### 9. GET /salas/:code inexistente -> 404
+GET {{host}}/salas/ZZZZ0000
 
-### 13. DELETE /salas/:id repetido -> 400 (ya está cancelada)
-DELETE {{host}}/salas/{{crearSala.response.body.$.salaId}}
-Authorization: Bearer {{login.response.body.$.accessToken}}
+> {%
+client.test("sala pública 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 10. GET /salas/mis-participaciones -> 200
+GET {{host}}/salas/mis-participaciones
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("agenda 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(Array.isArray(response.body.salas), "falta salas");
+});
+%}
+
+### 11. GET /salas/mis-participaciones sin token -> 401
+GET {{host}}/salas/mis-participaciones
+
+> {%
+client.test("agenda 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 12. GET /salas/:id/detalle -> 200
+GET {{host}}/salas/{{salaId}}/detalle
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("detalle 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 13. GET /salas/:id/detalle sin token -> 401
+GET {{host}}/salas/{{salaId}}/detalle
+
+> {%
+client.test("detalle 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 14. GET /salas/:id/detalle inexistente -> 404
+GET {{host}}/salas/{{missingId}}/detalle
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("detalle 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 15. PUT /salas/:id host -> 200
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Daily Backend + Demo"
+}
+
+> {%
+client.test("update 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 16. PUT /salas/:id invitado -> 403
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+Authorization: Bearer {{guestToken}}
+
+{
+  "nombre": "No debería"
+}
+
+> {%
+client.test("update 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+});
+%}
+
+### 17. PUT /salas/:id sin token -> 401
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+
+{
+  "nombre": "Sin token"
+}
+
+> {%
+client.test("update 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 18. PUT /salas/:id inexistente -> 404
+PUT {{host}}/salas/{{missingId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "No existe"
+}
+
+> {%
+client.test("update 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 19. GET participantes -> 200
+GET {{host}}/salas/{{salaId}}/participantes
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("participantes 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 20. GET participantes sin token -> 401
+GET {{host}}/salas/{{salaId}}/participantes
+
+> {%
+client.test("participantes 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 21. GET participantes inexistente -> 404
+GET {{host}}/salas/{{missingId}}/participantes
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("participantes 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 22. DELETE sin token -> 401
+DELETE {{host}}/salas/{{salaId}}
+
+> {%
+client.test("delete 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 23. DELETE invitado -> 403
+DELETE {{host}}/salas/{{salaId}}
+Authorization: Bearer {{guestToken}}
+
+> {%
+client.test("delete 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+});
+%}
+
+### 24. DELETE inexistente -> 404
+DELETE {{host}}/salas/{{missingId}}
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("delete 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 25. DELETE host -> 200
+DELETE {{host}}/salas/{{salaId}}
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("delete 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
