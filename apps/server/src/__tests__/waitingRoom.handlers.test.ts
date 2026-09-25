@@ -163,3 +163,52 @@ describe("join:subscribe — ownership", () => {
     });
   });
 });
+
+describe("join:request — valida el payload igual que el HTTP", () => {
+  // Antes, join:request por socket no validaba nada: le pasaba el payload
+  // crudo a requestJoin. Un email inválido (o campos vacíos) terminaba
+  // creando un Participante con datos basura en vez de un 400 claro.
+  it("email inválido → error ack con VALIDATION_ERROR, no crea participante", async () => {
+    const deps = makeDeps();
+    const socket = createFakeSocket({});
+    registerWaitingRoomHandlers({} as never, socket as never, deps);
+
+    const ack = vitest.fn();
+    await socket.trigger(
+      "join:request",
+      {
+        salaCodigo: "ABCD1234",
+        nombre: "Ana",
+        apellido: "Pérez",
+        email: "no-es-un-email",
+      },
+      ack,
+    );
+
+    expect(ack).toHaveBeenCalledWith({
+      ok: false,
+      error: expect.objectContaining({ code: "VALIDATION_ERROR" }),
+    });
+    expect(deps.participantes.createPendiente).not.toHaveBeenCalled();
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it("faltan campos → error ack con VALIDATION_ERROR, no crea participante", async () => {
+    const deps = makeDeps();
+    const socket = createFakeSocket({});
+    registerWaitingRoomHandlers({} as never, socket as never, deps);
+
+    const ack = vitest.fn();
+    await socket.trigger(
+      "join:request",
+      { salaCodigo: "ABCD1234", nombre: "", apellido: "", email: "" },
+      ack,
+    );
+
+    expect(ack).toHaveBeenCalledWith({
+      ok: false,
+      error: expect.objectContaining({ code: "VALIDATION_ERROR" }),
+    });
+    expect(deps.participantes.createPendiente).not.toHaveBeenCalled();
+  });
+});

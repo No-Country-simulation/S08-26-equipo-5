@@ -16,6 +16,7 @@ import {
 import {
   requestJoin,
   getStreamCallRef,
+  validateJoinInput,
   type WaitingRoomDeps,
 } from "../services/waitingRoom.service.js";
 import { PrismaParticipanteRepository } from "../repositories/participante.repository.js";
@@ -587,33 +588,15 @@ export async function joinSala(
   const { code } = req.params;
   const { nombre, apellido, email } = req.body ?? {};
 
-  if (!code || code.trim().length === 0) {
-    throw new AppError(400, "VALIDATION_ERROR", "El código de sala es requerido");
-  }
-
-  const faltantes = [
-    !nombre?.trim() && "nombre",
-    !apellido?.trim() && "apellido",
-    !email?.trim() && "email",
-  ].filter(Boolean) as string[];
-
-  if (faltantes.length > 0) {
-    throw new AppError(
-      400,
-      "VALIDATION_ERROR",
-      `Campos requeridos: ${faltantes.join(", ")}`
-    );
-  }
-
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email!.trim())) {
-    throw new AppError(400, "VALIDATION_ERROR", "El email no es válido");
-  }
+  // Misma validación que el evento de socket join:request (mismos códigos
+  // de error): vive en waitingRoom.service.ts para no duplicarla.
+  const validado = validateJoinInput({ salaCodigo: code, nombre, apellido, email });
 
   const result = await requestJoin(waitingRoomDeps, {
-    salaCodigo: code,
-    nombre: nombre!.trim(),
-    apellido: apellido!.trim(),
-    email: email!.trim(),
+    salaCodigo: validado.salaCodigo,
+    nombre: validado.nombre,
+    apellido: validado.apellido,
+    email: validado.email,
     // Si vino con sesión iniciada, queda vinculado a su usuario.
     usuarioId: req.user?.sub ?? null,
   });

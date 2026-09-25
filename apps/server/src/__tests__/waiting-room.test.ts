@@ -28,6 +28,7 @@ import {
   buildJoinApprovedPayload,
   getStreamCallRef,
   requestJoin,
+  validateJoinInput,
   type WaitingRoomDeps,
 } from "../services/waitingRoom.service.js";
 import { verifyParticipantToken } from "../utils/participantToken.js";
@@ -340,6 +341,44 @@ describe("requestJoin — accessToken también para PENDIENTE", () => {
 
     expect(result.estado).toBe("PENDIENTE");
     expect(result.accessToken).toBeTypeOf("string");
+  });
+});
+
+describe("validateJoinInput — validador compartido HTTP/socket", () => {
+  const valido = {
+    salaCodigo: "ABCD1234",
+    nombre: "Ana",
+    apellido: "Pérez",
+    email: "ana@test.com",
+  };
+
+  it("normaliza (trim) y devuelve el payload cuando es válido", () => {
+    expect(
+      validateJoinInput({
+        salaCodigo: "  ABCD1234  ",
+        nombre: " Ana ",
+        apellido: " Pérez ",
+        email: " ana@test.com ",
+      }),
+    ).toEqual(valido);
+  });
+
+  it("400 si falta el código de sala", () => {
+    expect(() => validateJoinInput({ ...valido, salaCodigo: "" })).toThrow(
+      expect.objectContaining({ statusCode: 400, code: "VALIDATION_ERROR" }),
+    );
+  });
+
+  it("400 si faltan campos requeridos", () => {
+    expect(() => validateJoinInput({ ...valido, nombre: "" })).toThrow(
+      expect.objectContaining({ statusCode: 400, code: "VALIDATION_ERROR" }),
+    );
+  });
+
+  it("400 si el email no es válido", () => {
+    expect(() => validateJoinInput({ ...valido, email: "no-es-un-email" })).toThrow(
+      expect.objectContaining({ statusCode: 400, code: "VALIDATION_ERROR" }),
+    );
   });
 });
 

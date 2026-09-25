@@ -5,6 +5,7 @@ import {
     broadcastResolution,
     requestJoin,
     resolveParticipant,
+    validateJoinInput,
     type WaitingRoomDeps,
 } from "../services/waitingRoom.service.js";
 import { rooms } from "./registry.js";
@@ -50,11 +51,17 @@ export function registerWaitingRoomHandlers(
 
     socket.on("join:request", async (payload: JoinRequestPayload, ack?: Ack) => {
         try {
+            // Misma validación que POST /salas/:code/join (mismos códigos de
+            // error): sin esto, un payload con campos vacíos o un email
+            // inválido llegaba directo a requestJoin y creaba un Participante
+            // con datos basura.
+            const validado = validateJoinInput(payload ?? {});
+
             const result = await requestJoin(deps, {
-                salaCodigo: payload.salaCodigo,
-                nombre: payload.nombre,
-                apellido: payload.apellido,
-                email: payload.email,
+                salaCodigo: validado.salaCodigo,
+                nombre: validado.nombre,
+                apellido: validado.apellido,
+                email: validado.email,
                 usuarioId: socket.data.userId ?? null,
             });
 

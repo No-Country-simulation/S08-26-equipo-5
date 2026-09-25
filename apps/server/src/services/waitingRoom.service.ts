@@ -114,6 +114,58 @@ function emitJoinPending(
     });
 }
 
+export interface RawJoinInput {
+  salaCodigo?: string;
+  nombre?: string;
+  apellido?: string;
+  email?: string;
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/**
+ * Validador compartido del payload de "pedir ingreso a una sala": lo usan
+ * tanto POST /salas/:code/join como el evento de socket join:request, para
+ * que ambos caminos apliquen exactamente las mismas reglas (y los mismos
+ * códigos de error). Antes join:request por socket no validaba nada y podía
+ * crear un Participante con datos basura.
+ */
+export function validateJoinInput(payload: RawJoinInput): {
+  salaCodigo: string;
+  nombre: string;
+  apellido: string;
+  email: string;
+} {
+  const salaCodigo = payload.salaCodigo?.trim();
+  if (!salaCodigo) {
+    throw new AppError(400, "VALIDATION_ERROR", "El código de sala es requerido");
+  }
+
+  const nombre = payload.nombre?.trim();
+  const apellido = payload.apellido?.trim();
+  const email = payload.email?.trim();
+
+  const faltantes = [
+    !nombre && "nombre",
+    !apellido && "apellido",
+    !email && "email",
+  ].filter(Boolean) as string[];
+
+  if (faltantes.length > 0) {
+    throw new AppError(
+      400,
+      "VALIDATION_ERROR",
+      `Campos requeridos: ${faltantes.join(", ")}`,
+    );
+  }
+
+  if (!EMAIL_RE.test(email!)) {
+    throw new AppError(400, "VALIDATION_ERROR", "El email no es válido");
+  }
+
+  return { salaCodigo, nombre: nombre!, apellido: apellido!, email: email! };
+}
+
 /**
  * Alta o reutilización de un participante en la sala de espera.
  * Lo usan por igual POST /salas/:code/join y el evento join:request.
