@@ -1,0 +1,58 @@
+
+---------------------
+
+=== 1. Register host -> 201 ===
+
+POST http://localhost:4000/api/v1/auth/register
+=> 201 (322 ms, 717 B)
+✓ register host 201
+
+---------------------
+
+=== 2. Login host -> 200 ===
+
+POST http://localhost:4000/api/v1/auth/login
+=> 200 (344 ms, 969 B)
+✓ login host 200
+
+---------------------
+
+=== 3. Register invitado -> 201 ===
+
+POST http://localhost:4000/api/v1/auth/register
+=> 201 (315 ms, 717 B)
+✓ register guest 201
+
+---------------------
+
+=== 4. Login invitado -> 200 ===
+
+POST http://localhost:4000/api/v1/auth/login
+=> 200 (314 ms, 977 B)
+✓ login guest 200
+
+---------------------
+
+=== 5. Crear sala -> 201 ===
+
+POST http://localhost:4000/api/v1/salas
+=> 201 (545 ms, 757 B)
+✓ crear sala 201
+
+---------------------
+
+=== 6. Waiting room Socket.IO ===
+
+GET http://localhost:4000/api/v1/health
+=> 200 (3 ms, 645 B)
+✓ waiting room
+
+---------------------
+
+=== 7. join:request con payload inválido (sin email) -> el backend no valida y crea el participante igual ===
+
+GET http://localhost:4000/api/v1/health
+=> 200 (6 ms, 645 B)
+✓ join:request sin campos requeridos no es rechazado por el server
+
+7 requests processed (7 succeeded)

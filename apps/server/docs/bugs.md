@@ -43,6 +43,28 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 - Efecto: el participante aprobado nunca se conecta a la misma videollamada que el host (queda en "Preparando conexión…" indefinidamente). El flujo de aprobación funciona a nivel de estado/UI, pero la reunión real (audio/video) no se establece.
 - Fix sugerido: en `resolveParticipant`, usar `participante.sala.streamRoomId` (agregándolo al `include`/`select` de la consulta si falta) en vez de fabricar el string.
 
+## BUG-07 — `GET /salas/:id/detalle` con id mal formado responde 500 en vez de 400/404
+
+- Casos: suite `.http` `api_salas_agenda.http` #29
+- Severidad: media
+- Estado: **abierto** (encontrado en S2-QA2, 2026-09-25).
+- Dónde: `apps/server/src/controllers/rooms.controller.ts` (`getSalaDetalle`), pasa `req.params.id` directo a `prisma.sala.findUnique({ where: { id } })` sin validar que sea un UUID válido antes.
+- Pasos de reproducción:
+  1. `GET /api/v1/salas/no-es-un-uuid/detalle` con un JWT válido.
+  2. Prisma lanza una excepción al intentar castear `"no-es-un-uuid"` a UUID en la query.
+  3. El error handler global no distingue este caso y devuelve `500 INTERNAL_SERVER_ERROR` genérico.
+- Efecto: un id mal formado (typo, id de otra entidad, etc.) se reporta como error de servidor en vez de un 400/404 claro. Es probable que el mismo patrón afecte a otras rutas `:id` de `rooms.controller.ts` (`PUT/DELETE /salas/:id`, `GET /salas/:id/participantes`) ya que comparten el mismo estilo de acceso a Prisma sin validar formato antes — no se verificaron todas en este ciclo.
+- Fix sugerido: validar `id` con una regex/`zod` de UUID antes de la consulta y devolver 400 si no matchea, o envolver el `findUnique` y mapear el error de Prisma (`P2023` - malformed ID) a 404.
+
+## BUG-08 — `join:request` (Socket.IO) no valida el payload
+
+- Casos: suite `.http` `api_waiting.http` #7
+- Severidad: baja
+- Estado: **abierto** (encontrado en S2-QA2, 2026-09-25).
+- Dónde: `apps/server/src/realtime/waitingRoom.handlers.ts`, handler de `join:request` usa `payload.nombre/apellido/email` sin validar que existan.
+- Efecto: se puede crear un participante `PENDIENTE` sin nombre/apellido/email (o con valores `undefined`), sin que el cliente reciba ningún error. El host vería una solicitud con datos vacíos en el panel de "Solicitudes de ingreso".
+- Fix sugerido: validar el payload (por ejemplo con `zod`) al inicio del handler y emitir un `error` con `code: "VALIDATION_ERROR"` si faltan campos, igual que ya se hace para los demás códigos de error de este namespace.
+
 ## BUG-06 — El panel del host pierde las solicitudes pendientes al reconectar
 
 - Casos: QA-10 (US-03)
