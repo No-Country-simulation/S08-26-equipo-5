@@ -77,7 +77,7 @@ function createToken(userId: string, email = "user@test.com"): string {
   return jwt.sign({ sub: userId, email }, JWT_SECRET, { expiresIn: "15m" });
 }
 
-describe("Rooms API — Integración (legacy)", () => {
+describe("Rooms API — Integración", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -98,6 +98,9 @@ describe("Rooms API — Integración (legacy)", () => {
   // authParticipante: el rol/usuario salen siempre de la DB, el body
   // (userId/role) se ignora por completo. Ver rooms.controller.ts.
   describe("POST /api/v1/rooms/:id/token (alias legacy de stream-token)", () => {
+    // NOTA: un intento previo de este cambio eliminaba este endpoint
+    // (esperaba 404). Se decidió mantenerlo como alias porque apps/web
+    // todavía le pega a /rooms/:id/token; ver JOIN-FLOW.md.
     const salaId = "sala-uuid-123";
     const mockSala = {
       id: salaId,
