@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { useAuth } from "../../lib/auth";
 import { createSala, getSalaByCode, type Sala } from "../../lib/salas-api";
+import { LoginModal } from "../../components/login-modal";
 
 type CreateMode = "instant" | "scheduled";
 
@@ -21,6 +23,8 @@ export default function HomePage() {
   const [joinedSala, setJoinedSala] = useState<Sala | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState<"create" | "join" | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const { isAuthenticated, isReady } = useAuth();
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,6 +34,10 @@ export default function HomePage() {
 
     if (createMode === "scheduled" && !scheduledAt) {
       setError("Elegí una fecha y hora para programar la reunión.");
+      return;
+    }
+    if (isReady && !isAuthenticated) {
+      setLoginOpen(true);
       return;
     }
 
@@ -81,7 +89,8 @@ export default function HomePage() {
   }
 
   return (
-    <section aria-labelledby="page-title" className="space-y-8">
+    <>
+      <section aria-labelledby="page-title" className="space-y-8">
       <div className="max-w-2xl">
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">
           Home
@@ -95,7 +104,7 @@ export default function HomePage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <form onSubmit={handleCreate} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form data-create-room onSubmit={handleCreate} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-950">Crear reunión</h2>
           <p className="mt-2 text-sm text-slate-600">
             Elegí si querés comenzar ahora o dejarla programada.
@@ -200,14 +209,25 @@ export default function HomePage() {
             </p>
           )}
           <Link
-            href={`/waiting-room?code=${encodeURIComponent((createdSala ?? joinedSala)!.codigo)}${createdSala ? "&host=true" : ""}`}
+            href={createdSala
+              ? `/room?code=${encodeURIComponent(createdSala.codigo)}&host=true&salaId=${encodeURIComponent(createdSala.id)}&callId=${encodeURIComponent(createdSala.streamRoomId ?? "")}`
+              : `/waiting-room?code=${encodeURIComponent(joinedSala!.codigo)}`}
             id="go-to-waiting-room-btn"
             className="mt-5 inline-flex rounded-lg bg-green-700 px-4 py-2.5 font-semibold text-white hover:bg-green-800"
           >
-            {createdSala ? "Abrir sala de espera como anfitrión" : "Continuar a la sala de espera"}
+            {createdSala ? "Entrar a la sala como anfitrión" : "Continuar a la sala de espera"}
           </Link>
         </div>
       )}
-    </section>
+      </section>
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => {
+          const form = document.querySelector<HTMLFormElement>("form[data-create-room]");
+          form?.requestSubmit();
+        }}
+      />
+    </>
   );
 }

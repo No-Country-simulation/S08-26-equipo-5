@@ -1,7 +1,8 @@
 import { AgendaTable } from "../../components/agenda-table";
+import { AuthGuard } from "../../components/auth-guard";
 
 export default function DashboardPage() {
-  return (
+  return <AuthGuard>
     <section aria-labelledby="page-title" className="space-y-10">
       <div>
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">
@@ -16,5 +17,5 @@ export default function DashboardPage() {
       </div>
       <AgendaTable />
     </section>
-  );
+  </AuthGuard>;
 }

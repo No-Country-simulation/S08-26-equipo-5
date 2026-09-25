@@ -10,7 +10,6 @@ import { useHostSocket } from "../../lib/host-socket";
 import {
   getRealtimeUrl,
   getSalaByCode,
-  requestSalaJoin,
   type Sala,
 } from "../../lib/salas-api";
 
@@ -172,13 +171,17 @@ function ParticipantView({
       return;
     }
 
-    try {
-      const response = await requestSalaJoin(code, joinForm);
-      setParticipantId(response.participanteId);
-      setJoinStatus(response.estado === "RECHAZADO" ? "rejected" : "waiting");
-    } catch (error) {
-      setJoinError(getErrorMessage(error, "No se pudo solicitar el ingreso."));
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      setJoinError("No se pudo conectar con la sala. Intentá nuevamente.");
+      return;
     }
+
+    setJoinStatus("waiting");
+    socket.emit("join:request", {
+      salaCodigo: code,
+      ...joinForm,
+    });
   }
 
   return (
@@ -329,7 +332,7 @@ function ParticipantView({
           <Link
             href={`/room?code=${encodeURIComponent(sala.codigo)}${
               streamCallId ? `&callId=${encodeURIComponent(streamCallId)}` : ""
-            }`}
+            }&salaId=${encodeURIComponent(sala.id)}`}
             id="enter-room-btn"
             className="mt-6 inline-flex w-full justify-center rounded-lg bg-green-600 px-4 py-3 font-semibold text-white transition-colors hover:bg-green-700"
           >
@@ -366,6 +369,7 @@ function ParticipantView({
 function HostView({ sala, accessToken }: { sala: Sala; accessToken?: string }) {
   const { requests, approve, reject, connected } = useHostSocket({
     salaCodigo: sala.codigo,
+    salaId: sala.id,
     accessToken,
   });
 
@@ -393,7 +397,7 @@ function HostView({ sala, accessToken }: { sala: Sala; accessToken?: string }) {
             Aparecerán abajo en tiempo real y podrás aprobarlos o rechazarlos.
           </p>
           <Link
-            href={`/room?code=${encodeURIComponent(sala.codigo)}`}
+            href={`/room?code=${encodeURIComponent(sala.codigo)}&salaId=${encodeURIComponent(sala.id)}&callId=${encodeURIComponent(sala.streamRoomId ?? "")}`}
             id="host-enter-room-btn"
             className="mt-5 inline-flex rounded-lg bg-slate-900 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-slate-700"
           >

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { getRealtimeUrl } from "./salas-api";
+import { getAccessToken } from "./auth";
 
 export type JoinRequest = {
   participanteId: string;
@@ -25,6 +26,7 @@ type JoinPendingPayload = {
 type UseHostSocketOptions = {
   /** Código de la sala (e.g. "SAL-8M4Q7Z"). Pass null/undefined to skip. */
   salaCodigo: string | null | undefined;
+  salaId: string | null | undefined;
   /** JWT access token for socket authentication */
   accessToken?: string | null;
 };
@@ -42,6 +44,7 @@ type UseHostSocketReturn = {
  */
 export function useHostSocket({
   salaCodigo,
+  salaId,
   accessToken,
 }: UseHostSocketOptions): UseHostSocketReturn {
   const socketRef = useRef<Socket | null>(null);
@@ -49,17 +52,20 @@ export function useHostSocket({
   const [requests, setRequests] = useState<JoinRequest[]>([]);
 
   useEffect(() => {
-    if (!salaCodigo) return;
+    if (!salaCodigo || !salaId) return;
 
     const socket = io(`${getRealtimeUrl()}/reuniones`, {
       transports: ["websocket"],
       autoConnect: false,
-      auth: accessToken ? { token: accessToken } : undefined,
+      auth: { token: accessToken ?? getAccessToken() ?? "" },
     });
 
     socketRef.current = socket;
 
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      socket.emit("host:subscribe", { salaId });
+    });
     socket.on("disconnect", () => setConnected(false));
 
     socket.on("join:pending", (payload: JoinPendingPayload) => {
@@ -101,7 +107,7 @@ export function useHostSocket({
       socketRef.current = null;
       setConnected(false);
     };
-  }, [salaCodigo, accessToken]);
+  }, [salaCodigo, salaId, accessToken]);
 
   const approve = useCallback((participanteId: string) => {
     // Optimistic update
