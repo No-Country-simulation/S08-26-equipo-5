@@ -177,6 +177,9 @@ describe("resolveParticipant", () => {
 
     expect(result.evento).toBe("join:rejected");
     expect(result.payload).not.toHaveProperty("accessToken");
+    // Compat: clientes/suite viejos esperan streamCallId (deprecated) en
+    // join:rejected. Siempre null porque un rechazo nunca emite call real.
+    expect(result.payload).toHaveProperty("streamCallId", null);
   });
 
   it("solo el HOST puede resolver", async () => {

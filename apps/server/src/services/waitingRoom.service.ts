@@ -350,9 +350,19 @@ export function buildJoinApprovedPayload(
   };
 }
 
+export interface JoinRejectedPayload {
+  sala: JoinApprovedPayload["sala"];
+  /**
+   * @deprecated Siempre null: un rechazo nunca emite un call real. Se
+   * mantiene por compatibilidad con clientes/suite que todavía leen este
+   * campo en join:rejected.
+   */
+  streamCallId: null;
+}
+
 export interface ResolveResult {
   participante: ParticipanteConSala;
-  payload: JoinApprovedPayload | { sala: JoinApprovedPayload["sala"] };
+  payload: JoinApprovedPayload | JoinRejectedPayload;
   evento: "join:approved" | "join:rejected";
 }
 
@@ -426,6 +436,7 @@ export async function resolveParticipant(
             codigo: participante.sala.codigo,
             estado: participante.sala.estado,
           },
+          streamCallId: null,
         },
   };
 }
