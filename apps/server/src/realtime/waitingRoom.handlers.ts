@@ -1,122 +1,213 @@
 import { Namespace, Socket } from "socket.io";
 import { EstadoParticipante } from "@prisma/client";
-import { IParticipanteRepository } from "../repositories/participante.repository.js";
-import { ISalaRepository } from "../repositories/sala.repository.js";
+import { AppError } from "../utils/AppError.js";
+import {
+    broadcastResolution,
+    requestJoin,
+    resolveParticipant,
+    resolveJoinIdentity,
+    validateJoinInput,
+    type WaitingRoomDeps,
+} from "../services/waitingRoom.service.js";
+import { rooms } from "./registry.js";
 
 interface JoinRequestPayload {
     salaCodigo: string;
-    nombre: string;
-    apellido: string;
-    email: string;
+    nombre?: string;
+    apellido?: string;
+    email?: string;
 }
 interface ParticipantActionPayload {
     participanteId: string;
 }
 
+type Ack = ((response: unknown) => void) | undefined;
+
+/** Traduce cualquier error a la forma { code, message } que espera el cliente. */
+function emitError(socket: Socket, error: unknown, ack?: Ack) {
+    const payload =
+        error instanceof AppError
+            ? { code: error.code, message: error.message }
+            : {
+                  code: "INTERNAL_SERVER_ERROR",
+                  message: "Ocurrió un error interno",
+              };
+
+    if (!(error instanceof AppError)) {
+        console.error("[waitingRoom]", error);
+    }
+
+    socket.emit("error", payload);
+    ack?.({ ok: false, error: payload });
+}
+
 export function registerWaitingRoomHandlers(
-    nsp: Namespace,
-    socket: Socket & { data: { userId?: string } },
-    deps: { participantes: IParticipanteRepository; salas: ISalaRepository }
+    _nsp: Namespace,
+    socket: Socket & {
+        data: { userId?: string; participanteId?: string };
+    },
+    deps: WaitingRoomDeps
 ) {
-    const { participantes, salas } = deps;
+    const { participantes } = deps;
 
-    socket.on("join:request", async (payload: JoinRequestPayload) => {
+    socket.on("join:request", async (payload: JoinRequestPayload, ack?: Ack) => {
         try {
-            const sala = await salas.findByCodigo(payload.salaCodigo);
-            if (!sala) {
-                return socket.emit("error", { code: "ROOM_NOT_FOUND", message: "No existe una sala con ese código" });
-            }
+            const usuarioId = socket.data.userId ?? null;
 
-            const existente = await participantes.findPendienteByEmail(sala.id, payload.email);
-            const participante =
-                existente ??
-                (await participantes.createPendiente({
-                    salaId: sala.id,
-                    usuarioId: socket.data.userId ?? null,
-                    nombre: payload.nombre,
-                    apellido: payload.apellido,
-                    email: payload.email,
-                }));
+            // Misma validación que POST /salas/:code/join (mismos códigos de
+            // error): sin esto, un payload con campos vacíos o un email
+            // inválido llegaba directo a requestJoin y creaba un Participante
+            // con datos basura.
+            const validado = validateJoinInput({ ...(payload ?? {}), usuarioId });
 
-            socket.join(`participante:${participante.id}`);
-            socket.join(`sala:${sala.id}`);
-
-            nsp.to(`sala:${sala.id}:host`).emit("join:pending", {
-                participanteId: participante.id,
-                nombre: participante.nombre,
-                apellido: participante.apellido,
-                email: participante.email,
-                timestamp: new Date().toISOString(),
+            // Socket logueado: la identidad sale de la cuenta, igual que en
+            // el HTTP join (mismo criterio de seguridad: no impersonar).
+            const identidad = await resolveJoinIdentity(deps, {
+                usuarioId,
+                nombre: validado.nombre,
+                apellido: validado.apellido,
+                email: validado.email,
             });
-        } catch {
-            socket.emit("error", { code: "INTERNAL_SERVER_ERROR", message: "Ocurrió un error interno" });
+
+            const result = await requestJoin(deps, {
+                salaCodigo: validado.salaCodigo,
+                nombre: identidad.nombre,
+                apellido: identidad.apellido,
+                email: identidad.email,
+                usuarioId,
+            });
+
+            // El socket se suscribe a sus rooms: sin esto join:approved
+            // no tiene a dónde llegar.
+            socket.join(rooms.participante(result.participanteId));
+            socket.join(rooms.sala(result.salaId));
+
+            ack?.({ ok: true, ...result });
+
+            // Si ya estaba aprobado (reingreso tras recargar), devolvemos el
+            // estado por el mismo evento que espera el cliente.
+            if (result.estado === EstadoParticipante.APROBADO) {
+                socket.emit("join:approved", {
+                    participanteId: result.participanteId,
+                    accessToken: result.accessToken,
+                    sala: { id: result.salaId },
+                    streamCallId: result.stream?.callId ?? null,
+                    stream: result.stream ?? null,
+                });
+            }
+        } catch (error) {
+            emitError(socket, error, ack);
         }
     });
 
-    socket.on("host:subscribe", async ({ salaId }: { salaId: string }) => {
-        if (!socket.data.userId) {
-            return socket.emit("error", { code: "UNAUTHORIZED", message: "Token ausente, inválido o expirado" });
-        }
-        const esHost = await participantes.findHost(salaId, socket.data.userId);
-        if (!esHost) {
-            return socket.emit("error", { code: "HOST_ONLY", message: "Solo el HOST puede suscribirse" });
-        }
-        socket.join(`sala:${salaId}:host`);
-    });
+    /**
+     * Permite que un participante ya dado de alta (por HTTP, por ejemplo)
+     * se suscriba a sus rooms sin volver a crear el registro.
+     *
+     * OJO: acá se entrega join:approved (con el accessToken del invitado) a
+     * quien esté en el room `participante:<id>`. Sin este chequeo, cualquier
+     * socket podía mandar un participanteId ajeno y quedarse escuchando la
+     * credencial de otra persona. Solo puede suscribirse:
+     *   - el propio invitado (su guest JWT trae `socket.data.participanteId`), o
+     *   - el usuario logueado dueño de ese participante (`participante.usuarioId`).
+     */
+    socket.on(
+        "join:subscribe",
+        async ({ participanteId }: ParticipantActionPayload, ack?: Ack) => {
+            try {
+                const participante = await participantes.findById(participanteId);
+                if (!participante) {
+                    throw new AppError(
+                        404,
+                        "NOT_FOUND",
+                        "Participante no encontrado"
+                    );
+                }
 
-    socket.on("participant:approve", (payload: ParticipantActionPayload) =>
-        resolveParticipant(nsp, socket, participantes, payload.participanteId, EstadoParticipante.APROBADO)
+                const esDueño =
+                    (socket.data.participanteId !== undefined &&
+                        socket.data.participanteId === participante.id) ||
+                    (socket.data.userId !== undefined &&
+                        socket.data.userId === participante.usuarioId);
+
+                if (!esDueño) {
+                    throw new AppError(
+                        403,
+                        "FORBIDDEN",
+                        "No podés suscribirte a este participante"
+                    );
+                }
+
+                socket.join(rooms.participante(participante.id));
+                socket.join(rooms.sala(participante.sala.id));
+                ack?.({ ok: true, estado: participante.estado });
+            } catch (error) {
+                emitError(socket, error, ack);
+            }
+        }
     );
 
-    socket.on("participant:reject", (payload: ParticipantActionPayload) =>
-        resolveParticipant(nsp, socket, participantes, payload.participanteId, EstadoParticipante.RECHAZADO)
+    socket.on("host:subscribe", async ({ salaId }: { salaId: string }, ack?: Ack) => {
+        try {
+            if (!socket.data.userId) {
+                throw new AppError(
+                    401,
+                    "UNAUTHORIZED",
+                    "Token ausente, inválido o expirado"
+                );
+            }
+
+            const esHost = await participantes.findHost(salaId, socket.data.userId);
+            if (!esHost) {
+                throw new AppError(
+                    403,
+                    "HOST_ONLY",
+                    "Solo el HOST puede suscribirse"
+                );
+            }
+
+            socket.join(rooms.salaHost(salaId));
+            socket.join(rooms.sala(salaId));
+            ack?.({ ok: true });
+        } catch (error) {
+            emitError(socket, error, ack);
+        }
+    });
+
+    socket.on("participant:approve", (payload: ParticipantActionPayload, ack?: Ack) =>
+        handleResolution(socket, deps, payload, EstadoParticipante.APROBADO, ack)
+    );
+
+    socket.on("participant:reject", (payload: ParticipantActionPayload, ack?: Ack) =>
+        handleResolution(socket, deps, payload, EstadoParticipante.RECHAZADO, ack)
     );
 }
 
-async function resolveParticipant(
-    nsp: Namespace,
+async function handleResolution(
     socket: Socket & { data: { userId?: string } },
-    participantes: IParticipanteRepository,
-    participanteId: string,
-    nuevoEstado: EstadoParticipante
+    deps: WaitingRoomDeps,
+    payload: ParticipantActionPayload,
+    nuevoEstado: EstadoParticipante,
+    ack?: Ack
 ) {
-    const participante = await participantes.findById(participanteId);
-    if (!participante) {
-        return socket.emit("error", { code: "NOT_FOUND", message: "Participante no encontrado" });
-    }
+    try {
+        if (!socket.data.userId) {
+            throw new AppError(
+                401,
+                "UNAUTHORIZED",
+                "Token ausente, inválido o expirado"
+            );
+        }
 
-    if (!socket.data.userId) {
-        return socket.emit("error", { code: "UNAUTHORIZED", message: "Token ausente, inválido o expirado" });
-    }
-
-    const esHost = await participantes.findHost(participante.sala.id, socket.data.userId);
-    if (!esHost) {
-        return socket.emit("error", { code: "HOST_ONLY", message: "Solo el HOST puede actualizar participantes" });
-    }
-
-    if (participante.estado !== EstadoParticipante.PENDIENTE) {
-        return socket.emit("error", {
-            code: "PARTICIPANT_STATE_CONFLICT",
-            message: "El participante ya tiene un estado final",
+        const result = await resolveParticipant(deps, {
+            participanteId: payload.participanteId,
+            hostUsuarioId: socket.data.userId,
+            nuevoEstado,
         });
+
+        await broadcastResolution(deps, result);
+        ack?.({ ok: true, estado: nuevoEstado });
+    } catch (error) {
+        emitError(socket, error, ack);
     }
-
-    const actualizado = await participantes.updateEstado(
-        participanteId,
-        nuevoEstado,
-        nuevoEstado === EstadoParticipante.APROBADO ? new Date() : undefined
-    );
-
-    const evento = nuevoEstado === EstadoParticipante.APROBADO ? "join:approved" : "join:rejected";
-    nsp.to(`participante:${participanteId}`).emit(evento, {
-        sala: { id: participante.sala.id, codigo: participante.sala.codigo, estado: participante.sala.estado },
-        streamCallId: nuevoEstado === EstadoParticipante.APROBADO ? `call_${participante.sala.codigo.toLowerCase()}` : null,
-    });
-
-    const activos = await participantes.findAprobadosBySala(participante.sala.id);
-    nsp.to(`sala:${participante.sala.id}`).emit("room:state", {
-        salaId: participante.sala.id,
-        estado: participante.sala.estado,
-        participantes: activos,
-    });
 }

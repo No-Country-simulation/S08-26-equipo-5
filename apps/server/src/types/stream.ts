@@ -26,7 +26,19 @@ export interface CreateSalaResponse {
   codigo: string;
   nombre: string;
   enlace: string;
+  /** CID completo "<type>:<id>". */
   streamRoomId: string;
+  stream: StreamCallRef;
+}
+
+/**
+ * Referencia al call de GetStream. El SDK del cliente necesita type e id
+ * por separado: `client.call(callType, callId)`.
+ */
+export interface StreamCallRef {
+  callType: string;
+  callId: string;
+  callCid: string;
 }
 
 // ─── GET /salas/:code ────────────────────────────────────
@@ -50,6 +62,7 @@ export interface SalaDetalle {
   fechaFin: string | null;
   estado: EstadoSala;
   streamRoomId: string | null;
+  stream: StreamCallRef | null;
   enlace: string;
   totalParticipantes: number;
   participantes: ParticipanteInfo[];
@@ -107,10 +120,55 @@ export interface TransferHostResponse {
   previousHost: { usuarioId: string };
 }
 
-// ─── POST /rooms/:id/token (legacy) ──────────────────────
-// El body ya no se usa: userId sale del JWT y el rol de la DB.
-export interface GenerateTokenResponse {
+// ─── POST /salas/:code/join ──────────────────────────────
+/**
+ * Con sesión iniciada (Bearer token) los tres campos son opcionales: la
+ * identidad se completa desde la cuenta y lo que venga acá se ignora. Sin
+ * sesión, los tres siguen siendo obligatorios (validateJoinInput los exige).
+ */
+export interface JoinSalaBody {
+  nombre?: string;
+  apellido?: string;
+  email?: string;
+}
+
+export interface JoinSalaResponse {
+  participanteId: string;
+  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO";
+  salaId: string;
+  /** Guest JWT. Solo presente si el participante ya está aprobado. */
+  accessToken?: string;
+  stream?: StreamCallRef;
+}
+
+// ─── POST /salas/:salaId/stream-token ────────────────────
+// También es la respuesta de POST /rooms/:id/token (legacy, deprecated):
+// ese endpoint es un alias que delega en la misma lógica, así que reutiliza
+// este mismo tipo en vez de duplicarlo.
+export interface StreamTokenResponse {
+  /** API key pública de GetStream: el cliente la necesita para el SDK. */
+  apiKey: string;
+  /** Token de GetStream, restringido a este call. */
   token: string;
+  /** user_id en GetStream (= Participante.id). */
+  userId: string;
+  user: { id: string; name: string };
+  rol: RoomRole;
+  callType: string;
+  callId: string;
+  callCid: string;
+  sala: { id: string; codigo: string; nombre: string; estado: string };
+  expiresAt: string;
+}
+
+// ─── GET /salas/:salaId/mi-estado ────────────────────────
+export interface MiEstadoResponse {
+  participanteId: string;
+  estado: string;
+  rol: RoomRole;
+  sala: { id: string; codigo: string; nombre: string; estado: string };
+  /** null mientras el participante no esté aprobado. */
+  stream: StreamCallRef | null;
 }
 
 // ─── Errores ─────────────────────────────────────────────

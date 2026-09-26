@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
-import { EstadoParticipante, PrismaClient } from "@prisma/client";
 import crypto from "crypto";
+import { env } from "../config/env.js";
+import { prisma } from "../config/prisma.js";
 import {
   ValidationError,
   NotFoundError,
@@ -10,8 +11,18 @@ import {
 import { AppError } from "../utils/AppError.js";
 import {
   createRoom as createRoomService,
-  generateToken as generateTokenService,
+  issueCallAccess,
 } from "../services/stream.service.js";
+import {
+  requestJoin,
+  getStreamCallRef,
+  validateJoinInput,
+  resolveJoinIdentity,
+  type WaitingRoomDeps,
+} from "../services/waitingRoom.service.js";
+import { PrismaParticipanteRepository } from "../repositories/participante.repository.js";
+import { PrismaSalaRepository } from "../repositories/sala.repository.js";
+import { PrismaUserRepository } from "../repositories/user.repository.js";
 import type {
   CreateSalaBody,
   CreateSalaResponse,
@@ -23,9 +34,17 @@ import type {
   ParticipantesResponse,
   TransferHostBody,
   TransferHostResponse,
+  JoinSalaBody,
+  JoinSalaResponse,
+  StreamTokenResponse,
+  MiEstadoResponse,
 } from "../types/stream.js";
 
-const prisma = new PrismaClient();
+const waitingRoomDeps: WaitingRoomDeps = {
+  participantes: new PrismaParticipanteRepository(prisma),
+  salas: new PrismaSalaRepository(prisma),
+  usuarios: new PrismaUserRepository(),
+};
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -106,7 +125,10 @@ export async function createSala(
   const codigo = await generateUniqueCodeWithRetry();
 
   // ── Crear sala en GetStream ──────────────────────────────
-  const { streamRoomId } = await createRoomService(nombre.trim(), userId);
+  const { streamRoomId, callType, callId } = await createRoomService(
+    nombre.trim(),
+    userId
+  );
 
   // ── Transacción Prisma: Sala + Participante HOST ─────────
   try {
@@ -120,6 +142,8 @@ export async function createSala(
           fechaInicio: fechaInicio ? new Date(fechaInicio) : new Date(),
           estado: fechaInicio ? "PROGRAMADA" : "ACTIVA",
           streamRoomId,
+          streamCallType: callType,
+          streamCallId: callId,
         },
       });
 
@@ -140,7 +164,8 @@ export async function createSala(
           usuarioId: userId,
           nombre: usuario.nombre,
           apellido: usuario.apellido,
-          email: usuario.email,
+          // Normalizado: el lookup de participantes es por email.
+          email: usuario.email.trim().toLowerCase(),
           rol: "HOST",
           estado: "APROBADO",
           fechaIngreso: new Date(),
@@ -151,7 +176,7 @@ export async function createSala(
     });
 
     // ── Respuesta exitosa ───────────────────────────────────
-    const enlace = `${process.env.FRONTEND_URL || "http://localhost:3000"}/sala/${codigo}`;
+    const enlace = `${env.frontendUrl}/sala/${codigo}`;
 
     res.status(201).json({
       salaId: result.id,
@@ -159,6 +184,7 @@ export async function createSala(
       nombre: result.nombre,
       enlace,
       streamRoomId,
+      stream: { callType, callId, callCid: streamRoomId },
     } satisfies CreateSalaResponse);
   } catch (error) {
     if (error instanceof ValidationError) throw error;
@@ -257,7 +283,7 @@ export async function getSalaDetalle(
   const hostParticipante = sala.participantes.find((p) => p.rol === "HOST");
   const creador = hostParticipante?.usuario;
 
-  const enlace = `${process.env.FRONTEND_URL || "http://localhost:3000"}/sala/${sala.codigo}`;
+  const enlace = `${env.frontendUrl}/sala/${sala.codigo}`;
 
   const response: SalaDetalle = {
     id: sala.id,
@@ -268,6 +294,7 @@ export async function getSalaDetalle(
     fechaFin: sala.fechaFin?.toISOString() || null,
     estado: sala.estado,
     streamRoomId: sala.streamRoomId,
+    stream: getStreamCallRef(sala),
     enlace,
     totalParticipantes: sala.participantes.length,
     participantes: sala.participantes.map((p) => ({
@@ -473,6 +500,13 @@ export async function transferHost(
   // la otra recibe count 0 → 403 y rollback antes de promover (evita doble HOST).
   // El promote queda como `update` simple: solo corre si el demote ganó la
   // carrera, así que no necesita condición propia.
+  //
+  // El promote también fuerza estado APROBADO (y fechaIngreso si no tenía):
+  // un HOST no puede quedar PENDIENTE. Si el target era un participante
+  // PENDIENTE (por ejemplo, todavía no lo había aprobado nadie) y no
+  // corrigiéramos esto acá, authParticipante rechazaría su propio
+  // stream-token con 403 JOIN_NOT_APPROVED — el nuevo host jamás podría
+  // pedir su token de video.
   await prisma.$transaction(async (tx) => {
     const demoted = await tx.participante.updateMany({
       where: { salaId: id, usuarioId: userId, rol: "HOST" },
@@ -483,7 +517,11 @@ export async function transferHost(
     }
     await tx.participante.update({
       where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
-      data: { rol: "HOST" },
+      data: {
+        rol: "HOST",
+        estado: "APROBADO",
+        fechaIngreso: target.fechaIngreso ?? new Date(),
+      },
     });
   });
 
@@ -547,55 +585,183 @@ export async function getParticipantes(
   res.status(200).json(response);
 }
 
-// ─── POST /rooms/:id/token — Generar token (legacy) ───────
+// ─── POST /salas/:code/join — Solicitar ingreso (público) ──
 
 /**
- * Genera un token GetStream para el usuario autenticado.
- * El userId sale del JWT (verifyToken → req.user.sub) y el rol de la DB
- * (participante.rol). El body se ignora por completo: nunca se confía
- * en userId/role enviados por el cliente.
- * Requiere: Authorization: Bearer <jwt> y ser participante APROBADO.
+ * Da de alta (o reutiliza) al invitado en la sala de espera y avisa al HOST
+ * por Socket.IO. Es el paso 1 del flujo de ingreso.
+ *
+ * Si el participante ya estaba aprobado y su aprobación sigue vigente,
+ * devuelve directamente el accessToken: así un refresh del navegador no
+ * obliga a volver a pedir permiso.
  */
-export async function generateToken(
-  req: Request<{ id: string }>,
+export async function joinSala(
+  req: Request<{ code: string }, unknown, JoinSalaBody>,
   res: Response
 ): Promise<void> {
-  const { id } = req.params;
-  const userId = req.user?.sub;
+  const { code } = req.params;
+  const { nombre, apellido, email } = req.body ?? {};
+  const usuarioId = req.user?.sub ?? null;
 
-  // ── Validación de auth ───────────────────────────────────
-  if (!userId) {
-    throw new AppError(401, "UNAUTHORIZED", "Usuario no autenticado");
+  // Misma validación que el evento de socket join:request (mismos códigos
+  // de error): vive en waitingRoom.service.ts para no duplicarla.
+  const validado = validateJoinInput({ salaCodigo: code, nombre, apellido, email, usuarioId });
+
+  // Si vino con sesión iniciada, la identidad sale de su cuenta (nombre,
+  // apellido y sobre todo el email: no puede impersonar a otra persona
+  // mandando un email distinto en el body). Anónimo: se usa el body tal cual.
+  const identidad = await resolveJoinIdentity(waitingRoomDeps, {
+    usuarioId,
+    nombre: validado.nombre,
+    apellido: validado.apellido,
+    email: validado.email,
+  });
+
+  const result = await requestJoin(waitingRoomDeps, {
+    salaCodigo: validado.salaCodigo,
+    nombre: identidad.nombre,
+    apellido: identidad.apellido,
+    email: identidad.email,
+    // Si vino con sesión iniciada, queda vinculado a su usuario.
+    usuarioId,
+  });
+
+  res.status(200).json({
+    participanteId: result.participanteId,
+    estado: result.estado,
+    salaId: result.salaId,
+    ...(result.accessToken ? { accessToken: result.accessToken } : {}),
+    ...(result.stream ? { stream: result.stream } : {}),
+  } satisfies JoinSalaResponse);
+}
+
+// ─── POST /salas/:salaId/stream-token — Token de GetStream ─
+
+/**
+ * Emite el token de GetStream para el participante autenticado.
+ *
+ * Sirve tanto para el HOST (access token de usuario) como para un invitado
+ * aprobado (guest JWT). El rol se lee de la base de datos: el body no
+ * influye, así que nadie puede pedirse a sí mismo un token de admin.
+ *
+ * Requiere authParticipante — ese middleware ya validó pertenencia a la sala,
+ * estado APROBADO y que la reunión siga vigente.
+ */
+export async function getStreamToken(
+  req: Request<{ salaId: string }>,
+  res: Response
+): Promise<void> {
+  const ctx = req.participante;
+  if (!ctx) {
+    throw new AppError(401, "UNAUTHORIZED", "Participante no autenticado");
   }
 
-  // ── Buscar sala ─────────────────────────────────────────
-  const sala = await prisma.sala.findUnique({ where: { id } });
+  const sala = await prisma.sala.findUnique({
+    where: { id: ctx.salaId },
+    select: {
+      id: true,
+      codigo: true,
+      nombre: true,
+      estado: true,
+      streamRoomId: true,
+      streamCallType: true,
+      streamCallId: true,
+    },
+  });
 
   if (!sala) {
     throw new NotFoundError("Sala no encontrada");
   }
 
-  // ── Autorización server-side: debe ser participante ─────
-  const participante = await prisma.participante.findUnique({
-    where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
-  });
-
-  if (!participante) {
-    throw new ForbiddenError("Solo los participantes aprobados pueden obtener token");
-  }
-
-  if (participante.estado !== EstadoParticipante.APROBADO) {
-    throw new ForbiddenError("Solo los participantes aprobados pueden obtener token");
-  }
-
-  if (!sala.streamRoomId) {
+  const call = getStreamCallRef(sala);
+  if (!call) {
     throw new StreamServiceError("Sala no sincronizada con GetStream", 409);
   }
 
-  // ── Generar token con el rol guardado en DB ─────────────
-  const token = generateTokenService(userId, participante.rol, sala.streamRoomId);
+  const nombreCompleto =
+    [ctx.nombre, ctx.apellido].filter(Boolean).join(" ").trim() || ctx.email;
 
-  res.status(200).json({ token });
+  // Crea el usuario en GetStream, lo agrega como member del call y firma
+  // un token restringido a ese call.
+  const { token, expiresAt, callCid } = await issueCallAccess({
+    userId: ctx.participanteId,
+    name: nombreCompleto,
+    role: ctx.rol,
+    callType: call.callType,
+    callId: call.callId,
+  });
+
+  res.status(200).json({
+    apiKey: env.getstreamApiKey,
+    token,
+    userId: ctx.participanteId,
+    user: { id: ctx.participanteId, name: nombreCompleto },
+    rol: ctx.rol,
+    callType: call.callType,
+    callId: call.callId,
+    callCid,
+    sala: { id: sala.id, codigo: sala.codigo, nombre: sala.nombre, estado: sala.estado },
+    expiresAt: expiresAt.toISOString(),
+  } satisfies StreamTokenResponse);
+}
+
+// ─── POST /rooms/:id/token — Alias legacy (deprecated) ────
+
+/**
+ * @deprecated Alias de POST /salas/:salaId/stream-token, mantenido para no
+ * romper clientes viejos (apps/web todavía le pega a esta ruta). Delega en
+ * exactamente la misma lógica segura: la ruta usa `authParticipante`, así
+ * que el rol y el usuario siempre salen de la DB/JWT vía `req.participante`
+ * y el body se ignora por completo (userId/role del body nunca se leen).
+ * Usar /salas/:salaId/stream-token en integraciones nuevas.
+ */
+export const generateToken = getStreamToken;
+
+// ─── GET /salas/:salaId/mi-estado — Recuperar sesión ───────
+
+/**
+ * Devuelve el estado del participante autenticado.
+ * Permite que el cliente recupere la sesión tras recargar la página sin
+ * volver a pasar por la aprobación del host.
+ *
+ * Usa authParticipante({ requireApproved: false }): un PENDIENTE también
+ * necesita poder consultar.
+ */
+export async function getMiEstado(
+  req: Request<{ salaId: string }>,
+  res: Response
+): Promise<void> {
+  const ctx = req.participante;
+  if (!ctx) {
+    throw new AppError(401, "UNAUTHORIZED", "Participante no autenticado");
+  }
+
+  const sala = await prisma.sala.findUnique({
+    where: { id: ctx.salaId },
+    select: {
+      id: true,
+      codigo: true,
+      nombre: true,
+      estado: true,
+      streamRoomId: true,
+      streamCallType: true,
+      streamCallId: true,
+    },
+  });
+
+  if (!sala) {
+    throw new NotFoundError("Sala no encontrada");
+  }
+
+  const call = ctx.estado === "APROBADO" ? getStreamCallRef(sala) : null;
+
+  res.status(200).json({
+    participanteId: ctx.participanteId,
+    estado: ctx.estado,
+    rol: ctx.rol,
+    sala: { id: sala.id, codigo: sala.codigo, nombre: sala.nombre, estado: sala.estado },
+    stream: call,
+  } satisfies MiEstadoResponse);
 }
 
 // ─── GET /salas/:code — Consulta pública ──────────────────
