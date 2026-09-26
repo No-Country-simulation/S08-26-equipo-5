@@ -218,7 +218,9 @@ podía mandar un `participanteId` ajeno y quedar suscripto a su
 }
 ```
 
-**`join:rejected`** → `{ sala: { id, codigo, estado } }`
+**`join:rejected`** → `{ sala: { id, codigo, estado }, streamCallId: null }`
+(el campo `streamCallId` va siempre en `null`: se mantiene deprecado solo por
+compatibilidad con clientes/suite que todavía lo leen en este evento)
 
 **`room:state`** → `{ salaId, estado, participantes: [...] }` (se emite a la sala
 y al room del host).
