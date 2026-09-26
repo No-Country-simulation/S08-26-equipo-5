@@ -16,6 +16,18 @@ vi.mock("@stream-io/node-sdk", () => ({
   })),
 }));
 
+// ─── Mock config/env ─────────────────────────────────────────
+// env.ts valida variables obligatorias al importarse (fail-fast). Sin este
+// mock el test depende de un .env local y rompe en CI, donde no existe.
+vi.mock("../../config/env.js", () => ({
+  env: {
+    nodeEnv: "test",
+    getstreamApiKey: "test-api-key",
+    getstreamApiSecret: "test-api-secret",
+    streamTokenTtlSeconds: 3600,
+  },
+}));
+
 // randomUUID determinístico para poder aserir el callId generado por createRoom.
 vi.mock("node:crypto", () => ({
   randomUUID: vi.fn(() => "abc-123"),
