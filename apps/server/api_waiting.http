@@ -183,7 +183,75 @@ client.test("waiting room", async function() {
   const conflictErr = await conflict;
   client.assert(conflictErr.code === "PARTICIPANT_STATE_CONFLICT", JSON.stringify(conflictErr));
 
+  // S2-QA2: approve/reject sobre un participanteId que no existe -> NOT_FOUND
+  const notFound = once(host, "error");
+  host.emit("participant:approve", { participanteId: "00000000-0000-4000-8000-000000000099" });
+  const notFoundErr = await notFound;
+  client.assert(notFoundErr.code === "NOT_FOUND", JSON.stringify(notFoundErr));
+
+  // S2-QA2: approve/reject sin token (socket anónimo) -> UNAUTHORIZED
+  const pending3 = once(host, "join:pending");
+  guest.emit("join:request", {
+    salaCodigo: codigo,
+    nombre: "Sin",
+    apellido: "Token",
+    email: "sin-token-wait@example.com",
+  });
+  const pending3Payload = await pending3;
+
+  const anon2 = await connect();
+  const unauthResolve = once(anon2, "error");
+  anon2.emit("participant:approve", { participanteId: pending3Payload.participanteId });
+  const unauthResolveErr = await unauthResolve;
+  client.assert(unauthResolveErr.code === "UNAUTHORIZED", JSON.stringify(unauthResolveErr));
+  anon2.close();
+
+  // S2-QA2: approve/reject por alguien logueado que no es el host de esa sala -> HOST_ONLY
+  const forbiddenResolve = once(guest, "error");
+  guest.emit("participant:approve", { participanteId: pending3Payload.participanteId });
+  const forbiddenResolveErr = await forbiddenResolve;
+  client.assert(forbiddenResolveErr.code === "HOST_ONLY", JSON.stringify(forbiddenResolveErr));
+
+  // Limpieza: el host resuelve la solicitud que quedó pendiente
+  const cleanup = once(guest, "join:rejected");
+  host.emit("participant:reject", { participanteId: pending3Payload.participanteId });
+  await cleanup;
+
   guest.close();
   host.close();
+});
+%}
+
+### 7. join:request con payload inválido (sin email) -> el backend no valida y crea el participante igual
+# Documenta un hueco: no hay validación de payload en el namespace /reuniones.
+GET {{root}}/api/v1/health
+
+> {%
+const { io } = require("socket.io-client");
+
+function connect(token) {
+  const socket = io("http://localhost:4000/reuniones", {
+    auth: token ? { token } : {},
+    transports: ["websocket"],
+    forceNew: true,
+  });
+  return new Promise((resolve, reject) => {
+    socket.on("connect", () => resolve(socket));
+    socket.on("connect_error", reject);
+  });
+}
+
+client.test("join:request sin campos requeridos no es rechazado por el server", async function() {
+  const codigo = request.variables.get("salaCodigo");
+  const socket = await connect();
+  const result = await new Promise((resolve) => {
+    socket.once("error", (err) => resolve({ type: "error", err }));
+    socket.emit("join:request", { salaCodigo: codigo });
+    setTimeout(() => resolve({ type: "timeout" }), 1500);
+  });
+  // Si algún día se agrega validación, este assert va a fallar y hay que
+  // actualizar docs/bugs.md (dejar de marcarlo como hueco abierto).
+  client.assert(result.type === "timeout", "se esperaba que no hubiera error de validación: " + JSON.stringify(result));
+  socket.close();
 });
 %}
