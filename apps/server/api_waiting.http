@@ -165,15 +165,22 @@ client.test("waiting room", async function() {
   const approvedPayload = await approved;
   client.assert(approvedPayload.streamCallId != null, JSON.stringify(approvedPayload));
 
+  // Luis usa un socket anónimo (NO reutiliza `guest`, que es un usuario
+  // logueado): un usuario logueado es un único participante por sala
+  // (dedupe por usuarioId), así que un segundo join:request del mismo
+  // socket `guest` reusaría la fila de Ana (ya APROBADO) y nunca emitiría
+  // join:pending -> el `once(host, "join:pending")` de abajo colgaría.
+  // Un invitado anónimo dedupe por email, así que es una identidad nueva.
+  const luis = await connect();
   const pending2 = once(host, "join:pending");
-  guest.emit("join:request", {
+  luis.emit("join:request", {
     salaCodigo: codigo,
     nombre: "Luis",
     apellido: "Diaz",
     email: "luis-wait@example.com",
   });
   const pending2Payload = await pending2;
-  const rejected = once(guest, "join:rejected");
+  const rejected = once(luis, "join:rejected");
   host.emit("participant:reject", { participanteId: pending2Payload.participanteId });
   const rejectedPayload = await rejected;
   client.assert(rejectedPayload.streamCallId === null, JSON.stringify(rejectedPayload));
@@ -183,7 +190,128 @@ client.test("waiting room", async function() {
   const conflictErr = await conflict;
   client.assert(conflictErr.code === "PARTICIPANT_STATE_CONFLICT", JSON.stringify(conflictErr));
 
+  luis.close();
   guest.close();
   host.close();
+});
+%}
+
+### 7. POST /salas/:code/join (anónimo) -> 200 PENDIENTE + accessToken
+# @name joinAnonimo
+POST {{host}}/salas/{{salaCodigo}}/join
+Content-Type: application/json
+
+{
+  "nombre": "Carla",
+  "apellido": "Gomez",
+  "email": "carla-wait-{{$timestamp}}@example.com"
+}
+
+> {%
+client.test("join anonimo 200 PENDIENTE", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(response.body.estado === "PENDIENTE", JSON.stringify(response.body));
+  client.assert(!!response.body.accessToken, "falta accessToken");
+  client.global.set("carlaParticipanteId", response.body.participanteId);
+  client.global.set("carlaToken", response.body.accessToken);
+});
+%}
+
+### 8. GET /salas/:salaId/mi-estado con el guest token -> PENDIENTE
+GET {{host}}/salas/{{salaId}}/mi-estado
+Authorization: Bearer {{carlaToken}}
+
+> {%
+client.test("mi-estado PENDIENTE", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(response.body.estado === "PENDIENTE", JSON.stringify(response.body));
+});
+%}
+
+### 9. POST /salas/:salaId/stream-token con guest PENDIENTE -> 403 JOIN_NOT_APPROVED
+POST {{host}}/salas/{{salaId}}/stream-token
+Authorization: Bearer {{carlaToken}}
+
+> {%
+client.test("stream-token 403 JOIN_NOT_APPROVED", function() {
+  client.assert(response.status === 403, "status " + response.status);
+  client.assert(response.body.error.code === "JOIN_NOT_APPROVED", JSON.stringify(response.body));
+});
+%}
+
+### 10. Socket con guest token pendiente: auto-subscribe + approve + stream-token + foreign join:subscribe
+GET {{root}}/api/v1/health
+
+> {%
+const { io } = require("socket.io-client");
+
+function once(socket, event) {
+  return new Promise((resolve) => socket.once(event, resolve));
+}
+
+function connect(token) {
+  const socket = io("http://localhost:4000/reuniones", {
+    auth: token ? { token } : {},
+    transports: ["websocket"],
+    forceNew: true,
+  });
+  return new Promise((resolve, reject) => {
+    socket.on("connect", () => resolve(socket));
+    socket.on("connect_error", reject);
+  });
+}
+
+client.test("guest JWT socket: auto-subscribe, approve, stream-token, join:subscribe ajeno", async function() {
+  const hostToken = request.variables.get("accessToken");
+  const salaId = request.variables.get("salaId");
+  const carlaToken = request.variables.get("carlaToken");
+  const carlaParticipanteId = request.variables.get("carlaParticipanteId");
+  client.assert(!!carlaToken, "falta carlaToken del request anterior");
+
+  const host = await connect(hostToken);
+  host.emit("host:subscribe", { salaId });
+  await new Promise((r) => setTimeout(r, 300));
+
+  // El socket con el guest JWT de Carla se autosuscribe a su room de
+  // participante en el connect (middleware del namespace /reuniones), sin
+  // necesidad de emitir join:subscribe.
+  const carla = await connect(carlaToken);
+  const approved = once(carla, "join:approved");
+  host.emit("participant:approve", { participanteId: carlaParticipanteId });
+  const approvedPayload = await approved;
+  client.assert(approvedPayload.streamCallId != null, JSON.stringify(approvedPayload));
+
+  // Un socket ajeno (anónimo o de otro usuario) que intenta join:subscribe
+  // con el participanteId de Carla no puede escuchar su join:approved.
+  const stranger = await connect();
+  const forbidden = once(stranger, "error");
+  let strangerGotApproved = false;
+  stranger.once("join:approved", () => { strangerGotApproved = true; });
+  stranger.emit("join:subscribe", { participanteId: carlaParticipanteId });
+  const forbiddenErr = await forbidden;
+  client.assert(
+    forbiddenErr.code === "FORBIDDEN",
+    JSON.stringify(forbiddenErr)
+  );
+  await new Promise((r) => setTimeout(r, 200));
+  client.assert(!strangerGotApproved, "el socket ajeno no debe recibir join:approved");
+
+  stranger.close();
+  carla.close();
+  host.close();
+});
+%}
+
+### 11. POST /salas/:salaId/stream-token con guest ya APROBADO -> 200 apiKey/token/callType/callId
+POST {{host}}/salas/{{salaId}}/stream-token
+Authorization: Bearer {{carlaToken}}
+
+> {%
+client.test("stream-token 200 aprobado", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.apiKey, "falta apiKey");
+  client.assert(!!response.body.token, "falta token");
+  client.assert(!!response.body.callType, "falta callType");
+  client.assert(!!response.body.callId, "falta callId");
 });
 %}
