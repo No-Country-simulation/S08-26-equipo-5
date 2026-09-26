@@ -2,10 +2,9 @@ openapi: 3.0.3
 info:
   title: MeetFlow API — Salas & Agenda
   description: >
-    ⚠️ DEPRECADO — artefacto previo a la consolidación de Agenda (PR #74),
-    puede contener endpoints que ya no existen. Fuente de verdad actual:
-    src/docs/openapi.ts (servida en GET /api/v1/docs). Ver issue #33.
-  version: 1.0.0
+    Snapshot OpenAPI para importar en Hoppscotch. La fuente de verdad es
+    src/docs/openapi.ts (GET /api/v1/docs), contrato 1.0.1.
+  version: 1.0.1
 
 servers:
   - url: http://localhost:4000/api/v1
@@ -188,9 +187,9 @@ paths:
         '404':
           description: Sala no encontrada
 
-  /salas/mis-salas/list:
+  /salas/mis-participaciones:
     get:
-      summary: Salas donde soy HOST
+      summary: Agenda del usuario (HOST o PARTICIPANTE)
       tags: [Agenda]
       security:
         - bearerAuth: []
@@ -206,25 +205,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Sala'
-
-  /salas/programadas/list:
-    get:
-      summary: Salas programadas/futuras
-      tags: [Agenda]
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Salas programadas
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  salas:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Sala'
+        '401':
+          description: No autenticado
 
   /salas/{id}/detalle:
     get:

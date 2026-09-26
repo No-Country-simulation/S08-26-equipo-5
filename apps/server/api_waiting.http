@@ -1,0 +1,189 @@
+@host = http://localhost:4000/api/v1
+@root = http://localhost:4000
+@email = qa-wait-{{$timestamp}}@test.com
+@guestEmail = qa-wait-guest-{{$timestamp}}@test.com
+@password = password123
+
+# Waiting room es Socket.IO en el namespace /reuniones (no hay REST /join).
+# Este archivo deja el host y la sala listos por HTTP y luego afirma los eventos:
+# join:request, approve, reject, UNAUTHORIZED, HOST_ONLY y ROOM_NOT_FOUND.
+
+### 1. Register host -> 201
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Host",
+  "apellido": "Waiting",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register host 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 2. Login host -> 200
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login host 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("accessToken", response.body.accessToken);
+});
+%}
+
+### 3. Register invitado -> 201
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Invitado",
+  "apellido": "Waiting",
+  "email": "{{guestEmail}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register guest 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 4. Login invitado -> 200
+# @name guest
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{guestEmail}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login guest 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("guestToken", response.body.accessToken);
+});
+%}
+
+### 5. Crear sala -> 201
+# @name sala
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Waiting QA"
+}
+
+> {%
+client.test("crear sala 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.global.set("salaId", response.body.salaId);
+  client.global.set("salaCodigo", response.body.codigo);
+});
+%}
+
+### 6. Waiting room Socket.IO
+GET {{root}}/api/v1/health
+
+> {%
+const { io } = require("socket.io-client");
+
+function once(socket, event) {
+  return new Promise((resolve) => socket.once(event, resolve));
+}
+
+function connect(token) {
+  const socket = io("http://localhost:4000/reuniones", {
+    auth: token ? { token } : {},
+    transports: ["websocket"],
+    forceNew: true,
+  });
+  return new Promise((resolve, reject) => {
+    socket.on("connect", () => resolve(socket));
+    socket.on("connect_error", reject);
+  });
+}
+
+client.test("waiting room", async function() {
+  const hostToken = request.variables.get("accessToken");
+  const guestToken = request.variables.get("guestToken");
+  const salaId = request.variables.get("salaId");
+  const codigo = request.variables.get("salaCodigo");
+  client.assert(!!salaId, "falta salaId de requests previos");
+
+  const anon = await connect();
+  const noRoom = once(anon, "error");
+  anon.emit("join:request", {
+    salaCodigo: "NOEXISTE",
+    nombre: "Ana",
+    apellido: "Perez",
+    email: "ana-noexiste@example.com",
+  });
+  const roomErr = await noRoom;
+  client.assert(roomErr.code === "ROOM_NOT_FOUND", JSON.stringify(roomErr));
+
+  const unauth = once(anon, "error");
+  anon.emit("host:subscribe", { salaId });
+  const unauthErr = await unauth;
+  client.assert(unauthErr.code === "UNAUTHORIZED", JSON.stringify(unauthErr));
+  anon.close();
+
+  const guest = await connect(guestToken);
+  const forbidden = once(guest, "error");
+  guest.emit("host:subscribe", { salaId });
+  const hostOnly = await forbidden;
+  client.assert(hostOnly.code === "HOST_ONLY", JSON.stringify(hostOnly));
+
+  const host = await connect(hostToken);
+  host.emit("host:subscribe", { salaId });
+  await new Promise((r) => setTimeout(r, 300));
+
+  const pending = once(host, "join:pending");
+  guest.emit("join:request", {
+    salaCodigo: codigo,
+    nombre: "Ana",
+    apellido: "Perez",
+    email: "ana-wait@example.com",
+  });
+  const pendingPayload = await pending;
+  client.assert(!!pendingPayload.participanteId, JSON.stringify(pendingPayload));
+
+  const approved = once(guest, "join:approved");
+  host.emit("participant:approve", { participanteId: pendingPayload.participanteId });
+  const approvedPayload = await approved;
+  client.assert(approvedPayload.streamCallId != null, JSON.stringify(approvedPayload));
+
+  const pending2 = once(host, "join:pending");
+  guest.emit("join:request", {
+    salaCodigo: codigo,
+    nombre: "Luis",
+    apellido: "Diaz",
+    email: "luis-wait@example.com",
+  });
+  const pending2Payload = await pending2;
+  const rejected = once(guest, "join:rejected");
+  host.emit("participant:reject", { participanteId: pending2Payload.participanteId });
+  const rejectedPayload = await rejected;
+  client.assert(rejectedPayload.streamCallId === null, JSON.stringify(rejectedPayload));
+
+  const conflict = once(host, "error");
+  host.emit("participant:reject", { participanteId: pending2Payload.participanteId });
+  const conflictErr = await conflict;
+  client.assert(conflictErr.code === "PARTICIPANT_STATE_CONFLICT", JSON.stringify(conflictErr));
+
+  guest.close();
+  host.close();
+});
+%}

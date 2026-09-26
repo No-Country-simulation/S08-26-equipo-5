@@ -22,7 +22,7 @@ export const openApiSpec = {
     description:
       "Documentación generada a partir del backend real (Express + Prisma). " +
       "Todas las rutas (salvo `/health` y `/webhooks/*`) están montadas bajo el prefijo `/api/v1`.",
-    version: "1.0.0",
+    version: "1.0.1",
   },
   servers: [
     { url: "http://localhost:4000/api/v1", description: "Local" },
