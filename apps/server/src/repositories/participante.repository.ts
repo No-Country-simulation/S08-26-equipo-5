@@ -4,6 +4,8 @@ export interface IParticipanteRepository {
     findHost(salaId: string, usuarioId: string): Promise<Participante | null>;
     findById(participanteId: string): Promise<(Participante & { sala: { id: string; codigo: string; estado: string } }) | null>;
     findPendienteByEmail(salaId: string, email: string): Promise<Participante | null>;
+    findAprobadoByEmail(salaId: string, email: string): Promise<Participante | null>;
+    findBySalaAndUsuario(salaId: string, usuarioId: string): Promise<Participante | null>;
     createPendiente(data: {
         salaId: string;
         usuarioId: string | null;
@@ -38,6 +40,18 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
     async findPendienteByEmail(salaId: string, email: string) {
         return this.prisma.participante.findFirst({
             where: { salaId, email, estado: EstadoParticipante.PENDIENTE },
+        });
+    }
+
+    async findAprobadoByEmail(salaId: string, email: string) {
+        return this.prisma.participante.findFirst({
+            where: { salaId, email, estado: EstadoParticipante.APROBADO },
+        });
+    }
+
+    async findBySalaAndUsuario(salaId: string, usuarioId: string) {
+        return this.prisma.participante.findFirst({
+            where: { salaId, usuarioId },
         });
     }
 

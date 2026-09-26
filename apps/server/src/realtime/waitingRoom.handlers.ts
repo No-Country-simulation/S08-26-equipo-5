@@ -1,7 +1,8 @@
-import { Namespace, Socket } from "socket.io";
+import type { Namespace } from "socket.io";
 import { EstadoParticipante } from "@prisma/client";
-import { IParticipanteRepository } from "../repositories/participante.repository.js";
-import { ISalaRepository } from "../repositories/sala.repository.js";
+import type { IParticipanteRepository } from "../repositories/participante.repository.js";
+import type { ISalaRepository } from "../repositories/sala.repository.js";
+import type { RealtimeSocket } from "../types/realtime.types.js";
 
 interface JoinRequestPayload {
     salaCodigo: string;
@@ -15,7 +16,7 @@ interface ParticipantActionPayload {
 
 export function registerWaitingRoomHandlers(
     nsp: Namespace,
-    socket: Socket & { data: { userId?: string } },
+    socket: RealtimeSocket,
     deps: { participantes: IParticipanteRepository; salas: ISalaRepository }
 ) {
     const { participantes, salas } = deps;
@@ -38,6 +39,8 @@ export function registerWaitingRoomHandlers(
                     email: payload.email,
                 }));
 
+            socket.data.salaId = sala.id;
+            socket.data.participanteId = participante.id;
             socket.join(`participante:${participante.id}`);
             socket.join(`sala:${sala.id}`);
 
@@ -75,7 +78,7 @@ export function registerWaitingRoomHandlers(
 
 async function resolveParticipant(
     nsp: Namespace,
-    socket: Socket & { data: { userId?: string } },
+    socket: RealtimeSocket,
     participantes: IParticipanteRepository,
     participanteId: string,
     nuevoEstado: EstadoParticipante
