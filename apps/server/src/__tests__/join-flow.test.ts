@@ -28,6 +28,7 @@ const {
   mockParticipanteFindMany,
   mockParticipanteCreate,
   mockParticipanteUpdate,
+  mockUsuarioFindUnique,
 } = vi.hoisted(() => ({
   mockSalaFindUnique: vi.fn(),
   mockParticipanteFindUnique: vi.fn(),
@@ -35,6 +36,7 @@ const {
   mockParticipanteFindMany: vi.fn(),
   mockParticipanteCreate: vi.fn(),
   mockParticipanteUpdate: vi.fn(),
+  mockUsuarioFindUnique: vi.fn(),
 }));
 
 vi.mock("@prisma/client", () => ({
@@ -47,6 +49,7 @@ vi.mock("@prisma/client", () => ({
       create: mockParticipanteCreate,
       update: mockParticipanteUpdate,
     },
+    usuario: { findUnique: mockUsuarioFindUnique },
   })),
   RolParticipante: { HOST: "HOST", PARTICIPANTE: "PARTICIPANTE" },
   EstadoParticipante: {
@@ -246,6 +249,92 @@ describe("POST /api/v1/salas/:code/join", () => {
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain("apellido");
     expect(res.body.error.message).toContain("email");
+  });
+
+  // ── Usuario logueado: identidad autocompletada desde la cuenta ──
+  const CUENTA = {
+    id: HOST_USER_ID,
+    nombre: "Marco",
+    apellido: "Vidal",
+    email: "marco@test.com",
+    passwordHash: "hash",
+  };
+
+  it("200 — usuario logueado con body vacío autocompleta identidad desde la cuenta", async () => {
+    mockSalaFindUnique.mockResolvedValue(salaActiva);
+    mockParticipanteFindUnique.mockResolvedValue(null); // findByUsuario
+    mockParticipanteFindFirst.mockResolvedValue(null); // findByEmail
+    mockUsuarioFindUnique.mockResolvedValue(CUENTA);
+    mockParticipanteCreate.mockResolvedValue(
+      participante({
+        estado: "PENDIENTE",
+        fechaIngreso: null,
+        usuarioId: HOST_USER_ID,
+        nombre: "Marco",
+        apellido: "Vidal",
+        email: "marco@test.com",
+      }),
+    );
+
+    const res = await request(app)
+      .post("/api/v1/salas/ABCD1234/join")
+      .set("Authorization", `Bearer ${userToken()}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.estado).toBe("PENDIENTE");
+    expect(mockParticipanteCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          usuarioId: HOST_USER_ID,
+          nombre: "Marco",
+          apellido: "Vidal",
+          email: "marco@test.com",
+        }),
+      }),
+    );
+  });
+
+  it("200 — usuario logueado que manda otro email: se usa el email de la cuenta (no se puede impersonar)", async () => {
+    mockSalaFindUnique.mockResolvedValue(salaActiva);
+    mockParticipanteFindUnique.mockResolvedValue(null);
+    mockParticipanteFindFirst.mockResolvedValue(null);
+    mockUsuarioFindUnique.mockResolvedValue(CUENTA);
+    mockParticipanteCreate.mockResolvedValue(
+      participante({
+        estado: "PENDIENTE",
+        fechaIngreso: null,
+        usuarioId: HOST_USER_ID,
+        nombre: "Marco",
+        apellido: "Vidal",
+        email: "marco@test.com",
+      }),
+    );
+
+    const res = await request(app)
+      .post("/api/v1/salas/ABCD1234/join")
+      .set("Authorization", `Bearer ${userToken()}`)
+      .send({ nombre: "Otro", apellido: "Nombre", email: "otro@evil.com" });
+
+    expect(res.status).toBe(200);
+    expect(mockParticipanteCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ email: "marco@test.com" }),
+      }),
+    );
+  });
+
+  it("401 — el usuario del token no existe en la DB", async () => {
+    mockUsuarioFindUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post("/api/v1/salas/ABCD1234/join")
+      .set("Authorization", `Bearer ${userToken()}`)
+      .send({});
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHORIZED");
+    expect(mockSalaFindUnique).not.toHaveBeenCalled();
   });
 });
 

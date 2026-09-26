@@ -315,3 +315,19 @@ client.test("stream-token 200 aprobado", function() {
   client.assert(!!response.body.callId, "falta callId");
 });
 %}
+
+### 12. POST /salas/:code/join logueado con body vacío -> 200, identidad autocompletada desde la cuenta
+POST {{host}}/salas/{{salaCodigo}}/join
+Content-Type: application/json
+Authorization: Bearer {{guestToken}}
+
+{}
+
+> {%
+client.test("join logueado (body vacio) 200, identidad de la cuenta", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.participanteId, JSON.stringify(response.body));
+  // El invitado ya está logueado como "Invitado Waiting" (ver paso 3/4): el
+  // body vacío no debería impedir el join ni pedir nombre/apellido/email.
+});
+%}

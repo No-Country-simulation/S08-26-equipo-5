@@ -17,10 +17,12 @@ import {
   requestJoin,
   getStreamCallRef,
   validateJoinInput,
+  resolveJoinIdentity,
   type WaitingRoomDeps,
 } from "../services/waitingRoom.service.js";
 import { PrismaParticipanteRepository } from "../repositories/participante.repository.js";
 import { PrismaSalaRepository } from "../repositories/sala.repository.js";
+import { PrismaUserRepository } from "../repositories/user.repository.js";
 import type {
   CreateSalaBody,
   CreateSalaResponse,
@@ -41,6 +43,7 @@ import type {
 const waitingRoomDeps: WaitingRoomDeps = {
   participantes: new PrismaParticipanteRepository(prisma),
   salas: new PrismaSalaRepository(prisma),
+  usuarios: new PrismaUserRepository(),
 };
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -598,18 +601,29 @@ export async function joinSala(
 ): Promise<void> {
   const { code } = req.params;
   const { nombre, apellido, email } = req.body ?? {};
+  const usuarioId = req.user?.sub ?? null;
 
   // Misma validación que el evento de socket join:request (mismos códigos
   // de error): vive en waitingRoom.service.ts para no duplicarla.
-  const validado = validateJoinInput({ salaCodigo: code, nombre, apellido, email });
+  const validado = validateJoinInput({ salaCodigo: code, nombre, apellido, email, usuarioId });
 
-  const result = await requestJoin(waitingRoomDeps, {
-    salaCodigo: validado.salaCodigo,
+  // Si vino con sesión iniciada, la identidad sale de su cuenta (nombre,
+  // apellido y sobre todo el email: no puede impersonar a otra persona
+  // mandando un email distinto en el body). Anónimo: se usa el body tal cual.
+  const identidad = await resolveJoinIdentity(waitingRoomDeps, {
+    usuarioId,
     nombre: validado.nombre,
     apellido: validado.apellido,
     email: validado.email,
+  });
+
+  const result = await requestJoin(waitingRoomDeps, {
+    salaCodigo: validado.salaCodigo,
+    nombre: identidad.nombre,
+    apellido: identidad.apellido,
+    email: identidad.email,
     // Si vino con sesión iniciada, queda vinculado a su usuario.
-    usuarioId: req.user?.sub ?? null,
+    usuarioId,
   });
 
   res.status(200).json({

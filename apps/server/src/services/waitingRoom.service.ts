@@ -15,11 +15,13 @@ import type {
   SalaDelParticipante,
 } from "../repositories/participante.repository.js";
 import type { ISalaRepository } from "../repositories/sala.repository.js";
+import type { IUserRepository } from "../repositories/user.repository.js";
 import type { RoomRole } from "../types/stream.js";
 
 export interface WaitingRoomDeps {
   participantes: IParticipanteRepository;
   salas: ISalaRepository;
+  usuarios: IUserRepository;
 }
 
 export interface JoinRequestInput {
@@ -119,6 +121,8 @@ export interface RawJoinInput {
   nombre?: string;
   apellido?: string;
   email?: string;
+  /** Si vino con sesión iniciada: su identidad se resuelve luego con resolveJoinIdentity. */
+  usuarioId?: string | null;
 }
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -129,6 +133,11 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  * que ambos caminos apliquen exactamente las mismas reglas (y los mismos
  * códigos de error). Antes join:request por socket no validaba nada y podía
  * crear un Participante con datos basura.
+ *
+ * Con `usuarioId` (caller logueado) nombre/apellido/email dejan de ser
+ * obligatorios: se completan después con `resolveJoinIdentity` a partir de
+ * la cuenta, así que acá no tiene sentido exigirlos ni validar el email que
+ * mandó el body (se ignora por completo).
  */
 export function validateJoinInput(payload: RawJoinInput): {
   salaCodigo: string;
@@ -139,6 +148,10 @@ export function validateJoinInput(payload: RawJoinInput): {
   const salaCodigo = payload.salaCodigo?.trim();
   if (!salaCodigo) {
     throw new AppError(400, "VALIDATION_ERROR", "El código de sala es requerido");
+  }
+
+  if (payload.usuarioId) {
+    return { salaCodigo, nombre: "", apellido: "", email: "" };
   }
 
   const nombre = payload.nombre?.trim();
@@ -164,6 +177,38 @@ export function validateJoinInput(payload: RawJoinInput): {
   }
 
   return { salaCodigo, nombre: nombre!, apellido: apellido!, email: email! };
+}
+
+/**
+ * Resuelve la identidad real del caller para el join: si vino logueado, la
+ * cuenta manda (nombre/apellido/email de la tabla Usuario) y lo que haya en
+ * el body se ignora — así nadie puede pedir el ingreso con un email ajeno.
+ * Si el usuarioId del token ya no existe en la DB, 401: ese token no
+ * corresponde a ninguna cuenta válida.
+ */
+export async function resolveJoinIdentity(
+  deps: WaitingRoomDeps,
+  input: {
+    usuarioId?: string | null;
+    nombre: string;
+    apellido: string;
+    email: string;
+  },
+): Promise<{ nombre: string; apellido: string; email: string }> {
+  if (!input.usuarioId) {
+    return { nombre: input.nombre, apellido: input.apellido, email: input.email };
+  }
+
+  const usuario = await deps.usuarios.findById(input.usuarioId);
+  if (!usuario) {
+    throw new AppError(401, "UNAUTHORIZED", "Usuario no encontrado");
+  }
+
+  return {
+    nombre: usuario.nombre,
+    apellido: usuario.apellido,
+    email: usuario.email,
+  };
 }
 
 /**

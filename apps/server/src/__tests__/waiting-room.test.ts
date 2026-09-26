@@ -29,6 +29,7 @@ import {
   getStreamCallRef,
   requestJoin,
   validateJoinInput,
+  resolveJoinIdentity,
   type WaitingRoomDeps,
 } from "../services/waitingRoom.service.js";
 import { verifyParticipantToken } from "../utils/participantToken.js";
@@ -63,9 +64,15 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
     findByCodigo: vitest.fn().mockResolvedValue(sala),
     findById: vitest.fn().mockResolvedValue(sala),
   };
-  return { participantes, salas } as unknown as WaitingRoomDeps & {
+  const usuarios = {
+    findByEmail: vitest.fn(),
+    findById: vitest.fn(),
+    create: vitest.fn(),
+  };
+  return { participantes, salas, usuarios } as unknown as WaitingRoomDeps & {
     participantes: typeof participantes;
     salas: typeof salas;
+    usuarios: typeof usuarios;
   };
 }
 
@@ -407,6 +414,77 @@ describe("validateJoinInput — validador compartido HTTP/socket", () => {
     expect(() => validateJoinInput({ ...valido, email: "no-es-un-email" })).toThrow(
       expect.objectContaining({ statusCode: 400, code: "VALIDATION_ERROR" }),
     );
+  });
+
+  it("con usuarioId no exige nombre/apellido/email: se resuelven después con resolveJoinIdentity", () => {
+    expect(
+      validateJoinInput({ salaCodigo: "ABCD1234", usuarioId: "usuario-1" }),
+    ).toEqual({ salaCodigo: "ABCD1234", nombre: "", apellido: "", email: "" });
+  });
+
+  it("con usuarioId sigue exigiendo el código de sala", () => {
+    expect(() =>
+      validateJoinInput({ salaCodigo: "", usuarioId: "usuario-1" }),
+    ).toThrow(expect.objectContaining({ statusCode: 400, code: "VALIDATION_ERROR" }));
+  });
+});
+
+describe("resolveJoinIdentity — identidad del participante logueado", () => {
+  const cuenta = {
+    id: "usuario-1",
+    nombre: "Marco",
+    apellido: "Vidal",
+    email: "marco@test.com",
+    passwordHash: "hash",
+  };
+
+  it("usuario logueado: usa nombre/apellido/email de la cuenta, ignora el body", async () => {
+    const deps = makeDeps();
+    deps.usuarios.findById.mockResolvedValue(cuenta);
+
+    const result = await resolveJoinIdentity(deps, {
+      usuarioId: "usuario-1",
+      nombre: "Otro",
+      apellido: "Nombre",
+      email: "otro@evil.com",
+    });
+
+    expect(result).toEqual({
+      nombre: "Marco",
+      apellido: "Vidal",
+      email: "marco@test.com",
+    });
+    expect(deps.usuarios.findById).toHaveBeenCalledWith("usuario-1");
+  });
+
+  it("usuario id inexistente en la DB → 401 UNAUTHORIZED", async () => {
+    const deps = makeDeps();
+    deps.usuarios.findById.mockResolvedValue(null);
+
+    await expect(
+      resolveJoinIdentity(deps, {
+        usuarioId: "usuario-fantasma",
+        nombre: "",
+        apellido: "",
+        email: "",
+      }),
+    ).rejects.toThrow(
+      expect.objectContaining({ statusCode: 401, code: "UNAUTHORIZED" }),
+    );
+  });
+
+  it("sin usuarioId: devuelve el nombre/apellido/email del payload tal cual", async () => {
+    const deps = makeDeps();
+
+    const result = await resolveJoinIdentity(deps, {
+      usuarioId: null,
+      nombre: "Ana",
+      apellido: "Pérez",
+      email: "ana@test.com",
+    });
+
+    expect(result).toEqual({ nombre: "Ana", apellido: "Pérez", email: "ana@test.com" });
+    expect(deps.usuarios.findById).not.toHaveBeenCalled();
   });
 });
 

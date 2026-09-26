@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { PrismaParticipanteRepository } from "../repositories/participante.repository.js";
 import { PrismaSalaRepository } from "../repositories/sala.repository.js";
+import { PrismaUserRepository } from "../repositories/user.repository.js";
 import { registerWaitingRoomHandlers } from "./waitingRoom.handlers.js";
 import { setReunionesNamespace } from "./registry.js";
 import { verifyParticipantToken } from "../utils/participantToken.js";
@@ -13,7 +14,8 @@ export function createReunionesNamespace(io: Server): Namespace {
     const nsp = io.of("/reuniones");
     const participantes = new PrismaParticipanteRepository(prisma);
     const salas = new PrismaSalaRepository(prisma);
-    const deps = { participantes, salas };
+    const usuarios = new PrismaUserRepository();
+    const deps = { participantes, salas, usuarios };
 
     // Los controllers HTTP emiten por este namespace (join:pending, etc.).
     setReunionesNamespace(nsp);

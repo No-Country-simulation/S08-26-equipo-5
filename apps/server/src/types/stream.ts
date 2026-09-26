@@ -121,10 +121,15 @@ export interface TransferHostResponse {
 }
 
 // ─── POST /salas/:code/join ──────────────────────────────
+/**
+ * Con sesión iniciada (Bearer token) los tres campos son opcionales: la
+ * identidad se completa desde la cuenta y lo que venga acá se ignora. Sin
+ * sesión, los tres siguen siendo obligatorios (validateJoinInput los exige).
+ */
 export interface JoinSalaBody {
-  nombre: string;
-  apellido: string;
-  email: string;
+  nombre?: string;
+  apellido?: string;
+  email?: string;
 }
 
 export interface JoinSalaResponse {

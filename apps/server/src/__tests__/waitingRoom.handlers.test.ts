@@ -73,8 +73,15 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
     findByCodigo: vitest.fn(),
     findById: vitest.fn(),
   };
-  return { participantes, salas } as unknown as WaitingRoomDeps & {
+  const usuarios = {
+    findByEmail: vitest.fn(),
+    findById: vitest.fn(),
+    create: vitest.fn(),
+  };
+  return { participantes, salas, usuarios } as unknown as WaitingRoomDeps & {
     participantes: typeof participantes;
+    salas: typeof salas;
+    usuarios: typeof usuarios;
   };
 }
 
@@ -212,6 +219,56 @@ describe("join:request — valida el payload igual que el HTTP", () => {
       error: expect.objectContaining({ code: "VALIDATION_ERROR" }),
     });
     expect(deps.participantes.createPendiente).not.toHaveBeenCalled();
+  });
+
+  it("usuario logueado (socket.data.userId) con solo salaCodigo autocompleta identidad desde la cuenta", async () => {
+    const deps = makeDeps({
+      findByUsuario: vitest.fn().mockResolvedValue(null),
+      findByEmail: vitest.fn().mockResolvedValue(null),
+      createPendiente: vitest.fn().mockResolvedValue({
+        id: PARTICIPANTE_ID,
+        salaId: SALA_ID,
+        estado: "PENDIENTE",
+        rol: "PARTICIPANTE",
+        nombre: "Marco",
+        apellido: "Vidal",
+        email: "marco@test.com",
+        usuarioId: "usuario-logueado",
+      }),
+    });
+    deps.salas.findByCodigo.mockResolvedValue({
+      id: SALA_ID,
+      codigo: "ABCD1234",
+      estado: "ACTIVA",
+      streamRoomId: null,
+      streamCallType: null,
+      streamCallId: null,
+    });
+    deps.usuarios.findById.mockResolvedValue({
+      id: "usuario-logueado",
+      nombre: "Marco",
+      apellido: "Vidal",
+      email: "marco@test.com",
+      passwordHash: "hash",
+    });
+
+    const socket = createFakeSocket({ userId: "usuario-logueado" });
+    registerWaitingRoomHandlers({} as never, socket as never, deps);
+
+    const ack = vitest.fn();
+    await socket.trigger("join:request", { salaCodigo: "ABCD1234" }, ack);
+
+    expect(ack).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, estado: "PENDIENTE" }),
+    );
+    expect(deps.participantes.createPendiente).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nombre: "Marco",
+        apellido: "Vidal",
+        email: "marco@test.com",
+        usuarioId: "usuario-logueado",
+      }),
+    );
   });
 });
 

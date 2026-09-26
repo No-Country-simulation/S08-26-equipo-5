@@ -5,6 +5,7 @@ import {
     broadcastResolution,
     requestJoin,
     resolveParticipant,
+    resolveJoinIdentity,
     validateJoinInput,
     type WaitingRoomDeps,
 } from "../services/waitingRoom.service.js";
@@ -12,9 +13,9 @@ import { rooms } from "./registry.js";
 
 interface JoinRequestPayload {
     salaCodigo: string;
-    nombre: string;
-    apellido: string;
-    email: string;
+    nombre?: string;
+    apellido?: string;
+    email?: string;
 }
 interface ParticipantActionPayload {
     participanteId: string;
@@ -51,18 +52,29 @@ export function registerWaitingRoomHandlers(
 
     socket.on("join:request", async (payload: JoinRequestPayload, ack?: Ack) => {
         try {
+            const usuarioId = socket.data.userId ?? null;
+
             // Misma validación que POST /salas/:code/join (mismos códigos de
             // error): sin esto, un payload con campos vacíos o un email
             // inválido llegaba directo a requestJoin y creaba un Participante
             // con datos basura.
-            const validado = validateJoinInput(payload ?? {});
+            const validado = validateJoinInput({ ...(payload ?? {}), usuarioId });
 
-            const result = await requestJoin(deps, {
-                salaCodigo: validado.salaCodigo,
+            // Socket logueado: la identidad sale de la cuenta, igual que en
+            // el HTTP join (mismo criterio de seguridad: no impersonar).
+            const identidad = await resolveJoinIdentity(deps, {
+                usuarioId,
                 nombre: validado.nombre,
                 apellido: validado.apellido,
                 email: validado.email,
-                usuarioId: socket.data.userId ?? null,
+            });
+
+            const result = await requestJoin(deps, {
+                salaCodigo: validado.salaCodigo,
+                nombre: identidad.nombre,
+                apellido: identidad.apellido,
+                email: identidad.email,
+                usuarioId,
             });
 
             // El socket se suscribe a sus rooms: sin esto join:approved

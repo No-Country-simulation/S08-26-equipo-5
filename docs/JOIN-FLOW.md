@@ -86,6 +86,16 @@ entrar —, se reutiliza esa fila en vez de intentar crear una nueva: el unique
 real es `(salaId, usuarioId)`, no el email. El HOST además nunca cae en la
 ventana de reingreso: siempre vuelve `APROBADO`.
 
+**Logueado: `nombre`/`apellido`/`email` del body son opcionales y se
+ignoran.** Con `Authorization: Bearer <access token>` la identidad sale
+siempre de la cuenta (`Usuario.nombre/apellido/email`), aunque el body venga
+vacío o mande otro email — así nadie puede pedir el ingreso impersonando otro
+email. Si el `sub` del token no corresponde a ningún `Usuario` en la DB,
+`401 UNAUTHORIZED`. Sin token, sigue rigiendo el comportamiento de siempre:
+los tres campos son obligatorios (`400 VALIDATION_ERROR` si falta alguno).
+Mismo criterio en el socket `join:request`: con `socket.data.userId` seteado
+solo hace falta mandar `salaCodigo`.
+
 ### `POST /salas/:salaId/stream-token` — token de GetStream
 
 Requiere `Authorization: Bearer <token>`, que puede ser **cualquiera de los dos**:
