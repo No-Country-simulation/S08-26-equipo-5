@@ -404,3 +404,128 @@ client.test("detalle con id no-UUID devuelve 500 en vez de 400/404 (BUG-07)", fu
   client.assert(response.status === 500, "status " + response.status);
 });
 %}
+
+### 30. POST /salas -> 201 (sala para probar transfer-host, S3-08 / S3-API)
+# @name crearSalaTransfer
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Sala transfer-host QA"
+}
+
+> {%
+client.test("crear sala para transfer-host 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.global.set("salaTransferId", response.body.salaId);
+  client.global.set("salaTransferCodigo", response.body.codigo);
+});
+%}
+
+### 31. GET /auth/me del host -> captura hostUserId (no hay endpoint HTTP de
+# join en develop todavía -- eso es parte de S3-02/join-flow, sin merge -- así
+# que los casos de abajo prueban con el único participante que sí existe hoy
+# vía HTTP: el propio HOST creador).
+GET {{host}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("auth/me del host 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("hostUserId", response.body.id || response.body.usuario?.id);
+});
+%}
+
+### 32. POST transfer-host sin token -> 401
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+
+{
+  "nuevoHostId": "00000000-0000-4000-8000-000000000099"
+}
+
+> {%
+client.test("transfer-host sin token 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 33. POST transfer-host sin nuevoHostId -> 400
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{}
+
+> {%
+client.test("transfer-host sin nuevoHostId 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 34. POST transfer-host a uno mismo -> 400
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nuevoHostId": "{{hostUserId}}"
+}
+
+> {%
+client.test("transfer-host auto-transferencia 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 35. POST transfer-host por un no-HOST -> 403
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{guestToken}}
+
+{
+  "nuevoHostId": "{{hostUserId}}"
+}
+
+> {%
+client.test("transfer-host por no-host 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+});
+%}
+
+### 36. POST transfer-host a alguien que no es participante de la sala -> 404
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nuevoHostId": "00000000-0000-4000-8000-000000000099"
+}
+
+> {%
+client.test("transfer-host a no-participante 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 37. POST /rooms/:id/token -> body ignorado (S3-08)
+# Se manda un userId/role distinto al del JWT a propósito: si el bug viejo
+# (rol tomado del body) volviera, este test lo detectaría porque el token
+# resultante no correspondería al rol real en DB.
+POST {{host}}/rooms/{{salaTransferId}}/token
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "userId": "00000000-0000-4000-8000-000000000099",
+  "role": "PARTICIPANTE",
+  "callCid": "no-deberia-importar"
+}
+
+> {%
+client.test("rooms/token ignora el body y responde con el token del HOST real", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.token, "falta token");
+});
+%}

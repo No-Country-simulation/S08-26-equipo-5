@@ -315,6 +315,41 @@ Genera un token GetStream para el usuario autenticado. El `userId` se toma del J
 
 ---
 
+## Realtime — Socket.IO (namespace `/reuniones`)
+
+Base: `<rootUrl>/reuniones` (sin prefijo `/api/v1`, es un namespace de Socket.IO, no una ruta REST). Auth vía `socket.handshake.auth.token` (JWT de usuario, opcional según el evento).
+
+### Waiting room (contrato v1, en producción)
+
+| Evento | Dirección | Payload | Descripción |
+|---|---|---|---|
+| `join:request` | C→S | `{ salaCodigo, nombre, apellido, email }` | El participante solicita ingreso. Si el caller tiene JWT válido, `nombre`/`apellido`/`email` se completan **siempre** desde `Usuario` (lo que venga en el payload se ignora). Sin sesión, los tres campos son obligatorios. |
+| `join:pending` | S→host | `{ participanteId, nombre, apellido, email, timestamp }` | Se emite a la room `sala:{id}:host` cuando hay una nueva solicitud `PENDIENTE`. |
+| `host:subscribe` | C→S | `{ salaId }` | El HOST se suscribe para recibir `join:pending` de su sala. Requiere JWT + ser HOST. **Conocido:** no reenvía las solicitudes `PENDIENTE` ya existentes al momento de suscribirse (ver BUG-06 en `docs/bugs.md`). |
+| `participant:approve` | C→S | `{ participanteId }` | Solo el HOST. Resuelve con `update` condicional (`WHERE estado = PENDIENTE`) para evitar doble resolución por carrera. |
+| `participant:reject` | C→S | `{ participanteId }` | Ídem, para rechazo. |
+| `join:approved` | S→participante | `{ sala: { id, codigo, estado }, streamCallId }` | `streamCallId` es el callCid real de GetStream (ver BUG-05 en `docs/bugs.md`: en la versión actual de `develop` este valor está fabricado y no coincide con el del host — corregido en el PR #85, pendiente de merge). |
+| `join:rejected` | S→participante | `{ sala: { id, codigo, estado }, streamCallId: null }` | `streamCallId` siempre `null` en un rechazo. |
+| `error` | S→C | `{ code, message }` | Códigos: `UNAUTHORIZED`, `HOST_ONLY`, `ROOM_NOT_FOUND`, `NOT_FOUND`, `PARTICIPANT_STATE_CONFLICT`, `INTERNAL_SERVER_ERROR`. |
+
+Verificado con la suite `.http` (`api_waiting.http`, `npm run test:http`).
+
+### Estado de medios en vivo — S3-09 (⏳ pendiente de merge, PR #84)
+
+Estos eventos **todavía no están en `develop` ni en Render** — se documentan de antemano (mismo criterio que `qa/casos-manuales-us-04-us-07.md`) para que FE pueda integrarlos apenas se mergee el PR. Fuente: `apps/server/src/realtime/participantState.handlers.ts` en `feature/S3-09-estado-mic-cam-pantalla`.
+
+| Evento | Dirección | Payload | Descripción |
+|---|---|---|---|
+| `room:enter` | C→S | `{ salaCodigo, email?, mic?, cam?, screen? }` | Bindea la identidad del socket (`socket.data.salaId`/`participanteId`) resuelta server-side contra `Participante` — nunca por lo que mande el cliente. Requiere participante `APROBADO`. Devuelve por *replay* el `participant:state` de todos los presentes, para evitar parpadeo. |
+| `participant:state` | C→S | `{ mic?, cam?, screen? }` (patch parcial, booleanos) | Actualiza el estado de medios propio. Valores no booleanos se descartan (`sanitizeMediaPatch`). Requiere haber hecho `room:enter` antes. |
+| `participant:state` | S→C | `{ participanteId, mic, cam, screen, timestamp }` | Broadcast a toda `sala:{id}` (incluye al emisor). |
+| `participant:connection` | S→C | `{ participanteId, connection: "disconnected", timestamp }` | Se emite al desconectarse el último socket de un participante (refcount por pestaña). **Nota:** el tipo contempla `"connected"` también, pero hoy solo se emite `"disconnected"` — la presencia al conectar se infiere del primer `participant:state`. |
+| `error` | S→C | `{ code, message }` | Códigos nuevos: `NOT_APPROVED`, `NOT_IN_ROOM`, `VALIDATION_ERROR` (además de los ya listados arriba). |
+
+El estado vive en memoria (`estadoMedio.store.ts`), no se persiste en DB: es un overlay de presencia, no el roster de la sala.
+
+---
+
 ## Webhooks
 
 > ⚠️ **Los webhooks NO usan el Base URL de arriba.** Se montan en la raíz
@@ -324,11 +359,9 @@ Genera un token GetStream para el usuario autenticado. El `userId` se toma del J
 
 URL completa: `http://localhost:4000/webhooks/getstream` (sin `/api/v1`).
 
-Recibe eventos de GetStream (call.ended, session_ended) y marca salas como FINALIZADA.
+Recibe eventos de GetStream y marca salas como `FINALIZADA`. Solo `call.ended` finaliza la sala; `call.session_ended` se ignora a propósito (dispara también cuando el host queda momentáneamente solo).
 
-> ⚠️ **Nota de seguridad**: la verificación de firma HMAC (`X-Signature`) está
-> implementada en `webhook.controller.ts` pero actualmente **comentada/deshabilitada**
-> para desarrollo. Antes de producción hay que descomentarla (ver TODO en el código).
+**Verificación de firma HMAC (S3-08):** exigida por defecto vía `WEBHOOK_SIGNATURE_REQUIRED` (`config/env.ts`; default `true` fuera de `development`, falso solo en dev si se lo pisa explícitamente). `apps/server/.env.example` todavía no lista esta variable (ni ninguna otra de webhook) — falta agregarla ahí para que quien clone el repo sepa que existe.
 
 ---
 
@@ -336,6 +369,7 @@ Recibe eventos de GetStream (call.ended, session_ended) y marca salas como FINAL
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-09-28 | S3-API: agregado `POST /salas/:id/transfer-host` a Swagger (faltaba por completo) y corregido el body de `POST /rooms/:id/token` (ya no exige/documenta `userId`/`role`/`callCid`, el controller los ignora desde S3-08). Nueva sección "Realtime — Socket.IO" con el contrato completo de waiting room (ya en producción) y de estado de medios en vivo S3-09 (⏳ pendiente de merge, PR #84). Nota de HMAC de webhooks actualizada y agregada `WEBHOOK_SIGNATURE_REQUIRED` a `.env.example`. Casos `.http` #30-#37 (`transfer-host` + `rooms/:id/token`) agregados a `api_salas_agenda.http`: 39/39 OK contra `localhost` (misma DB que Render); contra Render se encontró y documentó **BUG-09** (`POST /salas` → 500, bloquea la corrida completa contra ese entorno). |
 | 2026-09-24 | Contrato OpenAPI `1.0.1`. Suite `.http` con aserciones (auth, salas, waiting room) y colección Hoppscotch alineada a las rutas vigentes. |
 | 2026-09-22 | Documentado en Swagger (`src/docs/openapi.ts` + `/api/v1/docs`) con ejemplos y schemas: `POST /salas`, `GET /salas/:code`, `GET /salas/mis-participaciones` (Agenda). Agregado `api_salas_agenda.http` (REST Client). Ver issue #33. |
 | 2026-09-21 | Documento inicial (PR #74): CRUD de salas, participantes, webhook GetStream. |

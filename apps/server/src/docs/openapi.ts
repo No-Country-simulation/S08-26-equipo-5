@@ -248,19 +248,25 @@ export const openApiSpec = {
           },
         },
       },
-      GenerateTokenBody: {
-        type: "object",
-        required: ["userId", "role"],
-        properties: {
-          userId: { type: "string" },
-          role: { $ref: "#/components/schemas/RolParticipante" },
-          callCid: { type: "string" },
-        },
-      },
       GenerateTokenResponse: {
         type: "object",
         properties: {
           token: { type: "string" },
+        },
+      },
+      TransferHostBody: {
+        type: "object",
+        required: ["nuevoHostId"],
+        properties: {
+          nuevoHostId: { type: "string", format: "uuid", description: "usuarioId del participante que va a pasar a HOST" },
+        },
+      },
+      TransferHostResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string", example: "Rol de HOST transferido exitosamente" },
+          host: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
+          previousHost: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
         },
       },
       HealthResponse: {
@@ -576,23 +582,65 @@ export const openApiSpec = {
         },
       },
     },
-    "/rooms/{id}/token": {
+    "/salas/{id}/transfer-host": {
       post: {
-        tags: ["Legacy"],
-        summary: "Generar token de GetStream (legacy)",
-        operationId: "legacy_generate_token",
+        tags: ["Salas"],
+        summary: "Transferir el rol HOST a otro participante (S3-08)",
+        description:
+          "Solo el HOST actual puede transferir. El caller queda `PARTICIPANTE` y el " +
+          "target pasa a `HOST` (se preserva el `estado` de ambos). Transacción con " +
+          "guard anti-TOCTOU (`updateMany` condicional): dos transfers concurrentes " +
+          "solo dejan ganar a uno.",
+        operationId: "salas_transfer_host",
+        security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { $ref: "#/components/schemas/GenerateTokenBody" } } },
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TransferHostBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Rol transferido",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/TransferHostResponse" } } },
+          },
+          400: { description: "`nuevoHostId` ausente o auto-transferencia", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "Solo el HOST puede transferir el rol", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada / el nuevo host no es participante de la sala", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/rooms/{id}/token": {
+      post: {
+        tags: ["Legacy"],
+        summary: "Generar token de GetStream (legacy)",
+        description:
+          "**Body ignorado.** Antes (pre-S3-08) aceptaba `userId`/`role`/`callCid` en el body, " +
+          "lo que permitía a cualquiera pedirse un token con rol `HOST`. Ahora el `userId` se " +
+          "toma del JWT (`req.user.sub`) y el `role` se lee de la fila `Participante` en DB. " +
+          "El usuario debe ser participante con `estado = APROBADO` de la sala.",
+        operationId: "legacy_generate_token",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { type: "object", description: "Se acepta cualquier body por compatibilidad; el contenido se ignora." },
+            },
+          },
         },
         responses: {
           200: {
             description: "Token generado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/GenerateTokenResponse" } } },
           },
+          401: { description: "Sin token, sin claim `sub`, expirado o firma inválida", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "El usuario no es participante aprobado de la sala (PENDIENTE/RECHAZADO)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           409: { description: "Sala no sincronizada con GetStream", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
