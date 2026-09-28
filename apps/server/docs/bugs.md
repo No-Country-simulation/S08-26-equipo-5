@@ -62,11 +62,11 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 - Efecto: un id mal formado (typo, id de otra entidad, etc.) se reporta como error de servidor en vez de un 400/404 claro. Es probable que el mismo patrón afecte a otras rutas `:id` de `rooms.controller.ts` (`PUT/DELETE /salas/:id`, `GET /salas/:id/participantes`) ya que comparten el mismo estilo de acceso a Prisma sin validar formato antes — no se verificaron todas en este ciclo.
 - Fix sugerido: validar `id` con una regex/`zod` de UUID antes de la consulta y devolver 400 si no matchea, o envolver el `findUnique` y mapear el error de Prisma (`P2023` - malformed ID) a 404.
 
-## BUG-08 — `join:request` (Socket.IO) no valida el payload
+## BUG-08 — `join:request` (Socket.IO) no valida el payload — RESUELTO
 
-- Casos: suite `.http` `api_waiting.http` #7
+- Casos: suite `.http` `api_waiting.http` #13
 - Severidad: baja
-- Estado: **abierto** (encontrado en S2-QA2, 2026-09-25).
+- Estado: resuelto en `feature/join-flow-stream-token` (`eee4209`): `waitingRoom.service.ts` valida nombre/apellido/email y el socket recibe `error` con `code: "VALIDATION_ERROR"`. El caso #13 de `api_waiting.http` quedó como regresión. Encontrado en S2-QA2, 2026-09-25.
 - Dónde: `apps/server/src/realtime/waitingRoom.handlers.ts`, handler de `join:request` usa `payload.nombre/apellido/email` sin validar que existan.
 - Efecto: se puede crear un participante `PENDIENTE` sin nombre/apellido/email (o con valores `undefined`), sin que el cliente reciba ningún error. El host vería una solicitud con datos vacíos en el panel de "Solicitudes de ingreso".
 - Fix sugerido: validar el payload (por ejemplo con `zod`) al inicio del handler y emitir un `error` con `code: "VALIDATION_ERROR"` si faltan campos, igual que ya se hace para los demás códigos de error de este namespace.

@@ -195,6 +195,41 @@ try {
   const conflict = once(host, "error");
   host.emit("participant:reject", { participanteId: r.pending2Payload.participanteId });
   r.conflictErr = await conflict;
+
+  // S2-QA2: approve sobre un participanteId que no existe -> NOT_FOUND
+  const notFound = once(host, "error");
+  host.emit("participant:approve", { participanteId: "00000000-0000-4000-8000-000000000099" });
+  r.notFoundErr = await notFound;
+
+  // S2-QA2: una solicitud pendiente nueva para probar quién puede resolverla.
+  // Socket anónimo (identidad nueva por email), igual que Luis.
+  const sinToken = await connect();
+  sockets.push(sinToken);
+  const pending3 = once(host, "join:pending");
+  sinToken.emit("join:request", {
+    salaCodigo: codigo,
+    nombre: "Sin",
+    apellido: "Token",
+    email: "sin-token-wait@example.com",
+  });
+  r.pending3Payload = await pending3;
+
+  // S2-QA2: approve desde un socket sin token -> UNAUTHORIZED
+  const anon2 = await connect();
+  sockets.push(anon2);
+  const unauthResolve = once(anon2, "error");
+  anon2.emit("participant:approve", { participanteId: r.pending3Payload.participanteId });
+  r.unauthResolveErr = await unauthResolve;
+
+  // S2-QA2: approve por alguien logueado que no es el host de esa sala -> HOST_ONLY
+  const forbiddenResolve = once(guest, "error");
+  guest.emit("participant:approve", { participanteId: r.pending3Payload.participanteId });
+  r.forbiddenResolveErr = await forbiddenResolve;
+
+  // Limpieza: el host resuelve la solicitud que quedó pendiente
+  const cleanup = once(sinToken, "join:rejected");
+  host.emit("participant:reject", { participanteId: r.pending3Payload.participanteId });
+  await cleanup;
 } catch (e) {
   r.error = e.message;
 } finally {
@@ -225,6 +260,15 @@ client.test("join:rejected trae streamCallId null", function() {
 });
 client.test("segundo reject -> PARTICIPANT_STATE_CONFLICT", function() {
   client.assert(r.conflictErr?.code === "PARTICIPANT_STATE_CONFLICT", JSON.stringify(r.conflictErr));
+});
+client.test("approve de participanteId inexistente -> NOT_FOUND", function() {
+  client.assert(r.notFoundErr?.code === "NOT_FOUND", JSON.stringify(r.notFoundErr));
+});
+client.test("approve sin token -> UNAUTHORIZED", function() {
+  client.assert(r.unauthResolveErr?.code === "UNAUTHORIZED", JSON.stringify(r.unauthResolveErr));
+});
+client.test("approve de no-host -> HOST_ONLY", function() {
+  client.assert(r.forbiddenResolveErr?.code === "HOST_ONLY", JSON.stringify(r.forbiddenResolveErr));
 });
 %}
 
@@ -383,47 +427,11 @@ client.test("join logueado (body vacio) 200, identidad de la cuenta", function()
   client.assert(!!response.body.participanteId, JSON.stringify(response.body));
   // El invitado ya está logueado como "Invitado Waiting" (ver paso 3/4): el
   // body vacío no debería impedir el join ni pedir nombre/apellido/email.
-  // S2-QA2: approve/reject sobre un participanteId que no existe -> NOT_FOUND
-  const notFound = once(host, "error");
-  host.emit("participant:approve", { participanteId: "00000000-0000-4000-8000-000000000099" });
-  const notFoundErr = await notFound;
-  client.assert(notFoundErr.code === "NOT_FOUND", JSON.stringify(notFoundErr));
-
-  // S2-QA2: approve/reject sin token (socket anónimo) -> UNAUTHORIZED
-  const pending3 = once(host, "join:pending");
-  guest.emit("join:request", {
-    salaCodigo: codigo,
-    nombre: "Sin",
-    apellido: "Token",
-    email: "sin-token-wait@example.com",
-  });
-  const pending3Payload = await pending3;
-
-  const anon2 = await connect();
-  const unauthResolve = once(anon2, "error");
-  anon2.emit("participant:approve", { participanteId: pending3Payload.participanteId });
-  const unauthResolveErr = await unauthResolve;
-  client.assert(unauthResolveErr.code === "UNAUTHORIZED", JSON.stringify(unauthResolveErr));
-  anon2.close();
-
-  // S2-QA2: approve/reject por alguien logueado que no es el host de esa sala -> HOST_ONLY
-  const forbiddenResolve = once(guest, "error");
-  guest.emit("participant:approve", { participanteId: pending3Payload.participanteId });
-  const forbiddenResolveErr = await forbiddenResolve;
-  client.assert(forbiddenResolveErr.code === "HOST_ONLY", JSON.stringify(forbiddenResolveErr));
-
-  // Limpieza: el host resuelve la solicitud que quedó pendiente
-  const cleanup = once(guest, "join:rejected");
-  host.emit("participant:reject", { participanteId: pending3Payload.participanteId });
-  await cleanup;
-
-  guest.close();
-  host.close();
 });
 %}
 
-### 7. join:request con payload inválido (sin email) -> el backend no valida y crea el participante igual
-# Documenta un hueco: no hay validación de payload en el namespace /reuniones.
+### 13. join:request con payload inválido (sin nombre/apellido/email) -> error VALIDATION_ERROR
+# Regresión de BUG-08 (docs/bugs.md): el namespace /reuniones valida el payload igual que el HTTP.
 GET {{root}}/api/v1/health
 
 > {%
@@ -441,17 +449,26 @@ function connect(token) {
   });
 }
 
-client.test("join:request sin campos requeridos no es rechazado por el server", async function() {
-  const codigo = request.variables.get("salaCodigo");
-  const socket = await connect();
-  const result = await new Promise((resolve) => {
+// Mismo patrón que los pasos 6 y 10: await a nivel superior y asserts
+// síncronos al final (httpyac no espera un client.test(async ...)).
+const codigo = request.variables.get("salaCodigo");
+let result;
+let socket;
+try {
+  socket = await connect();
+  result = await new Promise((resolve) => {
     socket.once("error", (err) => resolve({ type: "error", err }));
     socket.emit("join:request", { salaCodigo: codigo });
     setTimeout(() => resolve({ type: "timeout" }), 1500);
   });
-  // Si algún día se agrega validación, este assert va a fallar y hay que
-  // actualizar docs/bugs.md (dejar de marcarlo como hueco abierto).
-  client.assert(result.type === "timeout", "se esperaba que no hubiera error de validación: " + JSON.stringify(result));
-  socket.close();
+} catch (e) {
+  result = { type: "exception", message: e.message };
+} finally {
+  socket?.close();
+}
+
+client.test("join:request sin campos requeridos -> VALIDATION_ERROR", function() {
+  client.assert(result.type === "error", "se esperaba un error de validación: " + JSON.stringify(result));
+  client.assert(result.err?.code === "VALIDATION_ERROR", JSON.stringify(result));
 });
 %}
