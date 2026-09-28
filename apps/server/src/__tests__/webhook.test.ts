@@ -166,6 +166,28 @@ describe("S3-08 — Webhooks GetStream (HMAC)", () => {
     });
   });
 
+  // call.session_ended dispara también cuando el host queda momentáneamente
+  // solo en la call (llega antes que los invitados, o se le corta la
+  // conexión un instante). Si finalizáramos la sala en ese evento, los
+  // invitados que llegan después quedarían afuera sin poder reingresar.
+  // Por eso NO finaliza la sala: solo call.ended (el host la termina de
+  // verdad) lo hace.
+  it("200 — call.session_ended con firma válida → NO finaliza la sala", async () => {
+    const sessionEnded = JSON.stringify({
+      type: "call.session_ended",
+      call: { cid: "default:abc-123" },
+    });
+
+    const res = await postWebhook(sessionEnded, {
+      "X-Signature": sign(sessionEnded),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ received: true });
+    expect(mockSalaFindFirst).not.toHaveBeenCalled();
+    expect(mockSalaUpdate).not.toHaveBeenCalled();
+  });
+
   it("200 — sin firma cuando la verificación está deshabilitada (dev)", async () => {
     process.env.WEBHOOK_SIGNATURE_REQUIRED = "false";
     mockSalaFindFirst.mockResolvedValue({ id: "sala-1", estado: "ACTIVA" });

@@ -40,14 +40,16 @@ function createDeps() {
         participantes: {
             findHost: vi.fn(),
             findById: vi.fn(),
-            findPendienteByEmail: vi.fn(),
+            findByEmail: vi.fn(),
+            findByUsuario: vi.fn(),
             createPendiente: vi.fn(),
             updateEstado: vi.fn(),
+            resolveEstadoSiPendiente: vi.fn(),
             findAprobadosBySala: vi.fn(),
             findAprobadoByEmail: vi.fn(),
             findBySalaAndUsuario: vi.fn(),
         },
-        salas: { findByCodigo: vi.fn() },
+        salas: { findByCodigo: vi.fn(), findById: vi.fn() },
         estado: new InMemoryEstadoMedioStore(),
     };
 }

@@ -346,3 +346,61 @@ client.test("delete 200", function() {
   client.assert(response.status === 200, "status " + response.status);
 });
 %}
+
+### 26. POST /salas con fechaInicio en el pasado -> S2-QA2 (sala "expirada")
+# BUG-04 (docs/bugs.md): no existe estado EXPIRED ni respuesta 410.
+# Este caso documenta el comportamiento actual: la sala se crea igual (201)
+# y su código sigue resolviendo por GET normalmente. Si algún día se agrega
+# la validación de expiración, este test hay que cambiarlo a 400/410 y
+# cerrar BUG-04 en docs/bugs.md.
+# @name crearSalaVencida
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Sala vencida QA",
+  "fechaInicio": "2020-01-01T00:00:00.000Z"
+}
+
+> {%
+client.test("crear sala con fecha pasada sigue devolviendo 201 (BUG-04)", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.global.set("salaVencidaCodigo", response.body.codigo);
+});
+%}
+
+### 27. GET /salas/:code de la sala "vencida" -> sigue resolviendo (BUG-04)
+GET {{host}}/salas/{{salaVencidaCodigo}}
+
+> {%
+client.test("sala vencida sigue resolviendo 200 (BUG-04, no hay expiración real)", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 28. GET /salas/:code con código con formato inválido -> 404 (no 400)
+# Documenta que la validación de formato de código no distingue "mal formado"
+# de "no encontrado": ambos devuelven 404.
+GET {{host}}/salas/@@@---123
+
+> {%
+client.test("codigo con formato invalido da 404, no 400", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 29. GET /salas/:id/detalle con id que no es UUID -> BUG-07: revienta con 500
+# Se esperaría 400 (id mal formado) o 404 (no encontrado), pero el controller
+# pasa el id directo a Prisma sin validar formato UUID antes. Prisma tira una
+# excepción no controlada que el error handler devuelve como 500 genérico.
+# Si se agrega la validación, este test hay que cambiarlo a 400 y cerrar
+# BUG-07 en docs/bugs.md.
+GET {{host}}/salas/no-es-un-uuid/detalle
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("detalle con id no-UUID devuelve 500 en vez de 400/404 (BUG-07)", function() {
+  client.assert(response.status === 500, "status " + response.status);
+});
+%}
