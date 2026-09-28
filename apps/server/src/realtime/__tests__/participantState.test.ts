@@ -97,6 +97,17 @@ describe("S3-09 — estado de medios realtime", () => {
             expect(store.get("s1", "p1")).toBeNull();
         });
 
+        it("leave no deja el bucket de la sala vacío colgado en memoria (memory leak)", () => {
+            const store = new InMemoryEstadoMedioStore();
+            store.join("s1", "p1", "sockA", { mic: true });
+            store.leave("s1", "p1", "sockA");
+
+            // Bug: antes del fix, `salas` conservaba un Map vacío por cada
+            // sala que alguna vez tuvo actividad, sin liberarlo nunca.
+            const salasInternas = (store as unknown as { salas: Map<string, unknown> }).salas;
+            expect(salasInternas.has("s1")).toBe(false);
+        });
+
         it("leave es idempotente ante un socket no trackeado (waiting room)", () => {
             const store = new InMemoryEstadoMedioStore();
             expect(store.leave("s1", "p1", "no-existe").left).toBe(false);

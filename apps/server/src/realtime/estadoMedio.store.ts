@@ -105,7 +105,18 @@ export class InMemoryEstadoMedioStore implements IEstadoMedioStore {
         }
 
         this.conexiones.delete(key);
-        this.salas.get(salaId)?.delete(participanteId);
+
+        // Bug: el bucket de la sala quedaba vacío en `this.salas` para
+        // siempre (nunca se borraba el Map exterior), aunque no hubiera
+        // nadie más presente en ella. En un proceso de larga duración con
+        // muchas salas creadas y finalizadas, eso es un memory leak lento
+        // pero indefinido: `salas.size` solo crece.
+        const bucket = this.salas.get(salaId);
+        bucket?.delete(participanteId);
+        if (bucket && bucket.size === 0) {
+            this.salas.delete(salaId);
+        }
+
         return { left: true };
     }
 

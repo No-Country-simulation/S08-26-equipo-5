@@ -36,6 +36,23 @@ export function registerParticipantStateHandlers(
 ) {
     const { participantes, salas, estado } = deps;
 
+    /**
+     * Identity is resolved server-side; the client never picks a
+     * participanteId. Prefers email (invitado) sobre la sesión logueada
+     * porque un mismo usuario puede tener el email de otra cuenta en el
+     * formulario del waiting room (ver criterio de room:enter en join-flow).
+     */
+    async function resolveEntrante(salaId: string, payload: RoomEnterPayload) {
+        const email = typeof payload?.email === "string" ? payload.email.trim().toLowerCase() : "";
+        if (email) {
+            return participantes.findAprobadoByEmail(salaId, email);
+        }
+        if (socket.data.userId) {
+            return participantes.findBySalaAndUsuario(salaId, socket.data.userId);
+        }
+        return null;
+    }
+
     socket.on("room:enter", async (payload: RoomEnterPayload) => {
         try {
             const sala = await salas.findByCodigo(payload?.salaCodigo ?? "");
@@ -43,14 +60,8 @@ export function registerParticipantStateHandlers(
                 return socket.emit("error", { code: "ROOM_NOT_FOUND", message: "No existe una sala con ese código" });
             }
 
-            const email = typeof payload?.email === "string" ? payload.email.trim().toLowerCase() : "";
-            const participante = email
-                ? await participantes.findAprobadoByEmail(sala.id, email)
-                : socket.data.userId
-                    ? await participantes.findBySalaAndUsuario(sala.id, socket.data.userId)
-                    : null;
+            const participante = await resolveEntrante(sala.id, payload);
 
-            // Identity is resolved server-side; the client never picks a participanteId.
             if (!participante || participante.estado !== EstadoParticipante.APROBADO) {
                 return socket.emit("error", {
                     code: "NOT_APPROVED",
