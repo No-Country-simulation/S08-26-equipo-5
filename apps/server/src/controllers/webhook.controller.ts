@@ -80,6 +80,7 @@ export async function handleGetStreamWebhook(
   // Firma HMAC: requerida por defecto en producción (fail-closed vía
   // env.webhookSignatureRequired). Con WEBHOOK_SIGNATURE_REQUIRED=false
   // (solo desarrollo local) se omite la verificación, como hasta ahora.
+  // Sin esto, cualquiera puede finalizar salas ajenas con un POST.
   if (env.webhookSignatureRequired) {
     if (!verifyWebhookSignature(rawBody, signature, apiSecret)) {
       console.error("[Webhook] Invalid signature");
@@ -96,6 +97,8 @@ export async function handleGetStreamWebhook(
     callId: event.call?.cid,
   });
 
+  // La lógica de negocio (qué hacer con cada tipo de evento) vive en
+  // webhook.service.ts; acá solo validamos la firma y delegamos.
   await processGetStreamEvent(event);
 
   // Responder 200 rápido (GetStream requiere respuesta rápida)

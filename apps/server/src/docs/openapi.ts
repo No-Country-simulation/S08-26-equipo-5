@@ -248,21 +248,6 @@ export const openApiSpec = {
           },
         },
       },
-      GenerateTokenBody: {
-        type: "object",
-        required: ["userId", "role"],
-        properties: {
-          userId: { type: "string" },
-          role: { $ref: "#/components/schemas/RolParticipante" },
-          callCid: { type: "string" },
-        },
-      },
-      GenerateTokenResponse: {
-        type: "object",
-        properties: {
-          token: { type: "string" },
-        },
-      },
       HealthResponse: {
         type: "object",
         properties: {
@@ -576,25 +561,46 @@ export const openApiSpec = {
         },
       },
     },
-    "/rooms/{id}/token": {
+    "/rooms/{salaId}/token": {
       post: {
-        tags: ["Legacy"],
-        summary: "Generar token de GetStream (legacy)",
-        operationId: "legacy_generate_token",
+        tags: ["Salas"],
+        deprecated: true,
+        summary: "[DEPRECATED] Alias legacy de POST /salas/{salaId}/stream-token",
+        description:
+          "Mantenido solo por compatibilidad con clientes viejos. Delega en la " +
+          "misma lógica segura que /salas/{salaId}/stream-token vía el " +
+          "middleware `authParticipante`: el rol y el usuario siempre salen de " +
+          "la DB/JWT, cualquier campo del body (userId, role) se ignora. Usar " +
+          "el endpoint nuevo en integraciones nuevas.",
+        operationId: "rooms_generate_token_legacy",
+        security: [{ bearerAuth: [] }],
         parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "salaId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ],
-        requestBody: {
-          required: true,
-          content: { "application/json": { schema: { $ref: "#/components/schemas/GenerateTokenBody" } } },
-        },
         responses: {
           200: {
-            description: "Token generado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/GenerateTokenResponse" } } },
+            description: "Token de GetStream",
+            content: {
+              "application/json": {
+                schema: { type: "object" },
+                example: {
+                  apiKey: "gs-api-key",
+                  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  userId: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+                  user: { id: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d", name: "Ana Pérez" },
+                  rol: "HOST",
+                  callType: "default",
+                  callId: "abc-123",
+                  callCid: "default:abc-123",
+                  sala: { id: "sala-id", codigo: "ABCD1234", nombre: "Daily Backend", estado: "ACTIVA" },
+                  expiresAt: "2026-09-25T19:00:00.000Z",
+                },
+              },
+            },
           },
-          404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          409: { description: "Sala no sincronizada con GetStream", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "No sos participante de la sala, o no estás aprobado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "Sala cancelada, finalizada o no sincronizada con GetStream", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },

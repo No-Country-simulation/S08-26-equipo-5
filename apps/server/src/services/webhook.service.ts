@@ -10,15 +10,28 @@ export interface GetStreamWebhookEvent {
  * verifica en el controller antes de llegar acá).
  *
  * Eventos soportados:
- * - call.ended / call.session_ended: marca la sala como FINALIZADA
+ * - call.ended: marca la sala como FINALIZADA.
+ * - call.session_ended: NO finaliza la sala (ver nota abajo), solo se loguea.
  */
 export async function processGetStreamEvent(
   event: GetStreamWebhookEvent
 ): Promise<void> {
   switch (event.type) {
     case "call.ended":
-    case "call.session_ended":
       await finalizeSala(event.type, event.call?.cid);
+      break;
+
+    case "call.session_ended":
+      // A propósito, NO finaliza la sala acá: `session_ended` dispara
+      // también cuando el host queda momentáneamente solo en la call (por
+      // ejemplo, llega antes que los invitados o se le corta la conexión un
+      // instante). Si finalizáramos la sala en ese evento, la dejaríamos
+      // FINALIZADA y los invitados que llegan después quedarían afuera sin
+      // poder reingresar. Solo `call.ended` (el host la termina de verdad)
+      // marca la sala como FINALIZADA.
+      console.log(
+        `[Webhook] call.session_ended para ${event.call?.cid} — la sala sigue activa`
+      );
       break;
 
     default:
