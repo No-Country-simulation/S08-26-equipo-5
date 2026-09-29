@@ -19,9 +19,16 @@ vi.mock("../config/env.js", () => ({
 }));
 
 // ─── Mock Prisma (controllers instancian PrismaClient) ─────
-const { mockSalaFindFirst, mockSalaUpdate } = vi.hoisted(() => ({
+const {
+  mockSalaFindFirst,
+  mockSalaUpdate,
+  mockRoomTo,
+  mockRoomEmit,
+} = vi.hoisted(() => ({
   mockSalaFindFirst: vi.fn(),
   mockSalaUpdate: vi.fn(),
+  mockRoomTo: vi.fn(),
+  mockRoomEmit: vi.fn(),
 }));
 
 vi.mock("@prisma/client", () => ({
@@ -50,6 +57,16 @@ vi.mock("../config/prisma.js", () => ({
       findFirst: mockSalaFindFirst,
       update: mockSalaUpdate,
     },
+  },
+}));
+
+vi.mock("../realtime/registry.js", () => ({
+  getReunionesNamespace: () => ({ to: mockRoomTo }),
+  setReunionesNamespace: vi.fn(),
+  rooms: {
+    participante: (participanteId: string) => `participante:${participanteId}`,
+    sala: (salaId: string) => `sala:${salaId}`,
+    salaHost: (salaId: string) => `sala:${salaId}:host`,
   },
 }));
 
@@ -91,6 +108,7 @@ const callEnded = JSON.stringify({
 describe("S3-08 — Webhooks GetStream (HMAC)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRoomTo.mockReturnValue({ emit: mockRoomEmit });
     process.env.WEBHOOK_SIGNATURE_REQUIRED = "true";
   });
 
@@ -164,6 +182,15 @@ describe("S3-08 — Webhooks GetStream (HMAC)", () => {
       where: { id: "sala-1" },
       data: { estado: "FINALIZADA", fechaFin: expect.any(Date) },
     });
+    expect(mockRoomTo).toHaveBeenCalledWith("sala:sala-1");
+    expect(mockRoomEmit).toHaveBeenCalledWith(
+      "room:ended",
+      expect.objectContaining({
+        salaId: "sala-1",
+        estado: "FINALIZADA",
+        fechaFin: expect.any(String),
+      }),
+    );
   });
 
   // call.session_ended dispara también cuando el host queda momentáneamente

@@ -7,7 +7,8 @@ import {
   StreamVideo,
 } from "@stream-io/video-react-sdk";
 import { Call, CallingState, StreamVideoClient } from "@stream-io/video-client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { StreamChatPanel } from "./stream-chat-panel";
 
 type StreamConferenceProps = {
   apiKey: string;
@@ -16,23 +17,44 @@ type StreamConferenceProps = {
     id: string;
     name: string;
   };
-  callCid: string;
+  callType: string;
+  callId: string;
+  onLeave?: (error?: Error) => void;
 };
 
 export function StreamConference({
   apiKey,
   token,
   user,
-  callCid,
+  callType,
+  callId,
+  onLeave,
 }: StreamConferenceProps) {
   const [client, setClient] = useState<StreamVideoClient | null>(null);
   const [call, setCall] = useState<Call | null>(null);
   const [error, setError] = useState("");
+  const [chatOpen, setChatOpen] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
 
   useEffect(() => {
     let active = true;
-    const [callType, callId] = callCid.split(":");
-
     if (!callType || !callId) {
       return;
     }
@@ -86,9 +108,9 @@ export function StreamConference({
       }
       void nextClient.disconnectUser();
     };
-  }, [apiKey, callCid, token, user.id, user.name]);
+  }, [apiKey, callId, callType, token, user.id, user.name]);
 
-  if (callCid.split(":").length !== 2) {
+  if (!callType || !callId) {
     return (
       <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
         El identificador de la llamada de GetStream no es válido.
@@ -121,14 +143,68 @@ export function StreamConference({
   }
 
   return (
-    <div className="str-video overflow-hidden rounded-2xl bg-slate-950 p-4 shadow-sm">
+    <div ref={containerRef} className="str-video overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
       <StreamVideo client={client}>
         <StreamCall call={call}>
-          <div className="aspect-video min-h-[420px]">
-            <SpeakerLayout participantsBarPosition="bottom" />
-          </div>
-          <div className="mt-4 flex justify-center">
-            <CallControls />
+          <div className="stream-conference-layout">
+            {/* ── Video area ── */}
+            <div className="stream-conference-layout__video">
+              <div className="stream-conference-layout__video-inner">
+                <SpeakerLayout participantsBarPosition="bottom" />
+              </div>
+              <div className="stream-conference-layout__controls">
+                <CallControls onLeave={onLeave} />
+                {/* Chat toggle button */}
+                <button
+                  type="button"
+                  id="toggle-chat-btn"
+                  onClick={() => setChatOpen((v) => !v)}
+                  className="stream-conference-layout__chat-toggle"
+                  aria-label={chatOpen ? "Cerrar chat" : "Abrir chat"}
+                  title={chatOpen ? "Cerrar chat" : "Abrir chat"}
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                    />
+                  </svg>
+                </button>
+                {/* Fullscreen toggle button */}
+                <button
+                  type="button"
+                  id="toggle-fullscreen-btn"
+                  onClick={toggleFullscreen}
+                  className="stream-conference-layout__chat-toggle"
+                  aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                  title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                >
+                  {isFullscreen ? (
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  ) : (
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Chat sidebar ── */}
+            {chatOpen && (
+              <div className="stream-conference-layout__chat">
+                <StreamChatPanel
+                  apiKey={apiKey}
+                  token={token}
+                  user={user}
+                  channelId={callId}
+                />
+              </div>
+            )}
           </div>
         </StreamCall>
       </StreamVideo>
