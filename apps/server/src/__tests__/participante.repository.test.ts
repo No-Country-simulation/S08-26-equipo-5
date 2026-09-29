@@ -80,36 +80,52 @@ describe("PrismaParticipanteRepository.findByEmail", () => {
   });
 });
 
+function makeTxPrisma(participanteCount: number) {
+  const participanteUpdateMany = vitest.fn().mockResolvedValue({ count: participanteCount });
+  const invitacionUpdateMany = vitest.fn().mockResolvedValue({ count: 1 });
+  const tx = {
+    participante: { updateMany: participanteUpdateMany },
+    invitacion: { updateMany: invitacionUpdateMany },
+  };
+  const prisma = { $transaction: vitest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)) } as any;
+  return { prisma, participanteUpdateMany, invitacionUpdateMany };
+}
+
 describe("PrismaParticipanteRepository.activarInvitado", () => {
-  it("promueve INVITADO → PENDIENTE con update condicional y guarda nombre/apellido", async () => {
-    const updateMany = vitest.fn().mockResolvedValue({ count: 1 });
-    const repo = new PrismaParticipanteRepository({ participante: { updateMany } } as any);
+  it("promueve INVITADO → PENDIENTE con update condicional, guarda nombre/apellido y marca usada la invitacion", async () => {
+    const { prisma, participanteUpdateMany, invitacionUpdateMany } = makeTxPrisma(1);
+    const repo = new PrismaParticipanteRepository(prisma);
 
     const count = await repo.activarInvitado("p-1", { nombre: "Ana", apellido: "Pérez" });
 
     expect(count).toBe(1);
-    expect(updateMany).toHaveBeenCalledWith({
+    expect(participanteUpdateMany).toHaveBeenCalledWith({
       where: { id: "p-1", estado: "INVITADO" },
       data: { estado: "PENDIENTE", nombre: "Ana", apellido: "Pérez" },
+    });
+    expect(invitacionUpdateMany).toHaveBeenCalledWith({
+      where: { participanteId: "p-1", usedAt: null },
+      data: { usedAt: expect.any(Date) },
     });
   });
 
   it("sin datos solo cambia el estado (no pisa nombre/apellido existentes)", async () => {
-    const updateMany = vitest.fn().mockResolvedValue({ count: 1 });
-    const repo = new PrismaParticipanteRepository({ participante: { updateMany } } as any);
+    const { prisma, participanteUpdateMany } = makeTxPrisma(1);
+    const repo = new PrismaParticipanteRepository(prisma);
 
     await repo.activarInvitado("p-1");
 
-    expect(updateMany).toHaveBeenCalledWith({
+    expect(participanteUpdateMany).toHaveBeenCalledWith({
       where: { id: "p-1", estado: "INVITADO" },
       data: { estado: "PENDIENTE" },
     });
   });
 
-  it("devuelve 0 si el participante ya no estaba INVITADO (carrera perdida)", async () => {
-    const updateMany = vitest.fn().mockResolvedValue({ count: 0 });
-    const repo = new PrismaParticipanteRepository({ participante: { updateMany } } as any);
+  it("devuelve 0 y no toca la invitacion si el participante ya no estaba INVITADO (carrera perdida)", async () => {
+    const { prisma, invitacionUpdateMany } = makeTxPrisma(0);
+    const repo = new PrismaParticipanteRepository(prisma);
 
     expect(await repo.activarInvitado("p-1", { nombre: "Ana", apellido: "Pérez" })).toBe(0);
+    expect(invitacionUpdateMany).not.toHaveBeenCalled();
   });
 });

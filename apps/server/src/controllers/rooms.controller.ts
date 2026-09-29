@@ -510,7 +510,8 @@ export async function finalizarSala(
  * Transfiere el rol de HOST a otro participante de la sala.
  * Solo el HOST actual puede transferir. El caller queda PARTICIPANTE
  * y el target pasa a HOST, preservando el `estado` de ambos.
- * Cualquier participante existente califica (PENDIENTE o APROBADO).
+ * Cualquier participante existente califica (PENDIENTE o APROBADO), salvo
+ * los INVITADO que todavía no aceptaron su invitación.
  * Requiere: Authorization: Bearer <jwt>
  */
 export async function transferHost(
@@ -556,6 +557,14 @@ export async function transferHost(
   // de usuario; comparar usuarioId detecta correctamente una auto-transferencia.
   if (target.usuarioId === userId) {
     throw new ValidationError("No puedes transferir el rol a ti mismo");
+  }
+
+  // Un INVITADO todavía no aceptó la invitación (ni pasó por la sala de
+  // espera): no puede ser HOST. Promoverlo lo dejaría APROBADO sin aval.
+  if (target.estado === "INVITADO") {
+    throw new ValidationError(
+      "El participante aún no aceptó la invitación y no puede ser HOST"
+    );
   }
 
   // Demover caller y promover target en una sola transacción.

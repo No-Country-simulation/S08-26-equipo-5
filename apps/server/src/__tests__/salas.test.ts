@@ -485,6 +485,25 @@ describe("S2-01 — Salas API", () => {
       expect(mockTransaction).not.toHaveBeenCalled();
     });
 
+    it("400 — Target INVITADO (aún no aceptó): no se promueve y no se ejecuta transacción", async () => {
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+        }
+        return { salaId, usuarioId: targetId, rol: "PARTICIPANTE", estado: "INVITADO", fechaIngreso: null };
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("invitación");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
     it("401 — Sin token de autenticación", async () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
@@ -492,6 +511,90 @@ describe("S2-01 — Salas API", () => {
 
       expect(res.status).toBe(401);
       expect(mockTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Participantes INVITADO en consultas (WR-02) ────────
+  describe("consultas con participantes INVITADO", () => {
+    const salaId = "sala-uuid-inv";
+    const hostId = "user-host-1";
+    const hostToken = createToken(hostId, "host@test.com");
+    const filas = [
+      { id: "p-host", nombre: "Host", apellido: "Uno", email: "host@test.com", rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01"), usuario: { id: hostId, nombre: "Host", apellido: "Uno", email: "host@test.com" } },
+      { id: "p-inv", nombre: null, apellido: null, email: "nuevo@test.com", rol: "PARTICIPANTE", estado: "INVITADO", fechaIngreso: null, usuario: null },
+    ];
+
+    it("GET participantes lista al INVITADO sin nombre como INVITADO (sin 500)", async () => {
+      mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+      mockParticipanteFindMany.mockResolvedValue(filas);
+
+      const res = await request(app)
+        .get(`/api/v1/salas/${salaId}/participantes`)
+        .set("Authorization", `Bearer ${hostToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(2);
+      expect(res.body.participantes[1]).toMatchObject({
+        id: "p-inv",
+        nombre: null,
+        apellido: null,
+        email: "nuevo@test.com",
+        estado: "INVITADO",
+      });
+    });
+
+    it("GET detalle expone al INVITADO como tal con nombre/apellido null", async () => {
+      mockSalaFindUnique.mockResolvedValue({
+        id: salaId,
+        codigo: "INV12345",
+        nombre: "Sala",
+        resumen: null,
+        fechaInicio: new Date("2026-01-01"),
+        fechaFin: null,
+        estado: "ACTIVA",
+        streamRoomId: null,
+        streamCallType: null,
+        streamCallId: null,
+        participantes: filas,
+      });
+
+      const res = await request(app)
+        .get(`/api/v1/salas/${salaId}/detalle`)
+        .set("Authorization", `Bearer ${hostToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.participantes.find((p: any) => p.id === "p-inv")).toMatchObject({
+        estado: "INVITADO",
+        nombre: null,
+      });
+      expect(res.body.creador.id).toBe(hostId);
+    });
+
+    it("mis-participaciones incluye la sala donde la cuenta esta INVITADO", async () => {
+      mockParticipanteFindMany.mockResolvedValue([
+        {
+          rol: "PARTICIPANTE",
+          estado: "INVITADO",
+          sala: {
+            id: salaId,
+            codigo: "INV12345",
+            nombre: "Sala",
+            resumen: null,
+            fechaInicio: new Date("2026-01-01"),
+            fechaFin: null,
+            estado: "ACTIVA",
+            _count: { participantes: 2 },
+          },
+        },
+      ]);
+
+      const res = await request(app)
+        .get("/api/v1/salas/mis-participaciones")
+        .set("Authorization", `Bearer ${hostToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.salas).toHaveLength(1);
+      expect(res.body.salas[0]).toMatchObject({ id: salaId, rol: "PARTICIPANTE" });
     });
   });
 
