@@ -96,6 +96,17 @@ los tres campos son obligatorios (`400 VALIDATION_ERROR` si falta alguno).
 Mismo criterio en el socket `join:request`: con `socket.data.userId` seteado
 solo hace falta mandar `salaCodigo`.
 
+**Participante `INVITADO` (invitado por correo).** Si el host invitó ese email,
+existe una fila en estado `INVITADO` con su invitación. `requestJoin` (HTTP y
+socket `join:request` comparten el mismo servicio) la **reutiliza** —no crea otra—
+y la promueve a `PENDIENTE`: completa `nombre`/`apellido` solo si la fila no los
+tiene, marca la invitación como usada en la misma transacción y emite
+`join:pending` al host. Si la fila es de una **cuenta registrada** y el caller no
+viene logueado con esa cuenta, responde `401 LOGIN_REQUIRED`. Un `INVITADO` no es
+aprobable (`participant:approve/reject` solo actúan sobre `PENDIENTE`) ni puede
+recibir el rol HOST. La vía "natural" es `POST /invitaciones/:token/aceptar`
+(ver `apps/server/docs/API.md`), que devuelve la misma respuesta que este endpoint.
+
 ### `POST /salas/:salaId/stream-token` — token de GetStream
 
 Requiere `Authorization: Bearer <token>`, que puede ser **cualquiera de los dos**:

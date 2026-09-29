@@ -359,7 +359,40 @@ Público. No consume el token (se puede consultar varias veces). Sirve a la UI p
 - 410 — `INVITATION_INVALID`: token desconocido, vencido, ya usado o de una sala cerrada. Un único código para todos los casos (evita que se pueda distinguir entre ellos probando tokens).
 - 429 — `RATE_LIMITED` (`RATE_LIMIT_TOKEN_MAX` por IP cada 15 min)
 
-> La aceptación de la invitación (`POST /invitaciones/:token/aceptar`) se documenta en el siguiente slice.
+---
+
+### POST /invitaciones/:token/aceptar — Aceptar invitación
+
+Sesión **opcional** (`Authorization: Bearer <access token>`). Pasa al invitado de `INVITADO` a `PENDIENTE` (el host lo aprueba como a cualquier otro), avisa al host por `join:pending` y devuelve la misma forma que `POST /salas/:code/join` (más `salaCodigo` para armar la URL de la sala de espera). Consumo **atómico y de un solo uso**: de N aceptaciones concurrentes solo una triunfa. El token nunca se devuelve.
+
+**Invitado sin cuenta** — body obligatorio; el `email` del body (si viene) se ignora, vale el de la invitación:
+```json
+{ "nombre": "Ana", "apellido": "Pérez" }
+```
+
+**Invitado con cuenta** — exige el JWT de **esa** cuenta; el body se ignora por completo (nombre/apellido salen de la cuenta).
+
+**Response 200:**
+```json
+{
+  "participanteId": "uuid",
+  "estado": "PENDIENTE",
+  "salaId": "uuid",
+  "salaCodigo": "ABCD1234",
+  "accessToken": "<guest jwt>"
+}
+```
+
+**Errores:**
+- 400 — `VALIDATION_ERROR`: falta `nombre`/`apellido` (invitado sin cuenta). El token **no** se consume.
+- 401 — `LOGIN_REQUIRED`: la invitación es de una cuenta registrada y no vino JWT.
+- 403 — `INVITATION_ACCOUNT_MISMATCH`: el JWT es de otra cuenta.
+- 410 — `INVITATION_INVALID`: token desconocido, vencido, ya usado, carrera perdida o sala cerrada (un único código, sin oráculo). Se evalúa antes que 400/401/403.
+- 429 — `RATE_LIMITED` (`RATE_LIMIT_TOKEN_MAX` por IP cada 15 min)
+
+**Ingreso por código:** un `INVITADO` que llama `POST /salas/:code/join` (o el socket `join:request`) con su email también se promueve a `PENDIENTE` reutilizando su fila (sin duplicar) y su invitación queda usada. Si la fila es de una cuenta registrada y el caller no tiene sesión de esa cuenta → `401 LOGIN_REQUIRED`.
+
+**Guardas:** `participant:approve/reject` solo actúan sobre `PENDIENTE` (sobre un `INVITADO`, `409 PARTICIPANT_STATE_CONFLICT`); `POST /salas/:id/transfer-host` rechaza un `INVITADO` como destino (`400`). `GET /salas/:id/participantes` y `/detalle` lo listan con `estado: "INVITADO"` (y `nombre`/`apellido` `null` si es un invitado sin cuenta); las listas de aprobados no lo incluyen.
 
 ---
 
@@ -493,7 +526,7 @@ en `apps/server/.env.example` (ver changelog).
 |-------|--------|
 | 2026-09-30 | PR #101 (Ezequiel): agregado `POST /salas/:id/finalizar` (fallback explícito al webhook de GetStream) y evento `room:ended`. **Cambio de contrato en `transfer-host`:** `nuevoHostId` pasó de ser `usuarioId` a ser `Participante.id` (el `userId` que usa GetStream), y ahora solo califican participantes con cuenta registrada; se agregó sincronización de roles en GetStream (`addCallMember`) para que el nuevo host tenga permisos reales en la llamada, no solo en la DB. Doc actualizada acá porque el PR no tocó Swagger/API.md — quedaba desalineada con el código. |
 | 2026-09-29 | S3-API: agregado `POST /salas/:id/transfer-host` a Swagger (faltaba por completo) y corregido el body de `POST /rooms/:id/token` (ya no exige/documenta `userId`/`role`/`callCid`, el controller los ignora desde S3-08). Corregido `apps/server/.env.example`: `WEBHOOK_SIGNATURE_REQUIRED` es la variable real que lee el código, no `WEBHOOK_VERIFY_SIGNATURE`. Casos `.http` #30-#37 (`transfer-host` + `rooms/:id/token`) agregados a `api_salas_agenda.http`: 39/39 OK contra `localhost` (misma DB que Render); contra Render se encontró y documentó **BUG-09** (`POST /salas` → 500, bloquea la corrida completa contra ese entorno). |
-| 2026-09-29 | Invitaciones por correo: `POST /salas/:id/invitaciones` y `GET /invitaciones/:token` (estado `INVITADO`, `nombre`/`apellido` nullables en participantes). Suite `api_invitaciones.http`. |
+| 2026-09-29 | Invitaciones por correo: `POST /salas/:id/invitaciones`, `GET /invitaciones/:token` y `POST /invitaciones/:token/aceptar` (estado `INVITADO`, `nombre`/`apellido` nullables en participantes). Suite `api_invitaciones.http`. |
 | 2026-09-28 | S3-09: agregada sección "Realtime — Socket.IO" con el contrato de join-flow (PR #85, ver `docs/JOIN-FLOW.md`) y de estado de medios en vivo (`room:enter`/`participant:state`/`participant:connection`). Corregida la nota de HMAC de webhooks (S3-08 la exige por defecto) y el endpoint legacy `/rooms/:id/token` (alias de `stream-token`, no del viejo contrato con body). |
 | 2026-09-24 | Contrato OpenAPI `1.0.1`. Suite `.http` con aserciones (auth, salas, waiting room) y colección Hoppscotch alineada a las rutas vigentes. |
 | 2026-09-22 | Documentado en Swagger (`src/docs/openapi.ts` + `/api/v1/docs`) con ejemplos y schemas: `POST /salas`, `GET /salas/:code`, `GET /salas/mis-participaciones` (Agenda). Agregado `api_salas_agenda.http` (REST Client). Ver issue #33. |

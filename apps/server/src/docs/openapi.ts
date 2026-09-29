@@ -261,6 +261,27 @@ export const openApiSpec = {
           },
         },
       },
+      AceptarInvitacionBody: {
+        type: "object",
+        description:
+          "Solo para invitados sin cuenta. Con cuenta registrada se ignora (los datos salen de la cuenta). " +
+          "Cualquier `email` enviado se ignora: vale el de la invitación.",
+        properties: {
+          nombre: { type: "string" },
+          apellido: { type: "string" },
+        },
+      },
+      AceptarInvitacionResponse: {
+        type: "object",
+        description: "Misma forma que POST /salas/{code}/join, más salaCodigo.",
+        properties: {
+          participanteId: { type: "string", format: "uuid" },
+          estado: { type: "string", enum: ["PENDIENTE"] },
+          salaId: { type: "string", format: "uuid" },
+          salaCodigo: { type: "string" },
+          accessToken: { type: "string", description: "Guest JWT para autenticar el socket y consultar mi-estado" },
+        },
+      },
       SalaDetalle: {
         type: "object",
         properties: {
@@ -704,6 +725,36 @@ export const openApiSpec = {
             description: "Invitación válida",
             content: { "application/json": { schema: { $ref: "#/components/schemas/PreviewInvitacionResponse" } } },
           },
+          410: { description: "Invitación inválida (INVITATION_INVALID)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "Rate limit excedido (RATE_LIMITED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/invitaciones/{token}/aceptar": {
+      post: {
+        tags: ["Invitaciones"],
+        summary: "Aceptar una invitación (INVITADO → PENDIENTE)",
+        description:
+          "Sesión opcional (Bearer): obligatoria solo si la invitación es de una cuenta registrada. " +
+          "Consumo atómico de un solo uso; avisa al host por `join:pending`. " +
+          "Todo token inválido/vencido/usado/carrera responde 410 `INVITATION_INVALID`. " +
+          "Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` cada 15 min.",
+        operationId: "invitaciones_aceptar",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: false,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/AceptarInvitacionBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Invitación aceptada: el participante queda PENDIENTE",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/AceptarInvitacionResponse" } } },
+          },
+          400: { description: "Falta nombre/apellido (VALIDATION_ERROR); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "Invitación de cuenta registrada sin sesión (LOGIN_REQUIRED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "La sesión es de otra cuenta (INVITATION_ACCOUNT_MISMATCH)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           410: { description: "Invitación inválida (INVITATION_INVALID)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           429: { description: "Rate limit excedido (RATE_LIMITED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
