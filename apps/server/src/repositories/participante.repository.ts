@@ -38,6 +38,10 @@ export interface IParticipanteRepository {
      * de su cuenta: `findByEmail` no lo encontraría.
      */
     findByUsuario(salaId: string, usuarioId: string): Promise<Participante | null>;
+    /** Usado por room:enter (S3-09) para resolver identidad por email sin sesión. */
+    findAprobadoByEmail(salaId: string, email: string): Promise<Participante | null>;
+    /** Usado por room:enter (S3-09) para resolver identidad por sesión logueada. */
+    findBySalaAndUsuario(salaId: string, usuarioId: string): Promise<Participante | null>;
     createPendiente(data: {
         salaId: string;
         usuarioId: string | null;
@@ -98,6 +102,18 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
     async findByUsuario(salaId: string, usuarioId: string) {
         return this.prisma.participante.findUnique({
             where: { salaId_usuarioId: { salaId, usuarioId } },
+        });
+    }
+
+    async findAprobadoByEmail(salaId: string, email: string) {
+        return this.prisma.participante.findFirst({
+            where: { salaId, email, estado: EstadoParticipante.APROBADO },
+        });
+    }
+
+    async findBySalaAndUsuario(salaId: string, usuarioId: string) {
+        return this.prisma.participante.findFirst({
+            where: { salaId, usuarioId },
         });
     }
 

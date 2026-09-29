@@ -6,6 +6,8 @@ import { PrismaParticipanteRepository } from "../repositories/participante.repos
 import { PrismaSalaRepository } from "../repositories/sala.repository.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
 import { registerWaitingRoomHandlers } from "./waitingRoom.handlers.js";
+import { registerParticipantStateHandlers } from "./participantState.handlers.js";
+import { InMemoryEstadoMedioStore } from "./estadoMedio.store.js";
 import { setReunionesNamespace } from "./registry.js";
 import { verifyParticipantToken } from "../utils/participantToken.js";
 import { rooms } from "./registry.js";
@@ -16,6 +18,8 @@ export function createReunionesNamespace(io: Server): Namespace {
     const salas = new PrismaSalaRepository(prisma);
     const usuarios = new PrismaUserRepository();
     const deps = { participantes, salas, usuarios };
+    // One store per namespace: shared by every socket, lifetime of the process.
+    const estado = new InMemoryEstadoMedioStore();
 
     // Los controllers HTTP emiten por este namespace (join:pending, etc.).
     setReunionesNamespace(nsp);
@@ -53,6 +57,7 @@ export function createReunionesNamespace(io: Server): Namespace {
         }
 
         registerWaitingRoomHandlers(nsp, socket, deps);
+        registerParticipantStateHandlers(nsp, socket, { participantes, salas, estado });
     });
 
     return nsp;
