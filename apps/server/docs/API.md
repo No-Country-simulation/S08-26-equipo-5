@@ -4,7 +4,7 @@ Base URL: `http://localhost:4000/api/v1`
 
 📖 **Swagger interactivo:** `GET /api/v1/docs` (UI) · `GET /api/v1/docs.json` (spec crudo) — fuente de verdad con schemas y ejemplos, generado desde `src/docs/openapi.ts`.
 
-🧪 **Suite `.http` (REST Client / httpyac), contrato v1.0.1:** `api_auth.http`, `api_salas_agenda.http` y `api_waiting.http`. Cliente gráfico en el repo: `hoppscotch/meetflow-salas-agenda.json`.
+🧪 **Suite `.http` (REST Client / httpyac), contrato v1.0.1:** `api_auth.http`, `api_salas_agenda.http`, `api_waiting.http` y `api_invitaciones.http`. Cliente gráfico en el repo: `hoppscotch/meetflow-salas-agenda.json`.
 
 ```bash
 npm run test:http
@@ -296,6 +296,73 @@ Retorna la lista de participantes de una sala.
 
 ---
 
+## Invitaciones por correo
+
+El host invita a 1..20 emails; cada invitado recibe un enlace `FRONTEND_URL/invitacion/<token>`. El token es opaco (32 bytes aleatorios), **solo viaja por correo**: la API nunca lo devuelve y en base de datos solo se guarda su hash SHA-256. Vigencia: `INVITACION_TTL_HORAS` (72 h por defecto). El correo sale por el `MailPort` según `MAIL_PROVIDER` (`console` por defecto: loguea sin red; `resend`: requiere `RESEND_API_KEY`, remitente `MAIL_FROM`).
+
+Estado nuevo de participante: `INVITADO` (invitado que todavía no aceptó; `nombre`/`apellido` pueden ser `null`). Nunca es aprobable directamente ni aparece entre los aprobados.
+
+### POST /salas/:id/invitaciones — Invitar por correo
+
+Solo el HOST de la sala. Los emails se normalizan (trim + minúsculas) y se deduplican. Los correos se envían **después** de persistir; si el envío falla no se revierte nada y el resultado marca `emailEnviado: false` (se puede reinvitar).
+
+**Auth:** JWT requerido (host)
+
+**Request body:**
+```json
+{ "emails": ["ana@example.com", "luis@example.com"] }
+```
+
+**Response 200:**
+```json
+{
+  "data": {
+    "resultados": [
+      { "email": "ana@example.com", "estado": "INVITADO", "emailEnviado": true },
+      { "email": "luis@example.com", "estado": "YA_PARTICIPA", "emailEnviado": false }
+    ]
+  }
+}
+```
+
+`estado` por email: `INVITADO` (invitación nueva), `REENVIADO` (ya estaba invitado; se rota el token y el enlace anterior deja de valer), `YA_PARTICIPA` (ya es participante de la sala: no se crea ni envía nada). Ningún campo revela si el email tiene cuenta.
+
+**Errores:**
+- 400 — `VALIDATION_ERROR`: `emails` vacío, con más de 20 o con formato inválido (sin efectos)
+- 401 — Sin JWT
+- 403 — `HOST_ONLY`
+- 404 — `ROOM_NOT_FOUND`
+- 409 — `ROOM_CANCELLED` / `ROOM_FINISHED`
+- 429 — `RATE_LIMITED` (`RATE_LIMIT_INVITE_MAX` por host cada 15 min)
+
+---
+
+### GET /invitaciones/:token — Vista previa de invitación
+
+Público. No consume el token (se puede consultar varias veces). Sirve a la UI para decidir entre pedir nombre/apellido o pedir login.
+
+**Response 200:**
+```json
+{
+  "data": {
+    "sala": { "id": "uuid", "nombre": "Reunión Q4" },
+    "email": "ana@example.com",
+    "requiereDatos": true,
+    "requiereLogin": false
+  }
+}
+```
+
+`requiereDatos` es `true` si el invitado no tiene cuenta; `requiereLogin` es `true` si la tiene.
+
+**Errores:**
+- 410 — `INVITATION_INVALID`: token desconocido, vencido, ya usado o de una sala cerrada. Un único código para todos los casos (evita que se pueda distinguir entre ellos probando tokens).
+- 429 — `RATE_LIMITED` (`RATE_LIMIT_TOKEN_MAX` por IP cada 15 min)
+
+> La aceptación de la invitación (`POST /invitaciones/:token/aceptar`) se documenta en el siguiente slice.
+
+---
+
 ### POST /rooms/:id/token — Generar token GetStream (legacy)
 
 Alias deprecado de `POST /salas/:salaId/stream-token` (ver sección Realtime más
@@ -426,6 +493,7 @@ en `apps/server/.env.example` (ver changelog).
 |-------|--------|
 | 2026-09-30 | PR #101 (Ezequiel): agregado `POST /salas/:id/finalizar` (fallback explícito al webhook de GetStream) y evento `room:ended`. **Cambio de contrato en `transfer-host`:** `nuevoHostId` pasó de ser `usuarioId` a ser `Participante.id` (el `userId` que usa GetStream), y ahora solo califican participantes con cuenta registrada; se agregó sincronización de roles en GetStream (`addCallMember`) para que el nuevo host tenga permisos reales en la llamada, no solo en la DB. Doc actualizada acá porque el PR no tocó Swagger/API.md — quedaba desalineada con el código. |
 | 2026-09-29 | S3-API: agregado `POST /salas/:id/transfer-host` a Swagger (faltaba por completo) y corregido el body de `POST /rooms/:id/token` (ya no exige/documenta `userId`/`role`/`callCid`, el controller los ignora desde S3-08). Corregido `apps/server/.env.example`: `WEBHOOK_SIGNATURE_REQUIRED` es la variable real que lee el código, no `WEBHOOK_VERIFY_SIGNATURE`. Casos `.http` #30-#37 (`transfer-host` + `rooms/:id/token`) agregados a `api_salas_agenda.http`: 39/39 OK contra `localhost` (misma DB que Render); contra Render se encontró y documentó **BUG-09** (`POST /salas` → 500, bloquea la corrida completa contra ese entorno). |
+| 2026-09-29 | Invitaciones por correo: `POST /salas/:id/invitaciones` y `GET /invitaciones/:token` (estado `INVITADO`, `nombre`/`apellido` nullables en participantes). Suite `api_invitaciones.http`. |
 | 2026-09-28 | S3-09: agregada sección "Realtime — Socket.IO" con el contrato de join-flow (PR #85, ver `docs/JOIN-FLOW.md`) y de estado de medios en vivo (`room:enter`/`participant:state`/`participant:connection`). Corregida la nota de HMAC de webhooks (S3-08 la exige por defecto) y el endpoint legacy `/rooms/:id/token` (alias de `stream-token`, no del viejo contrato con body). |
 | 2026-09-24 | Contrato OpenAPI `1.0.1`. Suite `.http` con aserciones (auth, salas, waiting room) y colección Hoppscotch alineada a las rutas vigentes. |
 | 2026-09-22 | Documentado en Swagger (`src/docs/openapi.ts` + `/api/v1/docs`) con ejemplos y schemas: `POST /salas`, `GET /salas/:code`, `GET /salas/mis-participaciones` (Agenda). Agregado `api_salas_agenda.http` (REST Client). Ver issue #33. |
