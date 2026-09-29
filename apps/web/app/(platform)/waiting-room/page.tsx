@@ -6,18 +6,30 @@ import { Suspense } from "react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { HostRequestPanel } from "../../components/host-request-panel";
+import { useAuth } from "../../lib/auth";
+import {
+  getGuestSession,
+  clearGuestSession,
+  saveGuestSession,
+  updateGuestSessionToken,
+  type GuestSession,
+} from "../../lib/guest-session";
 import { useHostSocket } from "../../lib/host-socket";
 import {
   getRealtimeUrl,
+  getMiEstado,
   getSalaByCode,
+  joinSala,
+  ApiRequestError,
   type Sala,
 } from "../../lib/salas-api";
 
 type JoinStatus = "idle" | "waiting" | "approved" | "rejected";
 
 type JoinApprovedPayload = {
+  participanteId: string;
+  accessToken: string;
   sala?: { codigo?: string };
-  streamCallId?: string | null;
 };
 
 type JoinRejectedPayload = {
@@ -26,6 +38,12 @@ type JoinRejectedPayload = {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function toJoinStatus(estado: "PENDIENTE" | "APROBADO" | "RECHAZADO"): JoinStatus {
+  if (estado === "PENDIENTE") return "waiting";
+  if (estado === "APROBADO") return "approved";
+  return "rejected";
 }
 
 // ---------------------------------------------------------------------------
@@ -50,15 +68,42 @@ function ParticipantView({
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true);
   const [joinStatus, setJoinStatus] = useState<JoinStatus>("idle");
   const [participantId, setParticipantId] = useState("");
-  const [streamCallId, setStreamCallId] = useState("");
   const [joinError, setJoinError] = useState("");
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [participantSession, setParticipantSession] = useState<GuestSession | null>(null);
+  const [participantIsHost, setParticipantIsHost] = useState(false);
+  const resolutionRef = useRef<JoinStatus | null>(null);
   const [joinForm, setJoinForm] = useState({
     nombre: "",
     apellido: "",
     email: "",
   });
+  const { isAuthenticated, user } = useAuth();
   // countdown before auto-redirect
   const [countdown, setCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      resolutionRef.current = null;
+      const session = getGuestSession();
+      if (session?.salaId !== sala.id) {
+        setParticipantId("");
+        setParticipantSession(null);
+        setParticipantIsHost(false);
+        setJoinStatus("idle");
+        setCountdown(null);
+        return;
+      }
+      setParticipantId(session.participanteId);
+      setParticipantSession(session);
+      setJoinStatus("waiting");
+    });
+    return () => {
+      active = false;
+    };
+  }, [sala.id]);
 
   // Camera preview
   useEffect(() => {
@@ -106,14 +151,15 @@ function ParticipantView({
     });
   }, [microphoneEnabled]);
 
-  // Socket — guest side
+  // The participant JWT authenticates the socket and subscribes it to room events.
   useEffect(() => {
-    if (isDemo) return;
+    if (isDemo || !participantSession || participantSession.salaId !== sala.id) return;
 
     const salaCode = sala.codigo;
     const socket = io(`${getRealtimeUrl()}/reuniones`, {
       transports: ["websocket"],
       autoConnect: false,
+      auth: { token: participantSession.accessToken },
     });
     socketRef.current = socket;
 
@@ -123,17 +169,74 @@ function ParticipantView({
 
     socket.on("join:approved", (payload: JoinApprovedPayload) => {
       if (!belongsToSala(payload)) return;
-      const callId = payload.streamCallId ?? "";
-      setStreamCallId(callId);
+      if (payload.participanteId !== participantSession.participanteId) return;
+      resolutionRef.current = "approved";
+      updateGuestSessionToken(payload.accessToken);
+      setParticipantSession((current) =>
+        current ? { ...current, accessToken: payload.accessToken } : current,
+      );
       setJoinStatus("approved");
-      // Start countdown → auto-redirect to room
       setCountdown(3);
     });
 
     socket.on("join:rejected", (payload: JoinRejectedPayload) => {
       if (belongsToSala(payload)) {
+        resolutionRef.current = "rejected";
         setJoinStatus("rejected");
       }
+    });
+
+    socket.on("connect_error", (error) => {
+      setJoinError(getErrorMessage(error, "No se pudo conectar con la sala."));
+      if (error.message === "INVALID_TOKEN") {
+        clearGuestSession();
+        resolutionRef.current = null;
+        setParticipantSession(null);
+        setParticipantId("");
+        setJoinStatus("idle");
+        setCountdown(null);
+      }
+    });
+
+    socket.on("error", (error: { message?: string }) => {
+      setJoinError(error.message ?? "No se pudo recuperar el estado de ingreso.");
+    });
+
+    socket.on("connect", () => {
+      socket.emit(
+        "join:subscribe",
+        { participanteId: participantSession.participanteId },
+        (ack: { ok?: boolean; error?: { message?: string } }) => {
+          if (!ack?.ok) {
+            setJoinError(ack?.error?.message ?? "No se pudo recuperar la solicitud.");
+          }
+        },
+      );
+
+      void getMiEstado(sala.id, participantSession.accessToken)
+        .then((mine) => {
+          setParticipantIsHost(mine.rol === "HOST");
+          if (resolutionRef.current) return;
+          resolutionRef.current = toJoinStatus(mine.estado);
+          setJoinStatus(toJoinStatus(mine.estado));
+          if (mine.estado === "APROBADO") setCountdown(3);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ApiRequestError) {
+            if (error.code === "JOIN_REJECTED") {
+              resolutionRef.current = "rejected";
+              setJoinStatus("rejected");
+            } else if (error.code === "UNAUTHORIZED") {
+              clearGuestSession();
+              setParticipantSession(null);
+              setParticipantId("");
+              setJoinStatus("idle");
+            }
+          }
+          setJoinError(
+            getErrorMessage(error, "No se pudo recuperar el estado de ingreso."),
+          );
+        });
     });
 
     socket.connect();
@@ -141,20 +244,20 @@ function ParticipantView({
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [sala, isDemo]);
+  }, [isDemo, participantSession, sala, sala.id, sala.codigo]);
 
   // Countdown auto-redirect
   useEffect(() => {
     if (countdown === null) return;
     if (countdown <= 0) {
-      const params = new URLSearchParams({ code });
-      if (streamCallId) params.set("callId", streamCallId);
+      const params = new URLSearchParams({ code, salaId: sala.id });
+      if (participantIsHost) params.set("host", "true");
       router.push(`/room?${params.toString()}`);
       return;
     }
     const timer = window.setTimeout(() => setCountdown((c) => (c ?? 1) - 1), 1000);
     return () => clearTimeout(timer);
-  }, [countdown, code, streamCallId, router]);
+  }, [countdown, code, participantIsHost, router, sala.id]);
 
   async function handleRequestJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -164,24 +267,36 @@ function ParticipantView({
       setParticipantId("demo-participant");
       setJoinStatus("waiting");
       window.setTimeout(() => {
-        setStreamCallId("demo-call");
         setJoinStatus("approved");
         setCountdown(3);
       }, 1200);
       return;
     }
 
-    const socket = socketRef.current;
-    if (!socket?.connected) {
-      setJoinError("No se pudo conectar con la sala. Intentá nuevamente.");
-      return;
+    setJoinLoading(true);
+    try {
+      const result = await joinSala(code, isAuthenticated ? {} : joinForm);
+      const session = {
+        accessToken: result.accessToken,
+        participanteId: result.participanteId,
+        salaId: result.salaId,
+      };
+      resolutionRef.current =
+        result.estado === "PENDIENTE" ? null : toJoinStatus(result.estado);
+      saveGuestSession(session);
+      setParticipantId(result.participanteId);
+      setParticipantSession(session);
+      setJoinStatus(toJoinStatus(result.estado));
+      if (result.estado === "APROBADO") setCountdown(3);
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === "JOIN_REJECTED") {
+        resolutionRef.current = "rejected";
+        setJoinStatus("rejected");
+      }
+      setJoinError(getErrorMessage(error, "No se pudo solicitar el ingreso."));
+    } finally {
+      setJoinLoading(false);
     }
-
-    setJoinStatus("waiting");
-    socket.emit("join:request", {
-      salaCodigo: code,
-      ...joinForm,
-    });
   }
 
   return (
@@ -241,38 +356,47 @@ function ParticipantView({
         )}
 
         {/* Join form — only shown while idle or rejected */}
-        {(joinStatus === "idle" || joinStatus === "rejected") && (
+        {joinStatus === "idle" && (
           <form id="join-request" onSubmit={handleRequestJoin} className="mt-6 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-medium text-slate-700">
-                Nombre
-                <input
-                  required
-                  value={joinForm.nombre}
-                  onChange={(e) => setJoinForm((f) => ({ ...f, nombre: e.target.value }))}
-                  className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
-                />
-              </label>
-              <label className="text-sm font-medium text-slate-700">
-                Apellido
-                <input
-                  required
-                  value={joinForm.apellido}
-                  onChange={(e) => setJoinForm((f) => ({ ...f, apellido: e.target.value }))}
-                  className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
-                />
-              </label>
-            </div>
-            <label className="block text-sm font-medium text-slate-700">
-              Email
-              <input
-                required
-                type="email"
-                value={joinForm.email}
-                onChange={(e) => setJoinForm((f) => ({ ...f, email: e.target.value }))}
-                className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
-              />
-            </label>
+            {isAuthenticated ? (
+              <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                Vas a solicitar el ingreso como {user?.nombre} {user?.apellido}
+                {user?.email ? ` (${user.email})` : ""}.
+              </p>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Nombre
+                    <input
+                      required
+                      value={joinForm.nombre}
+                      onChange={(e) => setJoinForm((f) => ({ ...f, nombre: e.target.value }))}
+                      className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Apellido
+                    <input
+                      required
+                      value={joinForm.apellido}
+                      onChange={(e) => setJoinForm((f) => ({ ...f, apellido: e.target.value }))}
+                      className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
+                    />
+                  </label>
+                </div>
+                <label className="block text-sm font-medium text-slate-700">
+                  Email
+                  <input
+                    required
+                    type="email"
+                    value={joinForm.email}
+                    onChange={(e) => setJoinForm((f) => ({ ...f, email: e.target.value }))}
+                    className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
+                  />
+                </label>
+              </>
+            )}
           </form>
         )}
 
@@ -309,7 +433,7 @@ function ParticipantView({
             {joinStatus === "approved" && countdown === null &&
               "Ya podés continuar a la sala de conferencia."}
             {joinStatus === "rejected" &&
-              "El anfitrión rechazó tu solicitud. Podés volver a intentarlo."}
+              "El anfitrión rechazó tu solicitud. Contactalo si necesitás acceso."}
             {joinStatus === "idle" &&
               "El anfitrión deberá aprobar tu ingreso antes de entrar."}
           </p>
@@ -330,34 +454,30 @@ function ParticipantView({
         {/* CTA buttons */}
         {joinStatus === "approved" ? (
           <Link
-            href={`/room?code=${encodeURIComponent(sala.codigo)}${
-              streamCallId ? `&callId=${encodeURIComponent(streamCallId)}` : ""
-            }&salaId=${encodeURIComponent(sala.id)}`}
+            href={`/room?code=${encodeURIComponent(sala.codigo)}&salaId=${encodeURIComponent(sala.id)}`}
             id="enter-room-btn"
             className="mt-6 inline-flex w-full justify-center rounded-lg bg-green-600 px-4 py-3 font-semibold text-white transition-colors hover:bg-green-700"
           >
             {countdown !== null ? `Entrando en ${countdown}…` : "Continuar a la sala"}
           </Link>
         ) : joinStatus === "waiting" ? (
-          <button
-            type="button"
-            onClick={() => setJoinStatus("idle")}
-            className="mt-6 w-full rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-900 hover:bg-slate-50"
+          <Link
+            href="/home"
+            className="mt-6 inline-flex w-full justify-center rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-900 hover:bg-slate-50"
           >
-            Cancelar solicitud
-          </button>
-        ) : (
+            Salir de la sala de espera
+          </Link>
+        ) : joinStatus === "idle" ? (
           <button
             type="submit"
             form="join-request"
             id="request-join-btn"
-            className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700"
+            disabled={joinLoading}
+            className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
           >
-            {joinStatus === "rejected"
-              ? "Solicitar ingreso nuevamente"
-              : "Solicitar ingreso"}
+            {joinLoading ? "Solicitando..." : "Solicitar ingreso"}
           </button>
-        )}
+        ) : null}
       </aside>
     </div>
   );
@@ -367,7 +487,7 @@ function ParticipantView({
 // Host view
 // ---------------------------------------------------------------------------
 function HostView({ sala, accessToken }: { sala: Sala; accessToken?: string }) {
-  const { requests, approve, reject, connected } = useHostSocket({
+  const { requests, approve, reject, connected, error } = useHostSocket({
     salaCodigo: sala.codigo,
     salaId: sala.id,
     accessToken,
@@ -397,7 +517,7 @@ function HostView({ sala, accessToken }: { sala: Sala; accessToken?: string }) {
             Aparecerán abajo en tiempo real y podrás aprobarlos o rechazarlos.
           </p>
           <Link
-            href={`/room?code=${encodeURIComponent(sala.codigo)}&salaId=${encodeURIComponent(sala.id)}&callId=${encodeURIComponent(sala.streamRoomId ?? "")}`}
+            href={`/room?code=${encodeURIComponent(sala.codigo)}&salaId=${encodeURIComponent(sala.id)}&callId=${encodeURIComponent(sala.streamRoomId ?? "")}&host=true`}
             id="host-enter-room-btn"
             className="mt-5 inline-flex rounded-lg bg-slate-900 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-slate-700"
           >
@@ -428,6 +548,7 @@ function HostView({ sala, accessToken }: { sala: Sala; accessToken?: string }) {
       <HostRequestPanel
         requests={requests}
         connected={connected}
+        error={error}
         onApprove={approve}
         onReject={reject}
       />

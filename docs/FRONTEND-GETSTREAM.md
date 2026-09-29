@@ -329,15 +329,17 @@ export function useGuestWaiting(salaId: string | null) {
 
 ### 4.4 `app/lib/host-socket.ts`
 
-Dos cambios necesarios sobre el hook actual:
+La integración cubre estos casos:
 
 1. **Re-emitir `host:subscribe` en cada reconexión.** El listener de `connect`
    ya está registrado una sola vez y `socket.io` reconecta solo, así que esto
    **ya funciona** tal como está escrito (`socket.on("connect", …)` corre de
    nuevo en cada reconexión) — no confundir con la Trampa #1, que es sobre la
    *lista de pendientes*, no sobre la suscripción.
-2. **Reconstruir la lista de pendientes al montar**, porque `host:subscribe`
-   solo suscribe — no devuelve quién ya está esperando:
+2. **Reconstruir la lista de pendientes después de cada suscripción**, porque
+   `host:subscribe` solo suscribe — no devuelve quién ya está esperando. El
+   frontend consulta `GET /salas/:id/participantes`, filtra los PENDIENTE y
+   deduplica con los eventos `join:pending` recibidos durante la consulta:
 
 ```ts
 // dentro de useHostSocket, después de emitir host:subscribe con éxito:
@@ -361,64 +363,51 @@ socket.emit("host:subscribe", { salaId }, async (ack: { ok: boolean }) => {
 });
 ```
 
-También conviene manejar el ack de `participant:approve`/`reject` cuando
-devuelve `{ ok: false, error: { code: "PARTICIPANT_STATE_CONFLICT" } }`: en ese
-caso otro host (u otra pestaña) ya lo resolvió — simplemente sacarlo de la
-lista en vez de mostrar error.
+Si el ack de `participant:approve`/`reject` devuelve
+`{ ok: false, error: { code: "PARTICIPANT_STATE_CONFLICT" } }`, otro host (u
+otra pestaña) ya lo resolvió y se quita la solicitud de pendientes. Los demás
+errores se muestran en el panel y no se presentan como una resolución exitosa.
 
 ### 4.5 `app/(platform)/waiting-room/page.tsx`
 
 Cambios sobre `ParticipantView`:
 
-- Reemplazar el `socket.emit("join:request", …)` directo por
-  `joinSala(code, joinForm)` (HTTP), guardar la sesión con
-  `saveGuestSession()`, y recién ahí usar `useGuestWaiting(sala.id)` para
-  escuchar la resolución. Hoy el socket se conecta **sin `auth`**, así que el
-  servidor nunca lo asocia a un participante y `join:approved` no le llega
-  nunca — es el BUG-02 ya resuelto del lado backend, pendiente del lado front.
-- Si `joinSala` devuelve `estado: "APROBADO"` directamente (reingreso dentro
-  de la ventana de 2h), saltar la espera y navegar directo.
-- El link a `/room` debe llevar `salaId` (ya lo hace) y ya no necesita armar
-  `callId` a mano: `/room` lo va a pedir con `stream-token`.
+- Implementado: el formulario usa `POST /salas/:code/join`, guarda el
+  `accessToken` y la identidad del participante en `sessionStorage`, y
+  autentica el socket con ese JWT. Al conectarse consulta también
+  `GET /salas/:salaId/mi-estado` para recuperar aprobaciones que hayan llegado
+  antes del socket.
+- Los usuarios logueados envían su access token mediante el cliente API; el
+  backend resuelve su identidad desde la cuenta y el frontend no pide nombre,
+  apellido ni email.
+- Si el join o `mi-estado` devuelve `APROBADO`, continúa a `/room` con el
+  `salaId`; esa página solicita el stream-token y no depende de un `callId`
+  pasado por URL.
 
 ### 4.6 `app/(platform)/room/page.tsx`
 
-Hoy solo pide `stream-token` (vía el alias legacy `generateRoomToken`) cuando
-`user?.id` existe, es decir **nunca para invitados**. Reemplazar por una lógica
-que obtenga credenciales de quien esté disponible:
+Implementado para anfitriones y participantes. La página usa el guest JWT
+guardado para esa sala, o el access token de usuario cuando no hay una sesión
+de participante guardada, y obtiene la API key, identidad y call desde la
+respuesta de `/salas/:salaId/stream-token`:
 
 ```ts
 const guest = getGuestSession();
-const credencial = isAuthenticated ? accessToken : guest?.accessToken ?? null;
-
-useEffect(() => {
-  if (isDemo || !salaId || !credencial) return;
-  let active = true;
-  void getStreamToken(salaId, credencial)
-    .then((res) => {
-      if (!active) return;
-      setStreamToken(res.token);
-      setApiKey(res.apiKey);
-      setCallType(res.callType);
-      setCallId(res.callId);
-      setDisplayName(res.user.name);
-    })
-    .catch((error) => {
-      if (active) setConnectionError(getErrorMessage(error, "..."));
-    });
-  return () => { active = false; };
-}, [isDemo, salaId, credencial]);
+const token =
+  guest?.salaId === salaId ? guest.accessToken : accessToken;
+const connection = await getStreamToken(salaId, token);
+// Usar connection.apiKey, connection.token, connection.user,
+// connection.callType y connection.callId con StreamConference.
 ```
 
-Sacar `NEXT_PUBLIC_GETSTREAM_API_KEY` (ya no hace falta: la `apiKey` viene en
-la respuesta) y pasarle a `StreamConference` `callType` + `callId` sueltos en
-vez de un `callCid` armado a mano.
+`NEXT_PUBLIC_GETSTREAM_API_KEY` ya no hace falta: la API key viene en la
+respuesta. `StreamConference` recibe `callType` + `callId` directos en vez de
+un `callCid` armado a mano.
 
 ### 4.7 `app/components/stream-conference.tsx`
 
-Cambiar la prop `callCid: string` (que hoy se parte con `.split(":")`, frágil
-si el id tuviera dos puntos) por `callType: string` y `callId: string` directos
-desde la respuesta de `stream-token`:
+Implementado: recibe `callType` y `callId` directos desde la respuesta de
+`stream-token` en vez de separar un CID:
 
 ```ts
 type StreamConferenceProps = {
@@ -434,21 +423,36 @@ const call = nextClient.call(callType, callId);
 await call.join({ create: false }); // ya lo hace — mantenerlo
 ```
 
-Mantener el `client.disconnectUser()` en el cleanup del `useEffect` — ya está
-bien implementado.
+El control de llamada pasa `onLeave` a `CallControls`. GetStream muestra
+“End call for all” a quien tenga `END_CALL` (el HOST, por el rol admin del
+token); al confirmar, su SDK llama `call.endCall()`. Si el usuario solo elige
+“Leave call”, sale únicamente él.
 
-### 4.8 `app/sala/[codigo]/page.tsx` (nuevo)
+El frontend escucha `room:ended` en el socket autenticado de la sala y manda a
+todos a `/home`. El backend recibe de GetStream el webhook `call.ended`, marca
+la sala `FINALIZADA` y emite ese evento a los sockets de la sala. No hace falta
+un endpoint adicional para finalizarla: es importante tener configurado el
+webhook de GetStream para `call.ended`. `call.session_ended` no debe cerrar la
+sala, porque también ocurre cuando la última persona se desconecta sin
+finalizar la llamada.
+
+### 4.8 `app/(platform)/sala/[codigo]/page.tsx`
 
 El backend arma el enlace compartido como `${FRONTEND_URL}/sala/${codigo}`
-(`rooms.controller.ts`, `createSala`) pero esa ruta no existe en el front — es
-el **BUG-01** de `apps/server/docs/bugs.md`. Crear un redirect simple:
+(`rooms.controller.ts`, `createSala`). Esta ruta, que antes faltaba (BUG-01 en
+`apps/server/docs/bugs.md`), ahora redirige a la sala de espera:
 
 ```tsx
-// app/sala/[codigo]/page.tsx
+// app/(platform)/sala/[codigo]/page.tsx
 import { redirect } from "next/navigation";
 
-export default function SalaRedirectPage({ params }: { params: { codigo: string } }) {
-  redirect(`/waiting-room?code=${encodeURIComponent(params.codigo)}`);
+export default async function SalaRedirectPage({
+  params,
+}: {
+  params: Promise<{ codigo: string }>;
+}) {
+  const { codigo } = await params;
+  redirect(`/waiting-room?code=${encodeURIComponent(codigo)}`);
 }
 ```
 
@@ -475,7 +479,7 @@ Todos los errores del backend tienen esta forma exacta:
 | `400 VALIDATION_ERROR` | Falta nombre/apellido/email (invitado anónimo), o email inválido | Marcar los campos del form |
 | `401 UNAUTHORIZED` | Token ausente, inválido o vencido | Para invitado: volver a pedir join. Para host: `POST /auth/refresh` o re-login |
 | `403 JOIN_NOT_APPROVED` | Pidió `stream-token` estando `PENDIENTE` | Volver a la sala de espera |
-| `403 JOIN_REJECTED` | El host rechazó | Mostrar mensaje, ofrecer reintentar el join |
+| `403 JOIN_REJECTED` | El host rechazó | Mostrar el rechazo; el backend no permite volver a solicitar acceso |
 | `403 NOT_A_PARTICIPANT` | El token no corresponde a un participante de esa sala | Tratar como sesión inválida |
 | `403 FORBIDDEN` | Guest JWT de otra sala, o `join:subscribe` a un participante ajeno | Error genérico, no debería pasar con uso normal de la UI |
 | `403 HOST_ONLY` | `host:subscribe` / approve / reject sin ser HOST | No mostrar el panel de host a quien no lo es |
@@ -527,15 +531,15 @@ con la misma forma, además del ack negativo si mandaste callback.
 
 ## 7. Checklist de implementación
 
-- [ ] `salas-api.ts`: agregar `joinSala`, `getMiEstado`, `getStreamToken` tipados; eliminar `generateRoomToken`
-- [ ] Crear `lib/guest-session.ts` con los helpers de `sessionStorage`
-- [ ] Crear `lib/use-guest-waiting.ts`
-- [ ] `waiting-room/page.tsx`: usar `joinSala` + `saveGuestSession` + `useGuestWaiting` en vez de `socket.emit("join:request")` sin auth
-- [ ] `host-socket.ts`: reconstruir pendientes con `GET /salas/:id/participantes` tras `host:subscribe`; manejar `PARTICIPANT_STATE_CONFLICT`
-- [ ] `room/page.tsx`: pedir `stream-token` para host **y** para invitado (leer credencial según quién esté logueado)
-- [ ] `stream-conference.tsx`: recibir `callType`/`callId` sueltos, no `callCid` armado a mano
-- [ ] Crear `app/sala/[codigo]/page.tsx` con el redirect a `/waiting-room`
-- [ ] Sacar `NEXT_PUBLIC_GETSTREAM_API_KEY` de `env.example` y de todo el código
+- [x] `salas-api.ts`: `joinSala`, `getMiEstado` y `getStreamToken` tipados; usar el endpoint nuevo en lugar del alias legacy
+- [x] `lib/guest-session.ts`: guardar y recuperar la sesión de participante en `sessionStorage`
+- [x] `waiting-room/page.tsx`: usar `joinSala`, autenticar el socket con el JWT del participante y consultar `mi-estado` al conectar
+- [x] `host-socket.ts`: reconstruir pendientes con `GET /salas/:id/participantes` tras `host:subscribe`; manejar `PARTICIPANT_STATE_CONFLICT`
+- [x] `room/page.tsx`: pedir `stream-token` con la credencial de anfitrión o participante y escuchar `room:ended`
+- [x] `stream-conference.tsx`: recibir `callType`/`callId` directos; enrutar al salir
+- [x] Backend: el webhook `call.ended` marca la sala finalizada y notifica a sus sockets
+- [x] Crear `app/(platform)/sala/[codigo]/page.tsx` con el redirect a `/waiting-room`
+- [x] Sacar `NEXT_PUBLIC_GETSTREAM_API_KEY` de `env.example` y del código
 - [ ] Verificar que `CORS_ORIGIN` del backend incluya el origen del front en todos los entornos
 
 ### Cómo probar manualmente (dos ventanas)
@@ -544,7 +548,7 @@ con la misma forma, además del ack negativo si mandaste callback.
 2. Ventana 2 (incógnito): abrir `/waiting-room?code=...`, completar el form, pedir ingreso.
 3. En la ventana 1 debería aparecer la solicitud en tiempo real — aprobarla.
 4. La ventana 2 debería pasar a "aprobado" sin recargar y poder entrar a `/room`.
-5. Recargar la ventana 2 en `/room`: debería recuperar sesión vía `mi-estado`/`sessionStorage` sin volver a pedir permiso.
+5. Recargar la ventana 2 en `/room`: debería recuperar la credencial de `sessionStorage` y volver a pedir `stream-token` sin volver a pedir permiso.
 6. Recargar la ventana 1 (host) durante una espera pendiente: la solicitud debe seguir apareciendo (prueba de la Trampa #1).
 
 ---

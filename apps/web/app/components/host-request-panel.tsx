@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { JoinRequest } from "../lib/host-socket";
 
 type HostRequestPanelProps = {
   requests: JoinRequest[];
   connected: boolean;
+  error: string;
   onApprove: (participanteId: string) => void;
   onReject: (participanteId: string) => void;
 };
+
+// ... RequestCard function remains the same ...
 
 function formatTime(iso: string) {
   try {
@@ -24,10 +28,12 @@ function formatTime(iso: string) {
 
 function RequestCard({
   request,
+  connected,
   onApprove,
   onReject,
 }: {
   request: JoinRequest;
+  connected: boolean;
   onApprove: () => void;
   onReject: () => void;
 }) {
@@ -108,7 +114,7 @@ function RequestCard({
           <button
             id={`approve-${request.participanteId}`}
             type="button"
-            disabled={isDeciding}
+            disabled={isDeciding || !connected}
             onClick={onApprove}
             aria-label={`Aprobar a ${request.nombre} ${request.apellido}`}
             className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-wait disabled:opacity-60"
@@ -125,7 +131,7 @@ function RequestCard({
           <button
             id={`reject-${request.participanteId}`}
             type="button"
-            disabled={isDeciding}
+            disabled={isDeciding || !connected}
             onClick={onReject}
             aria-label={`Rechazar a ${request.nombre} ${request.apellido}`}
             className="flex-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
@@ -148,16 +154,26 @@ function RequestCard({
 export function HostRequestPanel({
   requests,
   connected,
+  error,
   onApprove,
   onReject,
 }: HostRequestPanelProps) {
   const pending = requests.filter((r) => r.status === "pending" || r.status === "approving" || r.status === "rejecting");
   const done = requests.filter((r) => r.status === "approved" || r.status === "rejected");
+  const [isMounted, setIsMounted] = useState(false);
 
-  return (
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const content = (
     <aside
       aria-label="Panel de solicitudes de ingreso"
-      className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className={
+        pending.length > 0
+          ? "fixed bottom-6 right-6 z-[9999] w-full max-w-sm max-h-[80vh] flex flex-col rounded-2xl border border-blue-200 bg-white shadow-2xl animate-in slide-in-from-bottom-5"
+          : "flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm"
+      }
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -181,6 +197,12 @@ export function HostRequestPanel({
           </span>
         </div>
       </div>
+
+      {error && (
+        <p role="alert" className="mx-4 mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
       {/* Pending */}
       <div className="flex-1 overflow-y-auto p-4">
@@ -213,6 +235,7 @@ export function HostRequestPanel({
               <RequestCard
                 key={r.participanteId}
                 request={r}
+                connected={connected}
                 onApprove={() => onApprove(r.participanteId)}
                 onReject={() => onReject(r.participanteId)}
               />
@@ -260,4 +283,11 @@ export function HostRequestPanel({
       )}
     </aside>
   );
+
+  if (pending.length > 0) {
+    if (!isMounted) return null;
+    return createPortal(content, document.body);
+  }
+
+  return content;
 }

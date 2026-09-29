@@ -1,18 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
 import { useAuth } from "../../lib/auth";
-import { generateRoomToken, getSalaDetalle } from "../../lib/salas-api";
+import { getGuestSession } from "../../lib/guest-session";
+import {
+  getRealtimeUrl,
+  getSalaByCode,
+  getStreamToken,
+  type StreamTokenResponse,
+} from "../../lib/salas-api";
 import { StreamConference } from "../../components/stream-conference";
 import { HostRequestPanel } from "../../components/host-request-panel";
 import { useHostSocket } from "../../lib/host-socket";
 
-const STREAM_API_KEY = process.env.NEXT_PUBLIC_GETSTREAM_API_KEY;
-
 function RoomContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const code = searchParams.get("code") ?? "";
   const requestedCallId = searchParams.get("callId") ?? "";
@@ -28,14 +34,18 @@ function RoomContent() {
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState("Preparando conexión…");
   const [connectionError, setConnectionError] = useState("");
-  const [streamToken, setStreamToken] = useState("");
+  const [streamConnection, setStreamConnection] = useState<StreamTokenResponse | null>(null);
   const [callId, setCallId] = useState(requestedCallId);
-  const { user, accessToken, isAuthenticated } = useAuth();
+  const { accessToken } = useAuth();
+  const guestSession = getGuestSession();
+  const roomAccessToken =
+    guestSession?.salaId === salaId ? guestSession.accessToken : accessToken;
   const {
     requests,
     approve,
     reject,
     connected: hostSocketConnected,
+    error: hostSocketError,
   } = useHostSocket({
     salaCodigo: isHost ? code : null,
     salaId: isHost ? salaId : null,
@@ -43,46 +53,69 @@ function RoomContent() {
   });
 
   useEffect(() => {
-    setCallId(requestedCallId);
-  }, [requestedCallId]);
+    if (isDemo || !salaId || !roomAccessToken) return;
 
-  useEffect(() => {
-    if (isDemo || !salaId || requestedCallId) return;
+    const socket = io(`${getRealtimeUrl()}/reuniones`, {
+      transports: ["websocket"],
+      auth: { token: roomAccessToken },
+    });
 
-    let active = true;
-    void getSalaDetalle(salaId)
-      .then((sala) => {
-        if (!active) return;
-        if (!sala.streamRoomId) {
-          setConnectionError("La sala todavía no está sincronizada con GetStream.");
-          return;
-        }
-        setCallId(sala.streamRoomId);
-      })
-      .catch((error) => {
-        if (active) {
+    socket.on("room:ended", (payload: { salaId?: string }) => {
+      if (payload.salaId === salaId) router.replace("/home");
+    });
+
+    socket.on("connect", () => {
+      if (isHost) {
+        socket.emit(
+          "host:subscribe",
+          { salaId },
+          (ack: { ok?: boolean; error?: { message?: string } }) => {
+            if (!ack?.ok) {
+              setConnectionError(
+                ack?.error?.message ?? "No se pudo escuchar el cierre de la sala.",
+              );
+            }
+          },
+        );
+      }
+
+      void getSalaByCode(code)
+        .then((sala) => {
+          if (sala.estado === "FINALIZADA") router.replace("/home");
+        })
+        .catch((error: unknown) => {
           setConnectionError(
             error instanceof Error
               ? error.message
-              : "No se pudo obtener la información de la sala.",
+              : "No se pudo verificar el estado de la sala.",
           );
-        }
-      });
+        });
+    });
+
+    socket.on("connect_error", (error: Error) => {
+      setConnectionError(
+        error.message || "No se pudo conectar para recibir el estado de la sala.",
+      );
+    });
 
     return () => {
-      active = false;
+      socket.disconnect();
     };
-  }, [isDemo, requestedCallId, salaId]);
+  }, [code, isDemo, isHost, roomAccessToken, router, salaId]);
 
   useEffect(() => {
-    if (isDemo || !salaId || !user?.id || !isAuthenticated) return;
+    if (isDemo || !salaId) return;
 
     let active = true;
-    void generateRoomToken(salaId, user.id, "HOST")
-      .then(({ token }) => {
+    const token = roomAccessToken;
+    if (!token) return;
+
+    void getStreamToken(salaId, token)
+      .then((connection) => {
         if (active) {
-          setStreamToken(token);
-          setConnectionStatus("Token de anfitrión listo");
+          setStreamConnection(connection);
+          setCallId(connection.callCid);
+          setConnectionStatus("Conectando a la videollamada…");
         }
       })
       .catch((error) => {
@@ -99,7 +132,7 @@ function RoomContent() {
     return () => {
       active = false;
     };
-  }, [isAuthenticated, isDemo, salaId, user?.id]);
+  }, [isDemo, roomAccessToken, salaId]);
 
   useEffect(() => {
     if (!isDemo && !hasRealAccess) return;
@@ -186,18 +219,26 @@ function RoomContent() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]">
+      <div className={`grid gap-6 ${streamConnection ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]"}`}>
         {/* Video preview */}
         <div className="overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
-          {STREAM_API_KEY && streamToken && callId && user ? (
+          {streamConnection ? (
             <StreamConference
-              apiKey={STREAM_API_KEY}
-              token={streamToken}
+              apiKey={streamConnection.apiKey}
+              token={streamConnection.token}
               user={{
-                id: user.id,
-                name: `${user.nombre} ${user.apellido}`,
+                id: streamConnection.user.id,
+                name: streamConnection.user.name,
               }}
-              callCid={callId}
+              callType={streamConnection.callType}
+              callId={streamConnection.callId}
+              onLeave={(error) => {
+                if (error) {
+                  setConnectionError(error.message);
+                  return;
+                }
+                router.replace("/home");
+              }}
             />
           ) : (
           <>
@@ -242,48 +283,63 @@ function RoomContent() {
         </div>
 
         {/* Sidebar */}
-        <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-950">Participantes</h2>
-          <div className="mt-4 space-y-3">
-            <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
-              Vos · conectado
-            </p>
-            <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-              {isDemo ? "Host demo · conectado" : "Esperando a otros participantes…"}
-            </p>
-          </div>
-
-          {mediaError && (
-            <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-              {mediaError}
-            </p>
-          )}
-          {connectionError && (
-            <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-              {connectionError}
-            </p>
-          )}
-          {isHost && (
-            <div className="mt-6 border-t border-slate-200 pt-6">
-              <h3 className="text-lg font-semibold text-slate-950">Solicitudes de ingreso</h3>
-              <div className="mt-4">
-                <HostRequestPanel
-                  requests={requests}
-                  connected={hostSocketConnected}
-                  onApprove={approve}
-                  onReject={reject}
-                />
+        <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm h-fit">
+          <details className="group" open={!streamConnection}>
+            <summary className="text-xl font-semibold text-slate-950 cursor-pointer list-none flex items-center justify-between outline-none">
+              Participantes y opciones
+              <svg
+                className="w-5 h-5 text-slate-500 transition-transform group-open:rotate-180"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+            <div className="mt-6">
+              <div className="space-y-3">
+                <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">
+                  Vos · conectado
+                </p>
+                <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                  {isDemo ? "Host demo · conectado" : "Esperando a otros participantes…"}
+                </p>
               </div>
-            </div>
-          )}
 
-          <Link
-            href={`/waiting-room?code=${encodeURIComponent(code)}${isDemo ? "&demo=true" : ""}`}
-            id="back-to-waiting-room-btn"
-            className="mt-6 inline-flex w-full justify-center rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-900 hover:bg-slate-50"
-          >
-            ← Volver a sala de espera
-          </Link>
+              {mediaError && (
+                <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                  {mediaError}
+                </p>
+              )}
+              {connectionError && (
+                <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                  {connectionError}
+                </p>
+              )}
+              {isHost && (
+                <div className="mt-6 border-t border-slate-200 pt-6">
+                  <h3 className="text-lg font-semibold text-slate-950">Solicitudes de ingreso</h3>
+                  <div className="mt-4">
+                    <HostRequestPanel
+                      requests={requests}
+                      connected={hostSocketConnected}
+                      error={hostSocketError}
+                      onApprove={approve}
+                      onReject={reject}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Link
+                href={`/waiting-room?code=${encodeURIComponent(code)}${isDemo ? "&demo=true" : ""}`}
+                id="back-to-waiting-room-btn"
+                className="mt-6 inline-flex w-full justify-center rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                ← Volver a sala de espera
+              </Link>
+            </div>
+          </details>
         </aside>
       </div>
     </section>

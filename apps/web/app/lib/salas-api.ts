@@ -33,18 +33,72 @@ export type SalaDetalle = Sala & {
   }>;
 };
 
-export type JoinParticipantResponse = {
+export type StreamCallRef = {
+  callType: string;
+  callId: string;
+  callCid: string;
+};
+
+export type JoinSalaResponse = {
   participanteId: string;
   estado: "PENDIENTE" | "APROBADO" | "RECHAZADO";
-  message?: string;
+  salaId: string;
+  accessToken: string;
+  stream?: StreamCallRef;
+};
+
+export type MiEstadoResponse = {
+  participanteId: string;
+  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO";
+  rol: "HOST" | "PARTICIPANTE";
+  sala: { id: string; codigo: string; nombre: string; estado: string };
+  stream: StreamCallRef | null;
+};
+
+export type StreamTokenResponse = {
+  apiKey: string;
+  token: string;
+  userId: string;
+  user: { id: string; name: string };
+  rol: "HOST" | "PARTICIPANTE";
+  callType: string;
+  callId: string;
+  callCid: string;
+  sala: { id: string; codigo: string; nombre: string; estado: string };
+  expiresAt: string;
+};
+
+export type ParticipanteSala = {
+  id: string;
+  nombre: string;
+  apellido: string;
+  email: string;
+  rol: "HOST" | "PARTICIPANTE";
+  estado: string;
+  fechaIngreso: string | null;
+};
+
+export type ParticipantesResponse = {
+  salaId: string;
+  salaNombre: string;
+  total: number;
+  participantes: ParticipanteSala[];
 };
 import { getAccessToken } from "./auth";
 
 type ApiErrorResponse = {
   error?: {
+    code?: string;
     message?: string;
   };
 };
+
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
 
 type CreateRoomResponse = {
   salaId: string;
@@ -54,15 +108,36 @@ type CreateRoomResponse = {
   streamRoomId: string;
 };
 
-export type RoomTokenResponse = {
-  token: string;
-};
-
 const ROOMS_API_URL =
   process.env.NEXT_PUBLIC_ROOMS_API_URL ?? "http://localhost:4000/api/v1";
 
 export function getRealtimeUrl() {
   return new URL(ROOMS_API_URL).origin;
+}
+
+async function requestWithToken<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetch(`${ROOMS_API_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...init?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+    throw new ApiRequestError(
+      body?.error?.message ?? "No se pudo completar la solicitud.",
+      body?.error?.code,
+    );
+  }
+
+  return response.json() as Promise<T>;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -77,7 +152,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-    throw new Error(body?.error?.message ?? "No se pudo completar la solicitud.");
+    throw new ApiRequestError(
+      body?.error?.message ?? "No se pudo completar la solicitud.",
+      body?.error?.code,
+    );
   }
 
   return response.json() as Promise<T>;
@@ -103,17 +181,6 @@ export function createSala(input: {
   }));
 }
 
-export function generateRoomToken(
-  salaId: string,
-  userId: string,
-  role: "HOST" | "PARTICIPANTE",
-): Promise<RoomTokenResponse> {
-  return request<RoomTokenResponse>(`/rooms/${encodeURIComponent(salaId)}/token`, {
-    method: "POST",
-    body: JSON.stringify({ userId, role, callCid: "" }),
-  });
-}
-
 export function getSalaByCode(code: string): Promise<Sala> {
   return request<Sala>(`/salas/${encodeURIComponent(code)}`);
 }
@@ -126,19 +193,48 @@ export function getSalaDetalle(salaId: string): Promise<SalaDetalle> {
   return request<SalaDetalle>(`/salas/${encodeURIComponent(salaId)}/detalle`);
 }
 
-export function requestSalaJoin(
+export function getParticipantes(
+  salaId: string,
+): Promise<ParticipantesResponse> {
+  return request<ParticipantesResponse>(
+    `/salas/${encodeURIComponent(salaId)}/participantes`,
+  );
+}
+
+export function joinSala(
   code: string,
   input: {
-    nombre: string;
-    apellido: string;
-    email: string;
+    nombre?: string;
+    apellido?: string;
+    email?: string;
   },
-): Promise<JoinParticipantResponse> {
-  return request<JoinParticipantResponse>(
+): Promise<JoinSalaResponse> {
+  return request<JoinSalaResponse>(
     `/salas/${encodeURIComponent(code)}/join`,
     {
       method: "POST",
       body: JSON.stringify(input),
     },
+  );
+}
+
+export function getMiEstado(
+  salaId: string,
+  token: string,
+): Promise<MiEstadoResponse> {
+  return requestWithToken(
+    `/salas/${encodeURIComponent(salaId)}/mi-estado`,
+    token,
+  );
+}
+
+export function getStreamToken(
+  salaId: string,
+  token: string,
+): Promise<StreamTokenResponse> {
+  return requestWithToken(
+    `/salas/${encodeURIComponent(salaId)}/stream-token`,
+    token,
+    { method: "POST" },
   );
 }

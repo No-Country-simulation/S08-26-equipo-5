@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { getRealtimeUrl } from "./salas-api";
+import { getParticipantes, getRealtimeUrl } from "./salas-api";
 import { getAccessToken } from "./auth";
 
 export type JoinRequest = {
@@ -23,6 +23,11 @@ type JoinPendingPayload = {
   timestamp: string;
 };
 
+type SocketAck = {
+  ok?: boolean;
+  error?: { code?: string; message?: string };
+};
+
 type UseHostSocketOptions = {
   /** Código de la sala (e.g. "SAL-8M4Q7Z"). Pass null/undefined to skip. */
   salaCodigo: string | null | undefined;
@@ -36,6 +41,7 @@ type UseHostSocketReturn = {
   approve: (participanteId: string) => void;
   reject: (participanteId: string) => void;
   connected: boolean;
+  error: string;
 };
 
 /**
@@ -50,6 +56,7 @@ export function useHostSocket({
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!salaCodigo || !salaId) return;
@@ -64,14 +71,64 @@ export function useHostSocket({
 
     socket.on("connect", () => {
       setConnected(true);
-      socket.emit("host:subscribe", { salaId });
+      setError("");
+      socket.emit(
+        "host:subscribe",
+        { salaId },
+        (ack: SocketAck) => {
+          if (!ack?.ok) {
+            setError(ack?.error?.message ?? "No se pudo suscribir a la sala.");
+            return;
+          }
+
+          void getParticipantes(salaId)
+            .then(({ participantes }) => {
+              setRequests((prev) => {
+                const existing = new Set(prev.map((item) => item.participanteId));
+                const pending = participantes
+                  .filter((item) => item.estado === "PENDIENTE")
+                  .filter((item) => !existing.has(item.id))
+                  .map((item) => ({
+                    participanteId: item.id,
+                    nombre: item.nombre,
+                    apellido: item.apellido,
+                    email: item.email,
+                    timestamp: item.fechaIngreso ?? new Date().toISOString(),
+                    status: "pending" as const,
+                  }));
+                return [...prev, ...pending];
+              });
+            })
+            .catch((requestError: unknown) => {
+              setError(
+                requestError instanceof Error
+                  ? requestError.message
+                  : "No se pudieron recuperar las solicitudes pendientes.",
+              );
+            });
+        },
+      );
     });
-    socket.on("disconnect", () => setConnected(false));
+    socket.on("disconnect", () => {
+      setConnected(false);
+      setRequests((prev) =>
+        prev.map((request) =>
+          request.status === "approving" || request.status === "rejecting"
+            ? { ...request, status: "pending" }
+            : request,
+        ),
+      );
+    });
+    socket.on("connect_error", (socketError: Error) => {
+      setError(socketError.message || "No se pudo conectar con la sala.");
+    });
+    socket.on("error", (payload: { message?: string }) => {
+      setError(payload.message ?? "Ocurrió un error en la sala.");
+    });
 
     socket.on("join:pending", (payload: JoinPendingPayload) => {
-      // Ignore payloads not related to this sala (defensive check)
+      setError("");
       setRequests((prev) => {
-        // Avoid duplicates — backend may re-emit
         if (prev.some((r) => r.participanteId === payload.participanteId)) {
           return prev;
         }
@@ -96,8 +153,12 @@ export function useHostSocket({
             "SF5pgJKijH9vZm9+jZaTjIZ9eHyFj5OSkYqEgH+Bh4uMioeEg4" +
             "OFiImIh4aFhoaHh4eHh4eHiIiIiIiIiA=="
         );
-        void audio.play().catch(() => {/* silently ignore autoplay restrictions */});
-      } catch {/* ignore */}
+        void audio.play().catch(() => {
+          // Autoplay restrictions should not prevent the request from appearing.
+        });
+      } catch {
+        // Audio notification is optional; the request remains visible.
+      }
     });
 
     socket.connect();
@@ -109,68 +170,69 @@ export function useHostSocket({
     };
   }, [salaCodigo, salaId, accessToken]);
 
-  const approve = useCallback((participanteId: string) => {
-    // Optimistic update
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.participanteId === participanteId ? { ...r, status: "approving" } : r
-      )
-    );
-
-    socketRef.current?.emit(
-      "participant:approve",
-      { participanteId },
-      () => {
-        setRequests((prev) =>
-          prev.map((r) =>
-            r.participanteId === participanteId ? { ...r, status: "approved" } : r
-          )
-        );
+  const resolveRequest = useCallback(
+    (
+      participanteId: string,
+      action: "participant:approve" | "participant:reject",
+    ) => {
+      const socket = socketRef.current;
+      if (!socket?.connected) {
+        setError("No hay conexión con la sala. Intentá nuevamente.");
+        return;
       }
-    );
 
-    // Fallback: mark as approved even without ack
-    setTimeout(() => {
+      const isApproval = action === "participant:approve";
+      setError("");
       setRequests((prev) =>
-        prev.map((r) =>
-          r.participanteId === participanteId && r.status === "approving"
-            ? { ...r, status: "approved" }
-            : r
-        )
+        prev.map((request) =>
+          request.participanteId === participanteId
+            ? { ...request, status: isApproval ? "approving" : "rejecting" }
+            : request,
+        ),
       );
-    }, 3000);
-  }, []);
 
-  const reject = useCallback((participanteId: string) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.participanteId === participanteId ? { ...r, status: "rejecting" } : r
-      )
-    );
+      socket.emit(action, { participanteId }, (ack: SocketAck) => {
+        if (ack?.ok) {
+          setRequests((prev) =>
+            prev.map((request) =>
+              request.participanteId === participanteId
+                ? { ...request, status: isApproval ? "approved" : "rejected" }
+                : request,
+            ),
+          );
+          return;
+        }
 
-    socketRef.current?.emit(
-      "participant:reject",
-      { participanteId },
-      () => {
+        if (ack?.error?.code === "PARTICIPANT_STATE_CONFLICT") {
+          setRequests((prev) =>
+            prev.filter((request) => request.participanteId !== participanteId),
+          );
+          return;
+        }
+
         setRequests((prev) =>
-          prev.map((r) =>
-            r.participanteId === participanteId ? { ...r, status: "rejected" } : r
-          )
+          prev.map((request) =>
+            request.participanteId === participanteId
+              ? { ...request, status: "pending" }
+              : request,
+          ),
         );
-      }
-    );
+        setError(ack?.error?.message ?? "No se pudo resolver la solicitud.");
+      });
+    },
+    [],
+  );
 
-    // Fallback
-    setTimeout(() => {
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.participanteId === participanteId && r.status === "rejecting"
-            ? { ...r, status: "rejected" }
-            : r
-        )
-      );
-    }, 3000);
-  }, []);
+  const approve = useCallback(
+    (participanteId: string) =>
+      resolveRequest(participanteId, "participant:approve"),
+    [resolveRequest],
+  );
+  const reject = useCallback(
+    (participanteId: string) =>
+      resolveRequest(participanteId, "participant:reject"),
+    [resolveRequest],
+  );
 
-  return { requests, approve, reject, connected };
+  return { requests, approve, reject, connected, error };
 }

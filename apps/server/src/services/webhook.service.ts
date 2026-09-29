@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma.js";
+import { getReunionesNamespace, rooms } from "../realtime/registry.js";
 
 export interface GetStreamWebhookEvent {
   type?: string;
@@ -68,13 +69,22 @@ async function finalizeSala(
     return;
   }
 
+  const fechaFin = new Date();
   await prisma.sala.update({
     where: { id: sala.id },
     data: {
       estado: "FINALIZADA",
-      fechaFin: new Date(),
+      fechaFin,
     },
   });
+
+  getReunionesNamespace()
+    ?.to(rooms.sala(sala.id))
+    .emit("room:ended", {
+      salaId: sala.id,
+      estado: "FINALIZADA",
+      fechaFin: fechaFin.toISOString(),
+    });
 
   console.log(`[Webhook] Sala ${sala.id} finalized (was: ${sala.estado})`);
 }
