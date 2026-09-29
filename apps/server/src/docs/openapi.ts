@@ -248,6 +248,21 @@ export const openApiSpec = {
           },
         },
       },
+      TransferHostBody: {
+        type: "object",
+        required: ["nuevoHostId"],
+        properties: {
+          nuevoHostId: { type: "string", format: "uuid", description: "usuarioId del participante que va a pasar a HOST" },
+        },
+      },
+      TransferHostResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string", example: "Rol de HOST transferido exitosamente" },
+          host: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
+          previousHost: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
+        },
+      },
       HealthResponse: {
         type: "object",
         properties: {
@@ -561,22 +576,62 @@ export const openApiSpec = {
         },
       },
     },
+    "/salas/{id}/transfer-host": {
+      post: {
+        tags: ["Salas"],
+        summary: "Transferir el rol HOST a otro participante (S3-08)",
+        description:
+          "Solo el HOST actual puede transferir. El caller queda `PARTICIPANTE` y el " +
+          "target pasa a `HOST` (se preserva el `estado` de ambos). Transacción con " +
+          "guard anti-TOCTOU (`updateMany` condicional): dos transfers concurrentes " +
+          "solo dejan ganar a uno.",
+        operationId: "salas_transfer_host",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TransferHostBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Rol transferido",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/TransferHostResponse" } } },
+          },
+          400: { description: "`nuevoHostId` ausente o auto-transferencia", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "Solo el HOST puede transferir el rol", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada / el nuevo host no es participante de la sala", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
     "/rooms/{salaId}/token": {
       post: {
         tags: ["Salas"],
         deprecated: true,
         summary: "[DEPRECATED] Alias legacy de POST /salas/{salaId}/stream-token",
         description:
-          "Mantenido solo por compatibilidad con clientes viejos. Delega en la " +
-          "misma lógica segura que /salas/{salaId}/stream-token vía el " +
-          "middleware `authParticipante`: el rol y el usuario siempre salen de " +
-          "la DB/JWT, cualquier campo del body (userId, role) se ignora. Usar " +
-          "el endpoint nuevo en integraciones nuevas.",
+          "Mantenido solo por compatibilidad con clientes viejos (apps/web sigue " +
+          "llamando a este path). Delega en la misma lógica segura que " +
+          "/salas/{salaId}/stream-token vía el middleware `authParticipante`: el " +
+          "rol y el usuario siempre salen de la DB/JWT, cualquier campo del body " +
+          "(userId, role, callCid) se ignora. Usar el endpoint nuevo en " +
+          "integraciones nuevas. El param de ruta se llama `salaId` (no `id`) a " +
+          "propósito, porque `authParticipante` lee `req.params.salaId`.",
         operationId: "rooms_generate_token_legacy",
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: "salaId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { type: "object", description: "Se acepta cualquier body por compatibilidad; el contenido se ignora." },
+            },
+          },
+        },
         responses: {
           200: {
             description: "Token de GetStream",

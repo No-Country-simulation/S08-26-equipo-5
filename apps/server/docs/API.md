@@ -381,9 +381,8 @@ cuando el host queda momentáneamente solo).
 
 **Verificación de firma HMAC (S3-08):** exigida por defecto vía
 `WEBHOOK_SIGNATURE_REQUIRED` (`config/env.ts`; default `true` fuera de
-`development`, falso solo en dev si se lo pisa explícitamente). El
-`apps/server/.env.example` todavía lista la variable vieja
-`WEBHOOK_VERIFY_SIGNATURE` — desactualizado, pendiente de corregir.
+`development`, falso solo en dev si se lo pisa explícitamente). Ya corregido
+en `apps/server/.env.example` (ver changelog).
 
 ---
 
@@ -391,6 +390,7 @@ cuando el host queda momentáneamente solo).
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-09-29 | S3-API: agregado `POST /salas/:id/transfer-host` a Swagger (faltaba por completo) y corregido el body de `POST /rooms/:id/token` (ya no exige/documenta `userId`/`role`/`callCid`, el controller los ignora desde S3-08). Corregido `apps/server/.env.example`: `WEBHOOK_SIGNATURE_REQUIRED` es la variable real que lee el código, no `WEBHOOK_VERIFY_SIGNATURE`. Casos `.http` #30-#37 (`transfer-host` + `rooms/:id/token`) agregados a `api_salas_agenda.http`: 39/39 OK contra `localhost` (misma DB que Render); contra Render se encontró y documentó **BUG-09** (`POST /salas` → 500, bloquea la corrida completa contra ese entorno). |
 | 2026-09-28 | S3-09: agregada sección "Realtime — Socket.IO" con el contrato de join-flow (PR #85, ver `docs/JOIN-FLOW.md`) y de estado de medios en vivo (`room:enter`/`participant:state`/`participant:connection`). Corregida la nota de HMAC de webhooks (S3-08 la exige por defecto) y el endpoint legacy `/rooms/:id/token` (alias de `stream-token`, no del viejo contrato con body). |
 | 2026-09-24 | Contrato OpenAPI `1.0.1`. Suite `.http` con aserciones (auth, salas, waiting room) y colección Hoppscotch alineada a las rutas vigentes. |
 | 2026-09-22 | Documentado en Swagger (`src/docs/openapi.ts` + `/api/v1/docs`) con ejemplos y schemas: `POST /salas`, `GET /salas/:code`, `GET /salas/mis-participaciones` (Agenda). Agregado `api_salas_agenda.http` (REST Client). Ver issue #33. |

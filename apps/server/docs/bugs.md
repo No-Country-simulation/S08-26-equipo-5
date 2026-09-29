@@ -83,3 +83,18 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
   3. El panel "Solicitudes de ingreso" muestra "Sin solicitudes pendientes", aunque en la base de datos el participante sigue en estado `PENDIENTE`.
 - Efecto: el host no ve solicitudes legítimas que ya estaban esperando; el participante queda esperando indefinidamente sin ningún error visible, salvo que vuelva a enviar la solicitud.
 - Fix sugerido: al recibir `host:subscribe`, consultar los participantes `PENDIENTE` de la sala y emitir `join:pending` por cada uno antes de unir el socket a la room.
+
+## BUG-09 — `POST /salas` responde 500 en Render (creación de sala rota)
+
+- Casos: suite `.http` `api_salas_agenda.http` #5 y #30 (S3-API, tarea de documentación Swagger/`.http` para S3-08/S3-09)
+- Severidad: **crítica** — bloquea cualquier flujo que dependa de crear una sala (todo lo posterior: transfer-host, join, waiting room, medios en vivo) contra el entorno público.
+- Estado: **abierto** (encontrado el 2026-09-28, corriendo la suite `.http` contra `https://meetflow-server-tm9i.onrender.com`).
+- Dónde: reproducido de dos formas independientes contra Render — con `npx httpyac api_salas_agenda.http --all` (host apuntado temporalmente a Render) y con `curl` puro (register → login → `POST /salas`), mismo resultado en ambos casos.
+- Pasos de reproducción:
+  1. `POST /api/v1/auth/register` + `POST /api/v1/auth/login` contra `https://meetflow-server-tm9i.onrender.com` → 201/200 OK (auth funciona bien).
+  2. `POST /api/v1/salas` con el JWT válido y `{ "nombre": "..." }` → `500 { "error": { "code": "INTERNAL_SERVER_ERROR", "message": "Ocurrió un error interno" } }`.
+  3. `GET /api/v1/health` y `GET /api/v1/salas/:code` (lectura pública) sí responden bien (200/404 según corresponda) — el problema es específico del **path de escritura** de `createSala`.
+- **Aislado:** se corrió la suite completa `api_salas_agenda.http` (39 requests) levantando el server local (`npm run dev`) contra el **mismo** `DATABASE_URL` (Neon) que usa Render — resultado `39 requests processed (39 succeeded)`, incluyendo `POST /salas` en 201. Esto descarta la base de datos como causa: el problema es específico del entorno de ejecución de Render (env vars o egress de red hacia GetStream), no de los datos ni del código en sí (el mismo código, mismo commit, misma DB, funciona en local).
+- Hipótesis de causa: `createSala` en `rooms.controller.ts` llama a `createRoomService` (`stream.service.ts`, `call.getOrCreate` de GetStream) **antes** de la transacción Prisma. Si `GETSTREAM_API_KEY`/`GETSTREAM_API_SECRET` no están seteadas (o son distintas/inválidas) en el entorno de Render, o si Render bloquea el egress hacia la API de GetStream, `createRoom` relanza el error envuelto en un `Error` genérico, que el error-handler global mapea a 500 sin distinguirlo de otras fallas.
+- Efecto sobre esta tarea (S3-API): no se pudo completar el criterio de aceptación "`.http` actualizados y corridos contra el entorno Render" para los casos nuevos de `transfer-host` (#30-#37) — no hay forma de crear una sala en Render para probarlos. Quedan agregados al `.http` y **verificados 39/39 contra `localhost`** con la misma DB de Render; contra Render en sí solo se pudo reproducir y documentar este bug.
+- Fix sugerido: revisar en el dashboard de Render que `GETSTREAM_API_KEY`/`GETSTREAM_API_SECRET` estén seteadas y coincidan con las de GetStream Dashboard, y loguear el mensaje real de `createRoom` (hoy se pierde en el error-handler genérico) para confirmar la causa exacta antes de asumir más.
