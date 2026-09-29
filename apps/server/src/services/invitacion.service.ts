@@ -5,7 +5,10 @@ import type { IInvitacionRepository } from "../repositories/invitacion.repositor
 import type { IParticipanteRepository } from "../repositories/participante.repository.js";
 import type { ISalaRepository } from "../repositories/sala.repository.js";
 import type { IUserRepository } from "../repositories/user.repository.js";
+import type { RoomRole } from "../types/stream.js";
 import { AppError } from "../utils/AppError.js";
+import { signParticipantToken } from "../utils/participantToken.js";
+import { emitJoinPending } from "./waitingRoom.service.js";
 import {
   generateInvitationToken,
   hashInvitationToken,
@@ -223,5 +226,113 @@ export async function previewInvitacion(
     email: participante.email,
     requiereDatos: participante.usuarioId === null,
     requiereLogin: participante.usuarioId !== null,
+  };
+}
+
+export interface AceptarInvitacionInput {
+  token: string;
+  /** `sub` del JWT de sesión, si el caller vino logueado. */
+  usuarioId?: string | null;
+  /** Payload crudo del body: solo se usa con invitados sin cuenta. */
+  nombre?: unknown;
+  apellido?: unknown;
+}
+
+/** Misma forma que la respuesta de POST /salas/:code/join (+ salaCodigo para la UI). */
+export interface AceptarInvitacionResult {
+  participanteId: string;
+  estado: EstadoParticipante;
+  salaId: string;
+  salaCodigo: string;
+  accessToken: string;
+}
+
+function textoNoVacio(valor: unknown): string | null {
+  if (typeof valor !== "string") return null;
+  const limpio = valor.trim();
+  return limpio.length > 0 ? limpio : null;
+}
+
+/**
+ * Acepta la invitación: INVITADO → PENDIENTE (el host lo aprueba como a
+ * cualquier otro) y devuelve el guest JWT para suscribirse a la sala de espera.
+ *
+ * - Sin cuenta: nombre/apellido obligatorios; el email sale de la fila.
+ * - Con cuenta: exige sesión de ESA cuenta; el body se ignora por completo.
+ * - Consumo atómico (repositorio): solo una aceptación concurrente triunfa.
+ * Toda causa de invalidez responde 410 INVITATION_INVALID.
+ */
+export async function aceptarInvitacion(
+  deps: InvitacionDeps,
+  input: AceptarInvitacionInput,
+): Promise<AceptarInvitacionResult> {
+  const invalida = () =>
+    new AppError(410, "INVITATION_INVALID", "La invitación no es válida o ya venció");
+
+  const invitacion = await deps.invitaciones.findByTokenHash(
+    hashInvitationToken(input.token),
+  );
+  if (!invitacion) throw invalida();
+  if (invitacion.usedAt || invitacion.expiresAt.getTime() <= Date.now()) throw invalida();
+
+  const { participante } = invitacion;
+  const { sala } = participante;
+  if (participante.estado !== EstadoParticipante.INVITADO) throw invalida();
+  if (sala.estado === "CANCELADA" || sala.estado === "FINALIZADA") throw invalida();
+
+  let nombre: string | undefined;
+  let apellido: string | undefined;
+
+  if (participante.usuarioId) {
+    if (!input.usuarioId) {
+      throw new AppError(
+        401,
+        "LOGIN_REQUIRED",
+        "Iniciá sesión con la cuenta invitada para aceptar",
+      );
+    }
+    if (input.usuarioId !== participante.usuarioId) {
+      throw new AppError(
+        403,
+        "INVITATION_ACCOUNT_MISMATCH",
+        "La invitación pertenece a otra cuenta",
+      );
+    }
+  } else {
+    const n = textoNoVacio(input.nombre);
+    const a = textoNoVacio(input.apellido);
+    if (!n || !a) {
+      throw validationError("Campos requeridos: nombre y apellido");
+    }
+    nombre = n;
+    apellido = a;
+  }
+
+  const resultado = await deps.invitaciones.consumirYActivar({
+    invitacionId: invitacion.id,
+    participanteId: participante.id,
+    ...(nombre !== undefined ? { nombre, apellido } : {}),
+  });
+  if (!resultado.invitacionConsumida || !resultado.participanteActivado) {
+    throw invalida();
+  }
+
+  emitJoinPending(sala.id, {
+    ...participante,
+    estado: EstadoParticipante.PENDIENTE,
+    nombre: nombre ?? participante.nombre,
+    apellido: apellido ?? participante.apellido,
+  });
+
+  return {
+    participanteId: participante.id,
+    estado: EstadoParticipante.PENDIENTE,
+    salaId: sala.id,
+    salaCodigo: sala.codigo,
+    accessToken: signParticipantToken({
+      participanteId: participante.id,
+      salaId: sala.id,
+      rol: participante.rol as RoomRole,
+    }),
   };
 }

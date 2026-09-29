@@ -6,6 +6,7 @@ import { PrismaParticipanteRepository } from "../repositories/participante.repos
 import { PrismaSalaRepository } from "../repositories/sala.repository.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
 import {
+  aceptarInvitacion,
   invitar,
   previewInvitacion,
   type InvitacionDeps,
@@ -54,4 +55,26 @@ export async function getInvitacion(
 ): Promise<void> {
   const data = await previewInvitacion(deps, req.params.token);
   res.status(200).json({ data });
+}
+
+// ─── POST /invitaciones/:token/aceptar — aceptar (INVITADO → PENDIENTE) ──
+
+/**
+ * Sesión opcional (optionalVerifyToken): obligatoria solo si la invitación es
+ * de una cuenta registrada. Body: { nombre, apellido } para invitados sin
+ * cuenta; cualquier otro campo (p. ej. email) se ignora. Responde con la misma
+ * forma que POST /salas/:code/join (accessToken guest incluido).
+ */
+export async function aceptarInvitacionHandler(
+  req: Request<{ token: string }, unknown, { nombre?: unknown; apellido?: unknown }>,
+  res: Response,
+): Promise<void> {
+  const result = await aceptarInvitacion(deps, {
+    token: req.params.token,
+    usuarioId: req.user?.sub ?? null,
+    nombre: req.body?.nombre,
+    apellido: req.body?.apellido,
+  });
+
+  res.status(200).json(result);
 }
