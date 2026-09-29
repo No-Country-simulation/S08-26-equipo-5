@@ -44,6 +44,7 @@ vi.mock("@prisma/client", () => ({
     $transaction: vi.fn(),
   })),
   EstadoParticipante: {
+    INVITADO: "INVITADO",
     PENDIENTE: "PENDIENTE",
     APROBADO: "APROBADO",
     RECHAZADO: "RECHAZADO",

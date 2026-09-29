@@ -71,8 +71,9 @@ export interface SalaDetalle {
 
 export interface ParticipanteInfo {
   id: string;
-  nombre: string;
-  apellido: string;
+  // null mientras el participante es INVITADO y no completó sus datos.
+  nombre: string | null;
+  apellido: string | null;
   email: string;
   rol: RoomRole;
   estado: string;
@@ -134,7 +135,7 @@ export interface JoinSalaBody {
 
 export interface JoinSalaResponse {
   participanteId: string;
-  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO";
+  estado: "INVITADO" | "PENDIENTE" | "APROBADO" | "RECHAZADO";
   salaId: string;
   /** Guest JWT. Solo presente si el participante ya está aprobado. */
   accessToken?: string;

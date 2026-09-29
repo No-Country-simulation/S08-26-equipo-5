@@ -66,6 +66,16 @@ export interface IParticipanteRepository {
         estado: EstadoParticipante,
         fechaIngreso: Date | null
     ): Promise<number>;
+    /**
+     * Promueve INVITADO → PENDIENTE con update condicional (WHERE estado =
+     * INVITADO). Devuelve las filas afectadas: 0 = ya no era INVITADO (carrera
+     * perdida) y el caller debe releer. Solo escribe nombre/apellido si se
+     * pasan, para no pisar los datos que ya tenga la fila.
+     */
+    activarInvitado(
+        participanteId: string,
+        datos?: { nombre?: string; apellido?: string }
+    ): Promise<number>;
     findAprobadosBySala(salaId: string): Promise<Pick<Participante, "id" | "nombre" | "estado">[]>;
 }
 
@@ -176,6 +186,21 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
         const result = await this.prisma.participante.updateMany({
             where: { id: participanteId, estado: EstadoParticipante.PENDIENTE },
             data: { estado, fechaIngreso },
+        });
+        return result.count;
+    }
+
+    async activarInvitado(
+        participanteId: string,
+        datos?: { nombre?: string; apellido?: string }
+    ) {
+        const result = await this.prisma.participante.updateMany({
+            where: { id: participanteId, estado: EstadoParticipante.INVITADO },
+            data: {
+                estado: EstadoParticipante.PENDIENTE,
+                ...(datos?.nombre !== undefined ? { nombre: datos.nombre } : {}),
+                ...(datos?.apellido !== undefined ? { apellido: datos.apellido } : {}),
+            },
         });
         return result.count;
     }

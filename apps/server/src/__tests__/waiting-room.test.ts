@@ -16,6 +16,7 @@ vi.mock("@prisma/client", () => ({
   PrismaClient: vi.fn().mockImplementation(() => ({})),
   RolParticipante: { HOST: "HOST", PARTICIPANTE: "PARTICIPANTE" },
   EstadoParticipante: {
+    INVITADO: "INVITADO",
     PENDIENTE: "PENDIENTE",
     APROBADO: "APROBADO",
     RECHAZADO: "RECHAZADO",
