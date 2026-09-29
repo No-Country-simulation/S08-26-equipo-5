@@ -11,9 +11,15 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 - Dónde: `rooms.controller.ts` arma `enlace` como `{FRONTEND_URL}/sala/{codigo}`. No existe la ruta `apps/web/app/**/sala`.
 - Efecto: si un host copia y comparte el campo `enlace` fuera de la app (ej. por WhatsApp), ese link da 404. Dentro de la app ya no es un bloqueante porque el flujo de creación/unión (PR #82) navega directo a `/waiting-room?code=` y `/room?code=`, sin usar ese campo.
 - API relacionada: `GET /api/v1/salas/{codigo}` sí responde 200.
+- Nota (branch `feature/join-flow-stream-token`): el backend mantiene el enlace `/sala/{codigo}` (según lo acordado en la PR); el frontend es quien debe agregar esa ruta.
 
-## BUG-02 — El frontend pide un join HTTP que el backend no tiene
+## BUG-02 — El frontend pide un join HTTP que el backend no tiene — RESUELTO
 
+- Casos: QA-09, QA-10, QA-11
+- Severidad: alta
+- Estado: resuelto en `feature/join-flow-stream-token`. El backend ahora expone `POST /salas/:code/join` (HTTP, además del contrato Socket.IO existente): acepta invitados anónimos o logueados, crea/reusa el `Participante` en `PENDIENTE` y devuelve `accessToken` (guest JWT) cuando corresponde. Ver `docs/JOIN-FLOW.md`.
+- Pendiente en el frontend: `salas-api.ts` debe pegarle a esta ruta nueva y, con el `accessToken` recibido, conectar el socket de `/reuniones` para recibir `join:approved`/`join:rejected` (el servidor autosuscribe al socket que trae ese guest JWT).
+- Dónde (histórico): `apps/web/app/lib/salas-api.ts` `requestSalaJoin` hacía `POST /salas/{code}/join`, ruta que no estaba en `rooms.routes.ts`. El contrato Socket.IO (`join:request`, `participant:approve`, `participant:reject`) sigue vigente y cubierto por `api_waiting.http`.
 - Estado: **corregido** (PR #82, "integrate authentication, room access and realtime meetings"). Re-verificado en vivo: el waiting room ahora emite `join:request` por Socket.IO y el host recibe la solicitud en tiempo real, sin 404.
 
 ## BUG-03 — Crear sala desde el frontend no envía JWT
@@ -56,11 +62,11 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 - Efecto: un id mal formado (typo, id de otra entidad, etc.) se reporta como error de servidor en vez de un 400/404 claro. Es probable que el mismo patrón afecte a otras rutas `:id` de `rooms.controller.ts` (`PUT/DELETE /salas/:id`, `GET /salas/:id/participantes`) ya que comparten el mismo estilo de acceso a Prisma sin validar formato antes — no se verificaron todas en este ciclo.
 - Fix sugerido: validar `id` con una regex/`zod` de UUID antes de la consulta y devolver 400 si no matchea, o envolver el `findUnique` y mapear el error de Prisma (`P2023` - malformed ID) a 404.
 
-## BUG-08 — `join:request` (Socket.IO) no valida el payload
+## BUG-08 — `join:request` (Socket.IO) no valida el payload — RESUELTO
 
-- Casos: suite `.http` `api_waiting.http` #7
+- Casos: suite `.http` `api_waiting.http` #13
 - Severidad: baja
-- Estado: **abierto** (encontrado en S2-QA2, 2026-09-25).
+- Estado: resuelto en `feature/join-flow-stream-token` (`eee4209`): `waitingRoom.service.ts` valida nombre/apellido/email y el socket recibe `error` con `code: "VALIDATION_ERROR"`. El caso #13 de `api_waiting.http` quedó como regresión. Encontrado en S2-QA2, 2026-09-25.
 - Dónde: `apps/server/src/realtime/waitingRoom.handlers.ts`, handler de `join:request` usa `payload.nombre/apellido/email` sin validar que existan.
 - Efecto: se puede crear un participante `PENDIENTE` sin nombre/apellido/email (o con valores `undefined`), sin que el cliente reciba ningún error. El host vería una solicitud con datos vacíos en el panel de "Solicitudes de ingreso".
 - Fix sugerido: validar el payload (por ejemplo con `zod`) al inicio del handler y emitir un `error` con `code: "VALIDATION_ERROR"` si faltan campos, igual que ya se hace para los demás códigos de error de este namespace.

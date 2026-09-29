@@ -248,12 +248,6 @@ export const openApiSpec = {
           },
         },
       },
-      GenerateTokenResponse: {
-        type: "object",
-        properties: {
-          token: { type: "string" },
-        },
-      },
       TransferHostBody: {
         type: "object",
         required: ["nuevoHostId"],
@@ -612,19 +606,23 @@ export const openApiSpec = {
         },
       },
     },
-    "/rooms/{id}/token": {
+    "/rooms/{salaId}/token": {
       post: {
-        tags: ["Legacy"],
-        summary: "Generar token de GetStream (legacy)",
+        tags: ["Salas"],
+        deprecated: true,
+        summary: "[DEPRECATED] Alias legacy de POST /salas/{salaId}/stream-token",
         description:
-          "**Body ignorado.** Antes (pre-S3-08) aceptaba `userId`/`role`/`callCid` en el body, " +
-          "lo que permitía a cualquiera pedirse un token con rol `HOST`. Ahora el `userId` se " +
-          "toma del JWT (`req.user.sub`) y el `role` se lee de la fila `Participante` en DB. " +
-          "El usuario debe ser participante con `estado = APROBADO` de la sala.",
-        operationId: "legacy_generate_token",
+          "Mantenido solo por compatibilidad con clientes viejos (apps/web sigue " +
+          "llamando a este path). Delega en la misma lógica segura que " +
+          "/salas/{salaId}/stream-token vía el middleware `authParticipante`: el " +
+          "rol y el usuario siempre salen de la DB/JWT, cualquier campo del body " +
+          "(userId, role, callCid) se ignora. Usar el endpoint nuevo en " +
+          "integraciones nuevas. El param de ruta se llama `salaId` (no `id`) a " +
+          "propósito, porque `authParticipante` lee `req.params.salaId`.",
+        operationId: "rooms_generate_token_legacy",
         security: [{ bearerAuth: [] }],
         parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "salaId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         ],
         requestBody: {
           required: false,
@@ -636,13 +634,28 @@ export const openApiSpec = {
         },
         responses: {
           200: {
-            description: "Token generado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/GenerateTokenResponse" } } },
+            description: "Token de GetStream",
+            content: {
+              "application/json": {
+                schema: { type: "object" },
+                example: {
+                  apiKey: "gs-api-key",
+                  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  userId: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
+                  user: { id: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d", name: "Ana Pérez" },
+                  rol: "HOST",
+                  callType: "default",
+                  callId: "abc-123",
+                  callCid: "default:abc-123",
+                  sala: { id: "sala-id", codigo: "ABCD1234", nombre: "Daily Backend", estado: "ACTIVA" },
+                  expiresAt: "2026-09-25T19:00:00.000Z",
+                },
+              },
+            },
           },
-          401: { description: "Sin token, sin claim `sub`, expirado o firma inválida", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          403: { description: "El usuario no es participante aprobado de la sala (PENDIENTE/RECHAZADO)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          409: { description: "Sala no sincronizada con GetStream", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "No sos participante de la sala, o no estás aprobado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "Sala cancelada, finalizada o no sincronizada con GetStream", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },

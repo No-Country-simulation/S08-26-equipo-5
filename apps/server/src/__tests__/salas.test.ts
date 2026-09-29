@@ -11,6 +11,12 @@ vi.mock("../config/env.js", () => ({
     jwtExpiresIn: "15m",
     refreshTokenTtlDays: 7,
     bcryptSaltRounds: 12,
+    frontendUrl: "http://localhost:3000",
+    getstreamApiKey: "test-stream-key",
+    getstreamApiSecret: "test-stream-secret",
+    streamTokenTtlSeconds: 3600,
+    participantTokenTtlSeconds: 7200,
+    webhookSignatureRequired: false,
   },
 }));
 
@@ -21,6 +27,7 @@ const {
   mockUsuarioFindUnique,
   mockParticipanteCreate,
   mockParticipanteFindUnique,
+  mockParticipanteFindMany,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockSalaCreate: vi.fn(),
@@ -28,6 +35,7 @@ const {
   mockUsuarioFindUnique: vi.fn(),
   mockParticipanteCreate: vi.fn(),
   mockParticipanteFindUnique: vi.fn(),
+  mockParticipanteFindMany: vi.fn(),
   mockTransaction: vi.fn(),
 }));
 
@@ -43,6 +51,7 @@ vi.mock("@prisma/client", () => ({
     participante: {
       create: mockParticipanteCreate,
       findUnique: mockParticipanteFindUnique,
+      findMany: mockParticipanteFindMany,
     },
     $transaction: mockTransaction,
   })),
@@ -54,15 +63,16 @@ vi.mock("@prisma/client", () => ({
 }));
 
 // ─── Mock stream.service ──────────────────────────────────
-const { mockCreateRoom, mockGenerateToken } = vi.hoisted(() => ({
+const { mockCreateRoom, mockIssueCallAccess } = vi.hoisted(() => ({
   mockCreateRoom: vi.fn(),
-  mockGenerateToken: vi.fn(),
+  mockIssueCallAccess: vi.fn(),
 }));
 
 vi.mock("../services/stream.service.js", () => ({
   createRoom: (...args: unknown[]) => mockCreateRoom(...args),
-  generateToken: (...args: unknown[]) => mockGenerateToken(...args),
+  issueCallAccess: (...args: unknown[]) => mockIssueCallAccess(...args),
   resetStreamClient: vi.fn(),
+  DEFAULT_CALL_TYPE: "default",
 }));
 
 // ─── Imports después de los mocks ──────────────────────────
@@ -105,7 +115,11 @@ describe("S2-01 — Salas API", () => {
     };
 
     beforeEach(() => {
-      mockCreateRoom.mockResolvedValue({ streamRoomId: mockStreamRoomId });
+      mockCreateRoom.mockResolvedValue({
+        streamRoomId: mockStreamRoomId,
+        callType: "default",
+        callId: "abc-123",
+      });
       mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<any>) => {
         const tx = {
           sala: { create: vi.fn().mockResolvedValue(mockSala) },
@@ -129,6 +143,11 @@ describe("S2-01 — Salas API", () => {
         nombre: "Reunión Q4",
         enlace: expect.stringContaining("/sala/"),
         streamRoomId: mockStreamRoomId,
+        stream: {
+          callType: "default",
+          callId: "abc-123",
+          callCid: mockStreamRoomId,
+        },
       });
       expect(mockCreateRoom).toHaveBeenCalledWith("Reunión Q4", mockUserId);
     });
@@ -276,13 +295,19 @@ describe("S2-01 — Salas API", () => {
       mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
         const uid = where.salaId_usuarioId.usuarioId;
         if (uid === hostId) {
-          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01") };
         }
-        return { salaId, usuarioId: targetId, rol: "PARTICIPANTE", estado: "APROBADO" };
+        return {
+          salaId,
+          usuarioId: targetId,
+          rol: "PARTICIPANTE",
+          estado: "APROBADO",
+          fechaIngreso: new Date("2026-01-02"),
+        };
       });
     });
 
-    it("200 — HOST transfiere el rol a otro participante", async () => {
+    it("200 — HOST transfiere el rol a otro participante (ya APROBADO: no pisa fechaIngreso)", async () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
@@ -303,7 +328,46 @@ describe("S2-01 — Salas API", () => {
       expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(1);
       expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
         where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
-        data: { rol: "HOST" },
+        data: {
+          rol: "HOST",
+          estado: "APROBADO",
+          fechaIngreso: new Date("2026-01-02"),
+        },
+      });
+    });
+
+    // Regresión: transferHost podía promover a HOST a un participante
+    // PENDIENTE sin cambiar su estado. authParticipante exige APROBADO para
+    // stream-token, así que el nuevo host quedaba sin poder pedir su token
+    // de video (403 JOIN_NOT_APPROVED) — un HOST no puede estar pendiente.
+    it("200 — promueve a un participante PENDIENTE y lo deja APROBADO con fechaIngreso", async () => {
+      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
+        const uid = where.salaId_usuarioId.usuarioId;
+        if (uid === hostId) {
+          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01") };
+        }
+        return {
+          salaId,
+          usuarioId: targetId,
+          rol: "PARTICIPANTE",
+          estado: "PENDIENTE",
+          fechaIngreso: null,
+        };
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetId });
+
+      expect(res.status).toBe(200);
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
+        where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
+        data: {
+          rol: "HOST",
+          estado: "APROBADO",
+          fechaIngreso: expect.any(Date),
+        },
       });
     });
 
@@ -383,61 +447,23 @@ describe("S2-01 — Salas API", () => {
     });
   });
 
-  // ─── POST /api/v1/rooms/:id/token (legacy) ──────────────
-  describe("POST /api/v1/rooms/:id/token", () => {
-    const mockToken = "eyJhbGciOiJIUzI1NiIs.mock";
-    const tokenUserId = "user-uuid-token";
-    const mockSala = {
-      id: "sala-uuid-123",
-      streamRoomId: "default:abc-123",
-    };
+  // Cobertura de POST /api/v1/rooms/:id/token (alias legacy de
+  // stream-token) vive en rooms.test.ts, no acá: duplicarla con el mock
+  // viejo de generateToken quedó obsoleto tras el alias vía authParticipante.
 
-    beforeEach(() => {
-      mockGenerateToken.mockReturnValue(mockToken);
-    });
-
-    it("200 — Generar token exitosamente con JWT y rol de DB", async () => {
-      mockSalaFindUnique.mockResolvedValue(mockSala);
-      mockParticipanteFindUnique.mockResolvedValue({
-        id: "part-1",
-        salaId: mockSala.id,
-        usuarioId: tokenUserId,
-        rol: "HOST",
-        estado: "APROBADO",
-      });
+  // ─── Regresión: orden de rutas ──────────────────────────
+  describe("GET /api/v1/salas/mis-participaciones", () => {
+    it("no cae en la ruta paramétrica /salas/:code", async () => {
+      mockParticipanteFindMany.mockResolvedValue([]);
 
       const res = await request(app)
-        .post("/api/v1/rooms/sala-uuid-123/token")
-        .set("Authorization", `Bearer ${createToken(tokenUserId, "user@test.com")}`)
-        .send({ userId: "user-789", role: "HOST" });
+        .get("/api/v1/salas/mis-participaciones")
+        .set("Authorization", `Bearer ${createToken("user-1", "u@test.com")}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.token).toBe(mockToken);
-      expect(mockGenerateToken).toHaveBeenCalledWith(
-        tokenUserId,
-        "HOST",
-        "default:abc-123"
-      );
-    });
-
-    it("401 — Sin token de autenticación no obtiene token GetStream", async () => {
-      const res = await request(app)
-        .post("/api/v1/rooms/sala-uuid-123/token")
-        .send({ userId: "user-789", role: "HOST" });
-
-      expect(res.status).toBe(401);
-      expect(mockGenerateToken).not.toHaveBeenCalled();
-    });
-
-    it("404 — Sala no existe", async () => {
-      mockSalaFindUnique.mockResolvedValue(null);
-
-      const res = await request(app)
-        .post("/api/v1/rooms/999/token")
-        .set("Authorization", `Bearer ${createToken(tokenUserId, "user@test.com")}`)
-        .send({ userId: "user-789", role: "HOST" });
-
-      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ salas: [] });
+      // Si matcheara /salas/:code buscaría una sala con ese "código"
+      expect(mockSalaFindUnique).not.toHaveBeenCalled();
     });
   });
 });

@@ -46,6 +46,16 @@ jobs:
           cache: npm
           cache-dependency-path: apps/server/package-lock.json
 
+      - name: Check required secrets
+        run: |
+          missing=""
+          [ -z "${{ secrets.GETSTREAM_API_KEY }}" ] && missing="$missing GETSTREAM_API_KEY"
+          [ -z "${{ secrets.GETSTREAM_API_SECRET }}" ] && missing="$missing GETSTREAM_API_SECRET"
+          if [ -n "$missing" ]; then
+            echo "::error::Faltan secrets del repo: $missing — la suite .http necesita GetStream real, sin esto POST /salas falla con un 500 generico dificil de diagnosticar (ver BUG-09 en docs/bugs.md)."
+            exit 1
+          fi
+
       - name: Install dependencies
         working-directory: apps/server
         run: npm ci
