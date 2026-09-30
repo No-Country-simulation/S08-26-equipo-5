@@ -21,8 +21,8 @@ function parseBool(name: string, value: string | undefined): boolean | null {
   );
 }
 
-// Entero positivo estricto: undefined/"" → default; cualquier otra cosa que no
-// sea un entero > 0 revienta al boot en vez de caer silenciosamente a un valor.
+// Entero positivo con default. Vacío/undefined → default; cualquier otra cosa
+// que no sea entero > 0 revienta al boot (fail-closed, como parseBool).
 function parsePositiveInt(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined || value === "") return fallback;
   const n = Number(value);

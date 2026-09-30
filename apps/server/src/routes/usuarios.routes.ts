@@ -1,9 +1,9 @@
 import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
 import multer from "multer";
 import { env } from "../config/env.js";
 import { UsuariosController } from "../controllers/usuarios.controller.js";
+import { createLimiter } from "../middlewares/rateLimit.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
 import { UsuarioFotoService } from "../services/usuarioFoto.service.js";
@@ -13,7 +13,7 @@ import { AppError } from "../utils/AppError.js";
 export interface UsuariosRouterDeps {
   service: UsuarioFotoService;
   maxBytes: number;
-  /** Máximo de operaciones de foto por IP cada 15 minutos. */
+  /** Máximo de operaciones de foto por usuario cada 15 minutos. */
   rateLimitMax: number;
 }
 
@@ -27,15 +27,8 @@ export function createUsuariosRouter({ service, maxBytes, rateLimitMax }: Usuari
     limits: { fileSize: maxBytes, files: 1, fields: 0, parts: 2 },
   }).single("foto");
 
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: rateLimitMax,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-    message: {
-      error: { code: "RATE_LIMITED", message: "Demasiados intentos, probá de nuevo más tarde" },
-    },
-  });
+  // Clave por usuario (va detrás de verifyToken); 429 con formato AppError.
+  const limiter = createLimiter({ max: rateLimitMax, skip: false });
 
   // 503 antes de procesar el multipart: sin proveedor no tiene sentido bufferear el archivo.
   const requireUploads = (_req: Request, _res: Response, next: NextFunction) => {

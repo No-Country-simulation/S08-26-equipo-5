@@ -120,7 +120,20 @@ describe("PUT /usuarios/me/foto", () => {
     const hit = () => request(app).put("/api/v1/usuarios/me/foto").set(auth).attach("foto", JPEG, "a.jpg");
     expect((await hit()).status).toBe(200);
     expect((await hit()).status).toBe(200);
-    expect((await hit()).status).toBe(429);
+    const limited = await hit();
+    expect(limited.status).toBe(429);
+    // mismo formato de error que el resto de la API (AppError -> errorMiddleware)
+    expect(limited.body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("el límite es por usuario, no por IP compartida", async () => {
+    const { app } = build({ rateLimit: 1 });
+    const otro = { Authorization: `Bearer ${jwt.sign({ sub: "u2", email: "b@t.com" }, "test-jwt-secret")}` };
+    const hit = (h: Record<string, string>) =>
+      request(app).put("/api/v1/usuarios/me/foto").set(h).attach("foto", JPEG, "a.jpg");
+    expect((await hit(auth)).status).toBe(200);
+    expect((await hit(auth)).status).toBe(429);
+    expect((await hit(otro)).status).toBe(200);
   });
 });
 
