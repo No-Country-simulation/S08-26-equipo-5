@@ -27,6 +27,7 @@ const {
   mockUsuarioFindUnique,
   mockParticipanteCreate,
   mockParticipanteFindUnique,
+  mockParticipanteFindFirst,
   mockParticipanteFindMany,
   mockTransaction,
 } = vi.hoisted(() => ({
@@ -35,6 +36,7 @@ const {
   mockUsuarioFindUnique: vi.fn(),
   mockParticipanteCreate: vi.fn(),
   mockParticipanteFindUnique: vi.fn(),
+  mockParticipanteFindFirst: vi.fn(),
   mockParticipanteFindMany: vi.fn(),
   mockTransaction: vi.fn(),
 }));
@@ -51,6 +53,7 @@ vi.mock("@prisma/client", () => ({
     participante: {
       create: mockParticipanteCreate,
       findUnique: mockParticipanteFindUnique,
+      findFirst: mockParticipanteFindFirst,
       findMany: mockParticipanteFindMany,
     },
     $transaction: mockTransaction,
@@ -63,14 +66,16 @@ vi.mock("@prisma/client", () => ({
 }));
 
 // ─── Mock stream.service ──────────────────────────────────
-const { mockCreateRoom, mockIssueCallAccess } = vi.hoisted(() => ({
+const { mockCreateRoom, mockIssueCallAccess, mockAddCallMember } = vi.hoisted(() => ({
   mockCreateRoom: vi.fn(),
   mockIssueCallAccess: vi.fn(),
+  mockAddCallMember: vi.fn(),
 }));
 
 vi.mock("../services/stream.service.js", () => ({
   createRoom: (...args: unknown[]) => mockCreateRoom(...args),
   issueCallAccess: (...args: unknown[]) => mockIssueCallAccess(...args),
+  addCallMember: (...args: unknown[]) => mockAddCallMember(...args),
   resetStreamClient: vi.fn(),
   DEFAULT_CALL_TYPE: "default",
 }));
@@ -272,10 +277,18 @@ describe("S2-01 — Salas API", () => {
   describe("POST /api/v1/salas/:id/transfer-host", () => {
     const salaId = "sala-uuid-777";
     const hostId = "user-host-1";
+    const hostParticipantId = "participant-host-1";
     const targetId = "user-target-2";
+    const targetParticipantId = "participant-target-2";
     const hostToken = createToken(hostId, "host@test.com");
 
-    const mockSala = { id: salaId, codigo: "TRAN1234", nombre: "Sala Transfer" };
+    const mockSala = {
+      id: salaId,
+      codigo: "TRAN1234",
+      nombre: "Sala Transfer",
+      streamCallType: "default",
+      streamCallId: "stream-call-1",
+    };
     let mockTxParticipanteUpdate: ReturnType<typeof vi.fn>;
     let mockTxParticipanteUpdateMany: ReturnType<typeof vi.fn>;
 
@@ -295,14 +308,45 @@ describe("S2-01 — Salas API", () => {
       mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
         const uid = where.salaId_usuarioId.usuarioId;
         if (uid === hostId) {
-          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01") };
+          return {
+            id: hostParticipantId,
+            salaId,
+            usuarioId: hostId,
+            rol: "HOST",
+            estado: "APROBADO",
+            fechaIngreso: new Date("2026-01-01"),
+          };
+        }
+        return null;
+      });
+      mockParticipanteFindFirst.mockImplementation(async ({ where }: any) => {
+        if (where.id === hostParticipantId && where.salaId === salaId) {
+          return {
+            id: hostParticipantId,
+            salaId,
+            usuarioId: hostId,
+            rol: "HOST",
+            estado: "APROBADO",
+            fechaIngreso: new Date("2026-01-01"),
+          };
+        }
+        if (where.id === targetParticipantId && where.salaId === salaId) {
+          return {
+            id: targetParticipantId,
+            salaId,
+            usuarioId: targetId,
+            rol: "PARTICIPANTE",
+            estado: "APROBADO",
+            fechaIngreso: new Date("2026-01-02"),
+          };
         }
         return {
+          id: where.id,
           salaId,
-          usuarioId: targetId,
+          usuarioId: null,
           rol: "PARTICIPANTE",
           estado: "APROBADO",
-          fechaIngreso: new Date("2026-01-02"),
+          fechaIngreso: null,
         };
       });
     });
@@ -311,7 +355,7 @@ describe("S2-01 — Salas API", () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: targetId });
+        .send({ nuevoHostId: targetParticipantId });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
@@ -327,13 +371,27 @@ describe("S2-01 — Salas API", () => {
       });
       expect(mockTxParticipanteUpdate).toHaveBeenCalledTimes(1);
       expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
-        where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
+        where: { id: targetParticipantId },
         data: {
           rol: "HOST",
           estado: "APROBADO",
           fechaIngreso: new Date("2026-01-02"),
         },
       });
+      expect(mockAddCallMember).toHaveBeenNthCalledWith(
+        1,
+        "default",
+        "stream-call-1",
+        targetParticipantId,
+        "admin",
+      );
+      expect(mockAddCallMember).toHaveBeenNthCalledWith(
+        2,
+        "default",
+        "stream-call-1",
+        hostParticipantId,
+        "user",
+      );
     });
 
     // Regresión: transferHost podía promover a HOST a un participante
@@ -341,28 +399,23 @@ describe("S2-01 — Salas API", () => {
     // stream-token, así que el nuevo host quedaba sin poder pedir su token
     // de video (403 JOIN_NOT_APPROVED) — un HOST no puede estar pendiente.
     it("200 — promueve a un participante PENDIENTE y lo deja APROBADO con fechaIngreso", async () => {
-      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
-        const uid = where.salaId_usuarioId.usuarioId;
-        if (uid === hostId) {
-          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01") };
-        }
-        return {
-          salaId,
-          usuarioId: targetId,
-          rol: "PARTICIPANTE",
-          estado: "PENDIENTE",
-          fechaIngreso: null,
-        };
+      mockParticipanteFindFirst.mockResolvedValue({
+        id: targetParticipantId,
+        salaId,
+        usuarioId: targetId,
+        rol: "PARTICIPANTE",
+        estado: "PENDIENTE",
+        fechaIngreso: null,
       });
 
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: targetId });
+        .send({ nuevoHostId: targetParticipantId });
 
       expect(res.status).toBe(200);
       expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
-        where: { salaId_usuarioId: { salaId, usuarioId: targetId } },
+        where: { id: targetParticipantId },
         data: {
           rol: "HOST",
           estado: "APROBADO",
@@ -378,7 +431,7 @@ describe("S2-01 — Salas API", () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: targetId });
+        .send({ nuevoHostId: targetParticipantId });
 
       expect(res.status).toBe(403);
       expect(res.body.error).toContain("Solo el HOST puede transferir el rol");
@@ -400,7 +453,7 @@ describe("S2-01 — Salas API", () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: targetId });
+        .send({ nuevoHostId: targetParticipantId });
 
       expect(res.status).toBe(403);
       expect(res.body.error).toContain("Solo el HOST puede transferir el rol");
@@ -408,18 +461,12 @@ describe("S2-01 — Salas API", () => {
     });
 
     it("404 — Target no es participante de la sala y no se ejecuta transacción", async () => {
-      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
-        const uid = where.salaId_usuarioId.usuarioId;
-        if (uid === hostId) {
-          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
-        }
-        return null;
-      });
+      mockParticipanteFindFirst.mockResolvedValue(null);
 
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: "user-no-existe" });
+        .send({ nuevoHostId: "participant-no-existe" });
 
       expect(res.status).toBe(404);
       expect(res.body.error).toContain("participante de la sala");
@@ -430,7 +477,7 @@ describe("S2-01 — Salas API", () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: hostId });
+        .send({ nuevoHostId: hostParticipantId });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("ti mismo");

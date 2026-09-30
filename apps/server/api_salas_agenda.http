@@ -437,6 +437,21 @@ client.test("auth/me del host 200", function() {
 });
 %}
 
+### 31b. GET participantes -> captura hostParticipantId para transfer-host
+GET {{host}}/salas/{{salaTransferId}}/participantes
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("captura participante HOST de la sala", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  const hostParticipant = response.body.participantes.find(function(p) {
+    return p.rol === "HOST";
+  });
+  client.assert(!!hostParticipant, "no se encontró el participante HOST");
+  client.global.set("hostParticipantId", hostParticipant.id);
+});
+%}
+
 ### 32. POST transfer-host sin token -> 401
 POST {{host}}/salas/{{salaTransferId}}/transfer-host
 Content-Type: application/json
@@ -470,7 +485,7 @@ Content-Type: application/json
 Authorization: Bearer {{accessToken}}
 
 {
-  "nuevoHostId": "{{hostUserId}}"
+  "nuevoHostId": "{{hostParticipantId}}"
 }
 
 > {%

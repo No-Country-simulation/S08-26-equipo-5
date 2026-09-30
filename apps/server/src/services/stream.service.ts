@@ -101,6 +101,7 @@ export async function upsertStreamUser(user: {
   id: string;
   name?: string | null;
   role?: string;
+  isRegistered?: boolean;
 }): Promise<void> {
   const client = initStreamClient();
 
@@ -110,6 +111,7 @@ export async function upsertStreamUser(user: {
         id: user.id,
         name: user.name ?? undefined,
         role: user.role ?? "user",
+        custom: { registered: user.isRegistered ?? false },
       },
     ]);
   } catch (error) {
@@ -189,11 +191,16 @@ export async function issueCallAccess(params: {
   role: RoomRole;
   callType: string;
   callId: string;
+  isRegistered?: boolean;
 }): Promise<IssuedStreamToken & { callCid: string }> {
   const streamRole = toStreamRole(params.role);
   const callCid = buildCallCid(params.callType, params.callId);
 
-  await upsertStreamUser({ id: params.userId, name: params.name });
+  await upsertStreamUser({ 
+    id: params.userId, 
+    name: params.name,
+    isRegistered: params.isRegistered
+  });
   await addCallMember(params.callType, params.callId, params.userId, streamRole);
 
   const { token, expiresAt } = generateToken(params.userId, params.role, callCid);

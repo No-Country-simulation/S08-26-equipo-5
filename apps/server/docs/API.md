@@ -208,14 +208,20 @@ Cancela una sala (cambia estado a CANCELADA). Solo el HOST puede cancelar.
 
 ### POST /salas/:id/transfer-host — Transferir rol HOST
 
-Transfiere el rol de HOST a otro participante de la sala. Solo el HOST actual puede transferir. El caller queda como PARTICIPANTE y el target pasa a HOST (se preserva el `estado` de ambos). Cualquier participante existente califica (PENDIENTE o APROBADO).
+Transfiere el rol de HOST a otro participante de la sala. Solo el HOST actual puede transferir. El caller queda como PARTICIPANTE y el target pasa a HOST (se preserva el `estado` de ambos).
+
+> ⚠️ **Contrato de `nuevoHostId` cambiado (2026-09-30):** ya **no** es el `usuarioId`, es el
+> `Participante.id` de la sala — el mismo valor que usa GetStream como `userId` dentro de la
+> llamada. Además ahora **solo califican participantes con cuenta registrada** (`usuarioId != null`);
+> un invitado sin cuenta no puede ser HOST. La sincronización de roles en GetStream (ver abajo)
+> depende de este cambio.
 
 **Auth:** JWT requerido
 
 **Request body:**
 ```json
 {
-  "nuevoHostId": "uuid-del-usuario"
+  "nuevoHostId": "participante-id (no usuarioId)"
 }
 ```
 
@@ -228,10 +234,37 @@ Transfiere el rol de HOST a otro participante de la sala. Solo el HOST actual pu
 }
 ```
 
+**Efecto en GetStream:** además de actualizar la DB, sincroniza los roles en la llamada real vía
+API secret (`addCallMember`): el nuevo host queda con rol `admin` en GetStream (puede finalizar/
+expulsar) y el anterior pasa a `user`. Sin esto, el nuevo host quedaría "HOST" solo en la DB pero
+sin permisos reales en la videollamada.
+
 **Errores:**
 - 400 — `nuevoHostId` ausente o auto-transferencia
 - 403 — Solo el HOST puede transferir el rol
-- 404 — Sala no encontrada / nuevo host no es participante de la sala
+- 404 — Sala no encontrada / el target no es participante de la sala o no tiene cuenta registrada
+
+---
+
+### POST /salas/:id/finalizar — Finalizar sala explícitamente
+
+Cambia el estado de la sala a `FINALIZADA` y emite `room:ended` por el namespace `/reuniones`
+(ver sección Realtime) para redirigir a los clientes conectados, sin depender del webhook de
+GetStream. Pensado como fallback cuando el webhook no llega — típicamente en desarrollo local,
+donde el server no tiene una URL pública a la que GetStream le pueda pegar. Solo el HOST puede
+finalizar. Idempotente: si la sala ya estaba `FINALIZADA`, responde 200 igual.
+
+**Auth:** JWT requerido
+
+**Response 200:**
+```json
+{ "message": "Sala finalizada exitosamente" }
+```
+
+**Errores:**
+- 401 — No autenticado
+- 403 — Solo el HOST puede finalizar la sala
+- 404 — Sala no encontrada
 
 ---
 
@@ -313,6 +346,7 @@ Resumen de eventos:
 | `join:approved` | S→participante | `{ participanteId, accessToken, expiresAt, sala, streamCallId (deprecado), stream: { callType, callId, callCid } }` | |
 | `join:rejected` | S→participante | `{ sala, streamCallId: null }` | |
 | `room:state` | S→sala y host | `{ salaId, estado, participantes }` | |
+| `room:ended` | S→sala | `{ salaId, estado: "FINALIZADA", fechaFin }` | Emitido por `POST /salas/:id/finalizar` (fallback explícito cuando no llega el webhook de GetStream). Los clientes deben usarlo para redirigir fuera de la sala. |
 | `error` | S→C | `{ code, message }` | `UNAUTHORIZED`, `HOST_ONLY`, `FORBIDDEN`, `NOT_FOUND`, `ROOM_NOT_FOUND`, `VALIDATION_ERROR`, `PARTICIPANT_STATE_CONFLICT`, `INTERNAL_SERVER_ERROR` |
 
 ### Estado de medios en vivo (S3-09)
@@ -390,6 +424,7 @@ en `apps/server/.env.example` (ver changelog).
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-09-30 | PR #101 (Ezequiel): agregado `POST /salas/:id/finalizar` (fallback explícito al webhook de GetStream) y evento `room:ended`. **Cambio de contrato en `transfer-host`:** `nuevoHostId` pasó de ser `usuarioId` a ser `Participante.id` (el `userId` que usa GetStream), y ahora solo califican participantes con cuenta registrada; se agregó sincronización de roles en GetStream (`addCallMember`) para que el nuevo host tenga permisos reales en la llamada, no solo en la DB. Doc actualizada acá porque el PR no tocó Swagger/API.md — quedaba desalineada con el código. |
 | 2026-09-29 | S3-API: agregado `POST /salas/:id/transfer-host` a Swagger (faltaba por completo) y corregido el body de `POST /rooms/:id/token` (ya no exige/documenta `userId`/`role`/`callCid`, el controller los ignora desde S3-08). Corregido `apps/server/.env.example`: `WEBHOOK_SIGNATURE_REQUIRED` es la variable real que lee el código, no `WEBHOOK_VERIFY_SIGNATURE`. Casos `.http` #30-#37 (`transfer-host` + `rooms/:id/token`) agregados a `api_salas_agenda.http`: 39/39 OK contra `localhost` (misma DB que Render); contra Render se encontró y documentó **BUG-09** (`POST /salas` → 500, bloquea la corrida completa contra ese entorno). |
 | 2026-09-28 | S3-09: agregada sección "Realtime — Socket.IO" con el contrato de join-flow (PR #85, ver `docs/JOIN-FLOW.md`) y de estado de medios en vivo (`room:enter`/`participant:state`/`participant:connection`). Corregida la nota de HMAC de webhooks (S3-08 la exige por defecto) y el endpoint legacy `/rooms/:id/token` (alias de `stream-token`, no del viejo contrato con body). |
 | 2026-09-24 | Contrato OpenAPI `1.0.1`. Suite `.http` con aserciones (auth, salas, waiting room) y colección Hoppscotch alineada a las rutas vigentes. |

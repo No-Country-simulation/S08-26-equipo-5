@@ -252,7 +252,15 @@ export const openApiSpec = {
         type: "object",
         required: ["nuevoHostId"],
         properties: {
-          nuevoHostId: { type: "string", format: "uuid", description: "usuarioId del participante que va a pasar a HOST" },
+          nuevoHostId: {
+            type: "string",
+            format: "uuid",
+            description:
+              "Participante.id (NO usuarioId) del participante que va a pasar a HOST. " +
+              "Coincide con el userId que usa GetStream para identificar participantes " +
+              "en la llamada. El target debe ser participante de la sala Y tener cuenta " +
+              "registrada (usuarioId != null) — participantes invitados no pueden ser HOST.",
+          },
         },
       },
       TransferHostResponse: {
@@ -261,6 +269,12 @@ export const openApiSpec = {
           message: { type: "string", example: "Rol de HOST transferido exitosamente" },
           host: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
           previousHost: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
+        },
+      },
+      FinalizarSalaResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string", example: "Sala finalizada exitosamente" },
         },
       },
       HealthResponse: {
@@ -584,7 +598,10 @@ export const openApiSpec = {
           "Solo el HOST actual puede transferir. El caller queda `PARTICIPANTE` y el " +
           "target pasa a `HOST` (se preserva el `estado` de ambos). Transacción con " +
           "guard anti-TOCTOU (`updateMany` condicional): dos transfers concurrentes " +
-          "solo dejan ganar a uno.",
+          "solo dejan ganar a uno. El target debe tener cuenta registrada (participante " +
+          "invitado sin `usuarioId` no califica). Sincroniza los roles en GetStream " +
+          "(server-side, vía API secret) para que el nuevo host pueda finalizar/expulsar " +
+          "en la llamada real, no solo en la DB.",
         operationId: "salas_transfer_host",
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -602,7 +619,33 @@ export const openApiSpec = {
           400: { description: "`nuevoHostId` ausente o auto-transferencia", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           403: { description: "Solo el HOST puede transferir el rol", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          404: { description: "Sala no encontrada / el nuevo host no es participante de la sala", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada / el nuevo host no es participante de la sala o no tiene cuenta registrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/salas/{id}/finalizar": {
+      post: {
+        tags: ["Salas"],
+        summary: "Finalizar sala explícitamente (solo HOST)",
+        description:
+          "Cambia el estado de la sala a `FINALIZADA` y emite `room:ended` por el " +
+          "namespace `/reuniones` para que los clientes conectados sean redirigidos, " +
+          "sin esperar el webhook de GetStream. Pensado como fallback explícito para " +
+          "cuando el webhook no llega (ej. desarrollo local sin URL pública). " +
+          "Idempotente: si la sala ya estaba `FINALIZADA`, responde 200 igual.",
+        operationId: "salas_finalizar",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          200: {
+            description: "Sala finalizada (o ya lo estaba)",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/FinalizarSalaResponse" } } },
+          },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "Solo el HOST puede finalizar la sala", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },

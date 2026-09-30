@@ -15,6 +15,7 @@ declare global {
       participante?: {
         participanteId: string;
         salaId: string;
+        usuarioId: string | null;
         rol: RoomRole;
         estado: string;
         nombre: string | null;

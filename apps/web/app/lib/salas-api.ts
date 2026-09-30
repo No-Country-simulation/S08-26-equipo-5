@@ -87,10 +87,11 @@ export type ParticipantesResponse = {
 import { getAccessToken } from "./auth";
 
 type ApiErrorResponse = {
-  error?: {
+  error?: string | {
     code?: string;
     message?: string;
   };
+  message?: string;
 };
 
 export class ApiRequestError extends Error {
@@ -131,10 +132,11 @@ async function requestWithToken<T>(
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-    throw new ApiRequestError(
-      body?.error?.message ?? "No se pudo completar la solicitud.",
-      body?.error?.code,
-    );
+    const errorMessage = typeof body?.error === 'string' 
+      ? body.error 
+      : body?.error?.message ?? body?.message ?? "No se pudo completar la solicitud.";
+    const errorCode = typeof body?.error === 'object' ? body?.error?.code : undefined;
+    throw new ApiRequestError(errorMessage, errorCode);
   }
 
   return response.json() as Promise<T>;
@@ -152,10 +154,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-    throw new ApiRequestError(
-      body?.error?.message ?? "No se pudo completar la solicitud.",
-      body?.error?.code,
-    );
+    const errorMessage = typeof body?.error === 'string' 
+      ? body.error 
+      : body?.error?.message ?? body?.message ?? "No se pudo completar la solicitud.";
+    const errorCode = typeof body?.error === 'object' ? body?.error?.code : undefined;
+    throw new ApiRequestError(errorMessage, errorCode);
   }
 
   return response.json() as Promise<T>;
@@ -163,12 +166,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function createSala(input: {
   nombre: string;
+  resumen?: string;
   fechaInicio: string;
 }): Promise<Sala> {
   return request<CreateRoomResponse>("/salas", {
     method: "POST",
     body: JSON.stringify({
       nombre: input.nombre,
+      resumen: input.resumen,
       fechaInicio: input.fechaInicio,
     }),
   }).then((room) => ({
@@ -179,6 +184,16 @@ export function createSala(input: {
     estado: "PROGRAMADA",
     streamRoomId: room.streamRoomId,
   }));
+}
+
+export function updateSala(
+  salaId: string,
+  input: { nombre: string; resumen: string | null },
+): Promise<{ id: string; nombre: string; resumen: string | null; fechaInicio: string }> {
+  return request(`/salas/${encodeURIComponent(salaId)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getSalaByCode(code: string): Promise<Sala> {
@@ -238,3 +253,23 @@ export function getStreamToken(
     { method: "POST" },
   );
 }
+
+export function transferHost(
+  salaId: string,
+  nuevoHostId: string,
+): Promise<{ message: string; host: { usuarioId: string }; previousHost: { usuarioId: string } }> {
+  return request(
+    `/salas/${encodeURIComponent(salaId)}/transfer-host`,
+    {
+      method: "POST",
+      body: JSON.stringify({ nuevoHostId }),
+    },
+  );
+}
+
+export function finalizarSala(salaId: string): Promise<{ message: string }> {
+  return request(`/salas/${encodeURIComponent(salaId)}/finalizar`, {
+    method: "POST",
+  });
+}
+
