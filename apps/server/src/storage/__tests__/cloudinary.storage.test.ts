@@ -71,6 +71,9 @@ describe("CloudinaryStorage.uploadAvatar", () => {
     expect(mockUploadStream).toHaveBeenCalledWith(
       expect.objectContaining({
         public_id: "meetflow/avatars/u1",
+        // Cuentas con carpetas dinámicas: la carpeta del Media Library la
+        // define asset_folder, no el prefijo del public_id.
+        asset_folder: "meetflow/avatars",
         resource_type: "image",
         transformation: [
           { width: 256, height: 256, crop: "fill", gravity: "face" },

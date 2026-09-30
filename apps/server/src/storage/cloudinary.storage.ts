@@ -35,7 +35,10 @@ export class CloudinaryStorage implements ImageStorage {
     return new Promise<UploadedImage>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
+          // Carpetas fijas: la carpeta sale del prefijo del public_id.
+          // Carpetas dinámicas (cuentas nuevas): sale de asset_folder.
           public_id: publicId,
+          asset_folder: this.folder,
           resource_type: "image",
           // 256x256 centrado en la cara; el original nunca se sirve.
           transformation: [
