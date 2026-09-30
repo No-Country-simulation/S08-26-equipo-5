@@ -17,6 +17,7 @@ describe("config/env — invitaciones y mail", () => {
     // así un .env local no contamina los defaults bajo prueba.
     vi.stubEnv("MAIL_PROVIDER", "");
     vi.stubEnv("RESEND_API_KEY", "");
+    vi.stubEnv("BREVO_API_KEY", "");
     vi.stubEnv("MAIL_FROM", "");
     vi.stubEnv("INVITACION_TTL_HORAS", "");
     vi.stubEnv("RATE_LIMIT_INVITE_MAX", "");
@@ -66,6 +67,22 @@ describe("config/env — invitaciones y mail", () => {
     vi.stubEnv("MAIL_PROVIDER", "resend");
 
     await expect(cargarEnv()).rejects.toThrow(/RESEND_API_KEY/);
+  });
+
+  it("brevo con API key expone provider y clave", async () => {
+    vi.stubEnv("MAIL_PROVIDER", "brevo");
+    vi.stubEnv("BREVO_API_KEY", "xkeysib-123");
+
+    const env = await cargarEnv();
+
+    expect(env.mailProvider).toBe("brevo");
+    expect(env.brevoApiKey).toBe("xkeysib-123");
+  });
+
+  it("brevo sin BREVO_API_KEY falla al arrancar", async () => {
+    vi.stubEnv("MAIL_PROVIDER", "brevo");
+
+    await expect(cargarEnv()).rejects.toThrow(/BREVO_API_KEY/);
   });
 
   it("un MAIL_PROVIDER desconocido falla al arrancar", async () => {

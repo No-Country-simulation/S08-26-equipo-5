@@ -32,7 +32,7 @@ function parsePositiveInt(name: string, value: string | undefined, fallback: num
   return n;
 }
 
-const MAIL_PROVIDERS = ["console", "resend"] as const;
+const MAIL_PROVIDERS = ["console", "resend", "brevo"] as const;
 export type MailProvider = (typeof MAIL_PROVIDERS)[number];
 
 function parseMailProvider(value: string | undefined): MailProvider {
@@ -45,9 +45,11 @@ function parseMailProvider(value: string | undefined): MailProvider {
 
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const mailProvider = parseMailProvider(process.env.MAIL_PROVIDER);
-// La key solo es obligatoria si el provider es resend (fail-closed al boot).
+// Cada key solo es obligatoria si el provider correspondiente está activo (fail-closed al boot).
 const resendApiKey =
   mailProvider === "resend" ? requireEnv("RESEND_API_KEY") : undefined;
+const brevoApiKey =
+  mailProvider === "brevo" ? requireEnv("BREVO_API_KEY") : undefined;
 
 export const env = {
   port: Number(process.env.PORT ?? 4000),
@@ -63,9 +65,10 @@ export const env = {
   // ── Invitaciones por correo ──────────────────────────────
   // Vigencia del enlace de invitación (horas).
   invitacionTtlHoras: parsePositiveInt("INVITACION_TTL_HORAS", process.env.INVITACION_TTL_HORAS, 72),
-  // "console" (default, sin red: loguea el enlace) | "resend" (HTTPS a Resend).
+  // "console" (default, sin red: loguea el enlace) | "resend" | "brevo" (HTTPS al proveedor).
   mailProvider,
   resendApiKey,
+  brevoApiKey,
   mailFrom: process.env.MAIL_FROM || "onboarding@resend.dev",
   // Límites por ventana de 15 min (configurables para evitar 429 en tests).
   rateLimitInviteMax: parsePositiveInt("RATE_LIMIT_INVITE_MAX", process.env.RATE_LIMIT_INVITE_MAX, 30),

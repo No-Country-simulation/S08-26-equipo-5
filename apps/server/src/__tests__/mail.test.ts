@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConsoleMailer } from "../mail/console.mailer.js";
+import { BrevoMailer, parseSender } from "../mail/brevo.mailer.js";
 import { ResendMailer } from "../mail/resend.mailer.js";
 
 const mensaje = {
@@ -85,6 +86,76 @@ describe("ResendMailer", () => {
     const caida = new Error("ECONNRESET");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(caida));
     const mailer = new ResendMailer({ apiKey: "re_key", from: "a@b.com" });
+
+    await expect(mailer.send(mensaje)).rejects.toBe(caida);
+  });
+});
+
+describe("parseSender", () => {
+  it("separa nombre y email de 'Nombre <email>'", () => {
+    expect(parseSender("MeetFlow <hola@meetflow.app>")).toEqual({
+      name: "MeetFlow",
+      email: "hola@meetflow.app",
+    });
+  });
+
+  it("acepta comillas en el nombre", () => {
+    expect(parseSender('"Mauro V" <m@gmail.com>')).toEqual({ name: "Mauro V", email: "m@gmail.com" });
+  });
+
+  it("un email plano no lleva name", () => {
+    expect(parseSender("  hola@meetflow.app ")).toEqual({ email: "hola@meetflow.app" });
+  });
+});
+
+describe("BrevoMailer", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hace POST a la API de Brevo con api-key, sender, to, subject, htmlContent y textContent", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('{"messageId":"<1@x>"}', { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const mailer = new BrevoMailer({ apiKey: "xkeysib-secret", from: "MeetFlow <hola@gmail.com>" });
+
+    await mailer.send(mensaje);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.brevo.com/v3/smtp/email");
+    expect(init.method).toBe("POST");
+    expect(init.headers["api-key"]).toBe("xkeysib-secret");
+    expect(init.headers["content-type"]).toBe("application/json");
+    expect(init.headers.accept).toBe("application/json");
+    expect(JSON.parse(init.body)).toEqual({
+      sender: { name: "MeetFlow", email: "hola@gmail.com" },
+      to: [{ email: "ana@test.com" }],
+      subject: "Te invitaron a una sala",
+      textContent: mensaje.text,
+      htmlContent: mensaje.html,
+    });
+  });
+
+  it("una respuesta no-2xx lanza error sin filtrar api key, cuerpo ni token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("key xkeysib-secret TOKEN-SECRETO", { status: 401 })),
+    );
+    const mailer = new BrevoMailer({ apiKey: "xkeysib-secret", from: "a@b.com" });
+
+    const error = await mailer.send(mensaje).catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/401/);
+    expect((error as Error).message).not.toContain("xkeysib-secret");
+    expect((error as Error).message).not.toContain("TOKEN-SECRETO");
+  });
+
+  it("propaga el error de red de fetch", async () => {
+    const caida = new Error("ECONNRESET");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(caida));
+    const mailer = new BrevoMailer({ apiKey: "k", from: "a@b.com" });
 
     await expect(mailer.send(mensaje)).rejects.toBe(caida);
   });
