@@ -1,6 +1,31 @@
 import { v2 as cloudinary } from "cloudinary";
 import type { ImageStorage, UploadedImage } from "./image-storage.port.js";
 
+/**
+ * Error sanitizado del SDK. El mensaje original de Cloudinary puede incluir la
+ * api_key o fragmentos de la config, así que NO se propaga: solo se conserva
+ * el nombre y el http_code para diagnóstico.
+ */
+export class CloudinaryError extends Error {
+  constructor(
+    message: string,
+    public readonly http_code?: number,
+    name?: string,
+  ) {
+    super(message);
+    this.name = name || "CloudinaryError";
+  }
+}
+
+function sanitize(error: unknown, message: string): CloudinaryError {
+  const e = (error ?? {}) as { http_code?: unknown; name?: unknown };
+  return new CloudinaryError(
+    message,
+    typeof e.http_code === "number" ? e.http_code : undefined,
+    typeof e.name === "string" ? e.name : undefined,
+  );
+}
+
 export class CloudinaryStorage implements ImageStorage {
   constructor(private readonly folder: string) {}
 
@@ -20,10 +45,10 @@ export class CloudinaryStorage implements ImageStorage {
         },
         (error, result) => {
           if (error) {
-            return reject(new Error(error.message ?? "Cloudinary upload failed"));
+            return reject(sanitize(error, "Cloudinary upload failed"));
           }
           if (!result?.secure_url) {
-            return reject(new Error("Cloudinary no devolvió secure_url"));
+            return reject(new CloudinaryError("Cloudinary no devolvió secure_url"));
           }
           // secure_url incluye /v<version>/: el cache del CDN se rompe solo.
           resolve({ url: result.secure_url, publicId: result.public_id ?? publicId });
@@ -34,10 +59,14 @@ export class CloudinaryStorage implements ImageStorage {
   }
 
   async delete(publicId: string): Promise<void> {
-    await cloudinary.uploader.destroy(publicId, {
-      resource_type: "image",
-      invalidate: true,
-    });
+    try {
+      await cloudinary.uploader.destroy(publicId, {
+        resource_type: "image",
+        invalidate: true,
+      });
+    } catch (error) {
+      throw sanitize(error, "Cloudinary delete failed");
+    }
   }
 }
 

@@ -148,13 +148,19 @@ describe("UsuarioFotoService.setFoto", () => {
 
   it("502 UPLOAD_FAILED si Cloudinary falla, sin tocar la DB; loguea solo el mensaje", async () => {
     const { service, storage, users } = setup();
-    storage.uploadAvatar.mockRejectedValue(new Error("timeout"));
+    storage.uploadAvatar.mockRejectedValue(
+      Object.assign(new Error("Invalid api_key 123456"), { http_code: 401, name: "CloudinaryError" }),
+    );
     expect(await codeOf(service.setFoto("u1", { buffer: JPEG, size: JPEG.length }))).toEqual({
       status: 502,
       code: "UPLOAD_FAILED",
     });
     expect(users.updateFoto).not.toHaveBeenCalled();
-    expect(JSON.stringify((console.error as any).mock.calls)).toContain("timeout");
+    const logged = JSON.stringify((console.error as any).mock.calls);
+    // solo línea genérica + http_code/name: nunca el mensaje crudo (puede traer la api_key)
+    expect(logged).toContain("401");
+    expect(logged).toContain("CloudinaryError");
+    expect(logged).not.toContain("123456");
   });
 
   it("borra best-effort el publicId anterior si es distinto", async () => {
@@ -193,8 +199,9 @@ describe("UsuarioFotoService.removeFoto", () => {
 
   it("si Cloudinary falla, igual limpia la DB", async () => {
     const { service, storage, users } = setup(user({ fotoUrl: "x", fotoPublicId: "a/u1" }));
-    storage.delete.mockRejectedValue(new Error("down"));
+    storage.delete.mockRejectedValue(Object.assign(new Error("secret api_key 999"), { http_code: 503 }));
     await service.removeFoto("u1");
+    expect(JSON.stringify((console.warn as any).mock.calls)).not.toContain("999");
     expect(users.updateFoto).toHaveBeenCalledWith("u1", { fotoUrl: null, fotoPublicId: null });
     expect(console.warn).toHaveBeenCalled();
   });

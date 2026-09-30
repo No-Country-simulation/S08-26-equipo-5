@@ -9,8 +9,16 @@ export interface UploadedFile {
   size: number;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "error desconocido";
+/**
+ * Datos seguros para loguear de un error del proveedor: SOLO name y http_code.
+ * El mensaje crudo puede contener la api_key, así que nunca se loguea.
+ */
+function safeErrorInfo(error: unknown): { name: string; http_code?: number } {
+  const e = (error ?? {}) as { name?: unknown; http_code?: unknown };
+  return {
+    name: typeof e.name === "string" ? e.name : "UnknownError",
+    ...(typeof e.http_code === "number" ? { http_code: e.http_code } : {}),
+  };
 }
 
 export class UsuarioFotoService {
@@ -66,8 +74,7 @@ export class UsuarioFotoService {
       // y cada foto nueva tiene URL propia (no hace falta invalidar el CDN).
       uploaded = await storage.uploadAvatar(file.buffer, { publicId: randomUUID() });
     } catch (error) {
-      // Solo el mensaje: el error del SDK puede arrastrar la config/credenciales.
-      console.error("[avatar] Falló la subida a Cloudinary:", errorMessage(error));
+      console.error("[avatar] Falló la subida a Cloudinary", safeErrorInfo(error));
       throw new AppError(502, "UPLOAD_FAILED", "No se pudo subir la imagen, intentá de nuevo");
     }
 
@@ -115,7 +122,7 @@ export class UsuarioFotoService {
     try {
       await this.storage.delete(publicId);
     } catch (error) {
-      console.warn("[avatar] No se pudo borrar la imagen en Cloudinary:", errorMessage(error));
+      console.warn("[avatar] No se pudo borrar la imagen en Cloudinary", safeErrorInfo(error));
     }
   }
 }

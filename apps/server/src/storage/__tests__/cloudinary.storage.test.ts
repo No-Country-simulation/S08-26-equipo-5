@@ -82,9 +82,14 @@ describe("CloudinaryStorage.uploadAvatar", () => {
   });
 
   it("rechaza si Cloudinary devuelve error", async () => {
-    stubUpload(undefined, { message: "Invalid credentials" });
+    stubUpload(undefined, { message: "Invalid api_key 123456", http_code: 401, name: "Error" });
     const storage = new CloudinaryStorage("f");
-    await expect(storage.uploadAvatar(Buffer.from("x"), { publicId: "u1" })).rejects.toThrow("Invalid credentials");
+    const err = await storage.uploadAvatar(Buffer.from("x"), { publicId: "u1" }).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    // el mensaje crudo del SDK puede traer la api_key: no se propaga
+    expect(err.message).not.toContain("123456");
+    expect(JSON.stringify(err)).not.toContain("123456");
+    expect(err.http_code).toBe(401);
   });
 
   it("rechaza si la respuesta no trae secure_url", async () => {
@@ -102,7 +107,10 @@ describe("CloudinaryStorage.delete", () => {
   });
 
   it("propaga el error del SDK", async () => {
-    mockDestroy.mockRejectedValue(new Error("boom"));
-    await expect(new CloudinaryStorage("f").delete("f/u1")).rejects.toThrow("boom");
+    mockDestroy.mockRejectedValue(Object.assign(new Error("boom api_key=123456"), { http_code: 500 }));
+    const err = await new CloudinaryStorage("f").delete("f/u1").catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).not.toContain("123456");
+    expect(err.http_code).toBe(500);
   });
 });
