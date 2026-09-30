@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:http": "httpyac api_auth.http api_salas_agenda.http api_waiting.http --all --output short",
+    "test:http": "httpyac api_auth.http api_salas_agenda.http api_waiting.http api_usuarios.http --all --output short",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

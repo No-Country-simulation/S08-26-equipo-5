@@ -4,7 +4,7 @@ Base URL: `http://localhost:4000/api/v1`
 
 📖 **Swagger interactivo:** `GET /api/v1/docs` (UI) · `GET /api/v1/docs.json` (spec crudo) — fuente de verdad con schemas y ejemplos, generado desde `src/docs/openapi.ts`.
 
-🧪 **Suite `.http` (REST Client / httpyac), contrato v1.0.1:** `api_auth.http`, `api_salas_agenda.http` y `api_waiting.http`. Cliente gráfico en el repo: `hoppscotch/meetflow-salas-agenda.json`.
+🧪 **Suite `.http` (REST Client / httpyac), contrato v1.0.1:** `api_auth.http`, `api_salas_agenda.http`, `api_waiting.http` y `api_usuarios.http`. Cliente gráfico en el repo: `hoppscotch/meetflow-salas-agenda.json`.
 
 ```bash
 npm run test:http
@@ -288,11 +288,14 @@ Retorna la lista de participantes de una sala.
       "email": "juan@test.com",
       "rol": "HOST",
       "estado": "APROBADO",
-      "fechaIngreso": "2026-09-21T10:00:00.000Z"
+      "fechaIngreso": "2026-09-21T10:00:00.000Z",
+      "fotoUrl": "https://res.cloudinary.com/.../v1759230000/meetflow/avatars/uuid.jpg"
     }
   ]
 }
 ```
+
+`fotoUrl` es la foto de la cuenta vinculada (`null` para invitados sin cuenta o usuarios sin foto). El mismo campo se agrega a cada participante de `GET /salas/:id/detalle`.
 
 ---
 
@@ -342,10 +345,10 @@ Resumen de eventos:
 | `join:subscribe` | C→S | `{ participanteId }` | exige ser dueño del participante (socket conectado con su `accessToken`) |
 | `host:subscribe` | C→S | `{ salaId }` | requiere access token de HOST |
 | `participant:approve` / `participant:reject` | C→S | `{ participanteId }` | update condicional (`WHERE estado = PENDIENTE`); el que pierde la carrera recibe `PARTICIPANT_STATE_CONFLICT` por su ack, no un evento |
-| `join:pending` | S→host | `{ participanteId, nombre, apellido, email, timestamp }` | |
+| `join:pending` | S→host | `{ participanteId, nombre, apellido, email, fotoUrl, timestamp }` | `fotoUrl`: foto de la cuenta vinculada o `null` |
 | `join:approved` | S→participante | `{ participanteId, accessToken, expiresAt, sala, streamCallId (deprecado), stream: { callType, callId, callCid } }` | |
 | `join:rejected` | S→participante | `{ sala, streamCallId: null }` | |
-| `room:state` | S→sala y host | `{ salaId, estado, participantes }` | |
+| `room:state` | S→sala y host | `{ salaId, estado, participantes }` | cada participante: `{ id, nombre, estado, fotoUrl }` (`fotoUrl` null si no tiene) |
 | `room:ended` | S→sala | `{ salaId, estado: "FINALIZADA", fechaFin }` | Emitido por `POST /salas/:id/finalizar` (fallback explícito cuando no llega el webhook de GetStream). Los clientes deben usarlo para redirigir fuera de la sala. |
 | `error` | S→C | `{ code, message }` | `UNAUTHORIZED`, `HOST_ONLY`, `FORBIDDEN`, `NOT_FOUND`, `ROOM_NOT_FOUND`, `VALIDATION_ERROR`, `PARTICIPANT_STATE_CONFLICT`, `INTERNAL_SERVER_ERROR` |
 
@@ -377,11 +380,58 @@ escuchar `participant:state`/`participant:connection` en la room `sala:{id}`.
 
 ### GET /auth/me — Usuario actual
 
+**Response 200:** `{ "id", "nombre", "apellido", "email", "fotoUrl" }` — `fotoUrl` es `null` si el usuario no subió foto.
+
 ### POST /auth/refresh — Renovar token
 
 ### POST /auth/logout — Cerrar sesión
 
 *Ver detalles en el código fuente de auth.controller.ts*
+
+---
+
+## Usuarios — foto de perfil
+
+La imagen pasa por el backend y se guarda en Cloudinary (recorte 256x256 centrado en la cara). Sin `CLOUDINARY_URL` ambos endpoints responden `503 UPLOADS_NOT_CONFIGURED` (el resto del servidor funciona igual).
+
+### PUT /usuarios/me/foto — Subir o reemplazar
+
+**Auth:** JWT requerido · **Content-Type:** `multipart/form-data` con el campo `foto` (JPEG, PNG o WebP; máx. `AVATAR_MAX_BYTES`, 2 MB por defecto). El tipo se valida por magic bytes: el mimetype/extensión que declare el cliente se ignora.
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/usuarios/me/foto \
+  -H "Authorization: Bearer <jwt>" -F "foto=@avatar.jpg"
+```
+
+**Response 200:** `{ "fotoUrl": "https://res.cloudinary.com/<cloud>/image/upload/v<version>/meetflow/avatars/<usuarioId>.jpg" }` — la URL lleva la versión, así que cambia al reemplazar la foto (cache busting).
+
+| Status | `error.code` | Cuándo |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | No se envió archivo o el campo no se llama `foto` ("Se requiere una imagen") |
+| 401 | `UNAUTHORIZED` | Token ausente, inválido o expirado |
+| 413 | `FILE_TOO_LARGE` | Supera `AVATAR_MAX_BYTES` |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | El contenido no es JPEG/PNG/WebP |
+| 429 | `RATE_LIMITED` | Más de `RATE_LIMIT_AVATAR_MAX` (10) operaciones de foto por IP cada 15 min |
+| 502 | `UPLOAD_FAILED` | Falló Cloudinary |
+| 503 | `UPLOADS_NOT_CONFIGURED` | Falta `CLOUDINARY_URL` |
+
+### DELETE /usuarios/me/foto — Quitar
+
+**Auth:** JWT requerido · **Response 204** sin body. Idempotente (204 aunque no hubiera foto). Si el borrado en Cloudinary falla igual se limpia la base (se loguea un warning). Errores: 401, 429, 503 (mismos códigos que arriba).
+
+### Dónde se ve la foto
+
+- `GET /auth/me`, `GET /salas/:id/participantes`, `GET /salas/:id/detalle`, y los eventos `join:pending` / `room:state`: campo `fotoUrl`.
+- GetStream: al pedir el token de la llamada se sincroniza como `image` del usuario (avatar en video y chat). Se actualiza en el próximo `stream-token`.
+
+### Variables de entorno
+
+| Variable | Default | Descripción |
+|---|---|---|
+| `CLOUDINARY_URL` | — (opcional) | `cloudinary://<api_key>:<api_secret>@<cloud_name>`. Contiene el secret: no loguear ni commitear |
+| `CLOUDINARY_FOLDER` | `meetflow/avatars` | Carpeta en Cloudinary |
+| `AVATAR_MAX_BYTES` | `2097152` | Tamaño máximo de la imagen (entero positivo) |
+| `RATE_LIMIT_AVATAR_MAX` | `10` | Operaciones de foto por IP cada 15 min |
 
 ---
 
@@ -424,6 +474,7 @@ en `apps/server/.env.example` (ver changelog).
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-09-30 | Foto de perfil: `PUT`/`DELETE /usuarios/me/foto` (subida vía backend a Cloudinary), `fotoUrl` en `GET /auth/me`, participantes (REST y sockets) y avatar en GetStream. Suite `api_usuarios.http`. |
 | 2026-09-30 | PR #101 (Ezequiel): agregado `POST /salas/:id/finalizar` (fallback explícito al webhook de GetStream) y evento `room:ended`. **Cambio de contrato en `transfer-host`:** `nuevoHostId` pasó de ser `usuarioId` a ser `Participante.id` (el `userId` que usa GetStream), y ahora solo califican participantes con cuenta registrada; se agregó sincronización de roles en GetStream (`addCallMember`) para que el nuevo host tenga permisos reales en la llamada, no solo en la DB. Doc actualizada acá porque el PR no tocó Swagger/API.md — quedaba desalineada con el código. |
 | 2026-09-29 | S3-API: agregado `POST /salas/:id/transfer-host` a Swagger (faltaba por completo) y corregido el body de `POST /rooms/:id/token` (ya no exige/documenta `userId`/`role`/`callCid`, el controller los ignora desde S3-08). Corregido `apps/server/.env.example`: `WEBHOOK_SIGNATURE_REQUIRED` es la variable real que lee el código, no `WEBHOOK_VERIFY_SIGNATURE`. Casos `.http` #30-#37 (`transfer-host` + `rooms/:id/token`) agregados a `api_salas_agenda.http`: 39/39 OK contra `localhost` (misma DB que Render); contra Render se encontró y documentó **BUG-09** (`POST /salas` → 500, bloquea la corrida completa contra ese entorno). |
 | 2026-09-28 | S3-09: agregada sección "Realtime — Socket.IO" con el contrato de join-flow (PR #85, ver `docs/JOIN-FLOW.md`) y de estado de medios en vivo (`room:enter`/`participant:state`/`participant:connection`). Corregida la nota de HMAC de webhooks (S3-08 la exige por defecto) y el endpoint legacy `/rooms/:id/token` (alias de `stream-token`, no del viejo contrato con body). |
