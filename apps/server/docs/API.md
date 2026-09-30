@@ -392,7 +392,7 @@ escuchar `participant:state`/`participant:connection` en la room `sala:{id}`.
 
 ## Usuarios — foto de perfil
 
-La imagen pasa por el backend y se guarda en Cloudinary (recorte 256x256 centrado en la cara). Sin `CLOUDINARY_URL` ambos endpoints responden `503 UPLOADS_NOT_CONFIGURED` (el resto del servidor funciona igual).
+La imagen pasa por el backend y se guarda en Cloudinary (recorte 256x256 centrado en la cara). Sin `CLOUDINARY_URL` solo `PUT` responde `503 UPLOADS_NOT_CONFIGURED`; `DELETE` sigue funcionando (limpia la base y omite el borrado remoto). El resto del servidor funciona igual. Cada subida usa un identificador opaco (UUID) en Cloudinary, sin el id del usuario; la foto anterior se borra tras guardar la nueva.
 
 ### PUT /usuarios/me/foto — Subir o reemplazar
 
@@ -407,22 +407,22 @@ curl -X PUT http://localhost:4000/api/v1/usuarios/me/foto \
 
 | Status | `error.code` | Cuándo |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | No se envió archivo o el campo no se llama `foto` ("Se requiere una imagen") |
+| 400 | `VALIDATION_ERROR` | No se envió archivo, el campo no se llama `foto` ("Se requiere una imagen") o el cuerpo multipart está mal formado (truncado, sin boundary) |
 | 401 | `UNAUTHORIZED` | Token ausente, inválido o expirado |
 | 413 | `FILE_TOO_LARGE` | Supera `AVATAR_MAX_BYTES` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | El contenido no es JPEG/PNG/WebP |
-| 429 | `RATE_LIMITED` | Más de `RATE_LIMIT_AVATAR_MAX` (10) operaciones de foto por IP cada 15 min |
+| 429 | `RATE_LIMITED` | Más de `RATE_LIMIT_AVATAR_MAX` (10) operaciones de foto por usuario cada 15 min |
 | 502 | `UPLOAD_FAILED` | Falló Cloudinary |
 | 503 | `UPLOADS_NOT_CONFIGURED` | Falta `CLOUDINARY_URL` |
 
 ### DELETE /usuarios/me/foto — Quitar
 
-**Auth:** JWT requerido · **Response 204** sin body. Idempotente (204 aunque no hubiera foto). Si el borrado en Cloudinary falla igual se limpia la base (se loguea un warning). Errores: 401, 429, 503 (mismos códigos que arriba).
+**Auth:** JWT requerido · **Response 204** sin body. Idempotente (204 aunque no hubiera foto). Si el borrado en Cloudinary falla igual se limpia la base (se loguea un warning). Funciona también sin `CLOUDINARY_URL` (no hay borrado remoto). Errores: 401, 429 (mismos códigos que arriba); nunca 503.
 
 ### Dónde se ve la foto
 
 - `GET /auth/me`, `GET /salas/:id/participantes`, `GET /salas/:id/detalle`, y los eventos `join:pending` / `room:state`: campo `fotoUrl`.
-- GetStream: al pedir el token de la llamada se sincroniza como `image` del usuario (avatar en video y chat). Se actualiza en el próximo `stream-token`.
+- GetStream: al pedir el token de la llamada se sincroniza como `image` del usuario (avatar en video y chat). La foto nueva (o su baja) se refleja en GetStream recién en el próximo `stream-token` que pida el participante.
 
 ### Variables de entorno
 
@@ -431,7 +431,7 @@ curl -X PUT http://localhost:4000/api/v1/usuarios/me/foto \
 | `CLOUDINARY_URL` | — (opcional) | `cloudinary://<api_key>:<api_secret>@<cloud_name>`. Contiene el secret: no loguear ni commitear |
 | `CLOUDINARY_FOLDER` | `meetflow/avatars` | Carpeta en Cloudinary |
 | `AVATAR_MAX_BYTES` | `2097152` | Tamaño máximo de la imagen (entero positivo) |
-| `RATE_LIMIT_AVATAR_MAX` | `10` | Operaciones de foto por IP cada 15 min |
+| `RATE_LIMIT_AVATAR_MAX` | `10` | Operaciones de foto por usuario cada 15 min |
 
 ---
 

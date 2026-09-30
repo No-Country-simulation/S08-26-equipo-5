@@ -389,7 +389,8 @@ export const openApiSpec = {
           "`multipart/form-data` con el campo `foto`. La imagen se valida por magic bytes " +
           "(JPEG/PNG/WebP), se recorta a 256x256 centrada en la cara y se guarda en Cloudinary. " +
           "Sin `CLOUDINARY_URL` responde 503 `UPLOADS_NOT_CONFIGURED`. Rate limit: " +
-          "`RATE_LIMIT_AVATAR_MAX` (10) cada 15 min por IP.",
+          "`RATE_LIMIT_AVATAR_MAX` (10) cada 15 min por usuario. Cada subida usa un id opaco en Cloudinary; " +
+          "el avatar en GetStream se actualiza en el próximo `stream-token`.",
         operationId: "usuarios_put_foto",
         security: [{ bearerAuth: [] }],
         requestBody: {
@@ -401,7 +402,7 @@ export const openApiSpec = {
             description: "Foto actualizada",
             content: { "application/json": { schema: { $ref: "#/components/schemas/FotoPerfilResponse" } } },
           },
-          400: { description: "`VALIDATION_ERROR`: falta la imagen (campo `foto`)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          400: { description: "`VALIDATION_ERROR`: falta la imagen (campo `foto`) o el multipart está mal formado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           413: { description: "`FILE_TOO_LARGE`: supera `AVATAR_MAX_BYTES`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           415: { description: "`UNSUPPORTED_MEDIA_TYPE`: no es JPEG/PNG/WebP", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
@@ -413,14 +414,13 @@ export const openApiSpec = {
       delete: {
         tags: ["Usuarios"],
         summary: "Quitar la foto de perfil",
-        description: "Idempotente: 204 aunque no hubiera foto. Si falla el borrado en Cloudinary igual se limpia la base (se loguea un warning).",
+        description: "Idempotente: 204 aunque no hubiera foto. Funciona también sin `CLOUDINARY_URL` (limpia la base y omite el borrado remoto). Si falla el borrado en Cloudinary igual se limpia la base (se loguea un warning).",
         operationId: "usuarios_delete_foto",
         security: [{ bearerAuth: [] }],
         responses: {
           204: { description: "Foto eliminada" },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          503: { description: "`UPLOADS_NOT_CONFIGURED`: sin `CLOUDINARY_URL`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },

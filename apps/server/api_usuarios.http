@@ -82,12 +82,12 @@ client.test("put foto sin archivo 503/400", function() {
 });
 %}
 
-### 7. DELETE foto sin foto -> 204 (con Cloudinary) o 503 (sin Cloudinary)
+### 7. DELETE foto sin foto -> 204 (funciona con o sin Cloudinary)
 DELETE {{host}}/usuarios/me/foto
 Authorization: Bearer {{fotoToken}}
 
 > {%
-client.test("delete foto 204/503", function() {
-  client.assert(response.status === 204 || response.status === 503, "status " + response.status);
+client.test("delete foto 204", function() {
+  client.assert(response.status === 204, "status " + response.status);
 });
 %}
