@@ -52,7 +52,10 @@ export function createUsuariosRouter({ service, maxBytes, rateLimitMax }: Usuari
         // Campo equivocado, partes de más, etc.
         return next(new AppError(400, "VALIDATION_ERROR", "Se requiere una imagen"));
       }
-      next(err);
+      // Errores de busboy (no son MulterError): "Unexpected end of form",
+      // "Boundary not found", "Malformed part header"... Con memoryStorage el
+      // único origen posible es un cuerpo multipart mal formado del cliente.
+      next(new AppError(400, "VALIDATION_ERROR", "El cuerpo multipart es inválido"));
     });
   };
 

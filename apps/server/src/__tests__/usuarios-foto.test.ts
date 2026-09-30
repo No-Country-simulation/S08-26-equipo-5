@@ -16,6 +16,13 @@ import type { ImageStorage } from "../storage/image-storage.port.js";
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
 const MAX = 256;
+const MULTIPART_TRUNCADO = [
+  "--XYZ",
+  'Content-Disposition: form-data; name="foto"; filename="a.jpg"',
+  "Content-Type: image/jpeg",
+  "",
+  "abc",
+].join("\r\n");
 const token = jwt.sign({ sub: "u1", email: "a@t.com" }, "test-jwt-secret");
 const auth = { Authorization: `Bearer ${token}` };
 
@@ -83,6 +90,28 @@ describe("PUT /usuarios/me/foto", () => {
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe("FILE_TOO_LARGE");
     expect(storage.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it("400 VALIDATION_ERROR con multipart truncado (Unexpected end of form)", async () => {
+    const { app } = build();
+    const res = await request(app)
+      .put("/api/v1/usuarios/me/foto")
+      .set(auth)
+      .set("Content-Type", "multipart/form-data; boundary=XYZ")
+      .send(MULTIPART_TRUNCADO);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("400 VALIDATION_ERROR con multipart sin boundary", async () => {
+    const { app } = build();
+    const res = await request(app)
+      .put("/api/v1/usuarios/me/foto")
+      .set(auth)
+      .set("Content-Type", "multipart/form-data")
+      .send("basura");
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
   });
 
   it("415 si el archivo dice ser image/jpeg pero no lo es", async () => {
