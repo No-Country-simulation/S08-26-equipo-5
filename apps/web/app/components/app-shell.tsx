@@ -1,83 +1,123 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { LoginModal } from "./login-modal";
 
+const LOGO_URL =
+  "https://res.cloudinary.com/dsiizolgq/image/upload/v1790777798/Imagen_de_ChatGPT_26_sept_2026_20_06_45_1_byfv9h.png";
+
+// Solo las dos secciones del producto. Las rutas de desarrollo
+// (/room, /waiting-room, /demo-sala, /historial) siguen existiendo pero no se enlazan.
 const navigation = [
   { href: "/home", label: "Inicio" },
-  { href: "/waiting-room", label: "Sala de espera" },
-  { href: "/room", label: "Sala" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/agenda", label: "Agenda" },
-  { href: "/historial", label: "Historial" },
-  { href: "/demo-sala", label: "🧪 Demo" },
+  { href: "/agenda", label: "Mis reuniones" },
 ];
+
+const onBlueFocus =
+  "focus-visible:outline-mf-yellow focus-visible:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, user } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
 
+  function openAuth(mode: "login" | "register") {
+    setAuthMode(mode);
+    setLoginOpen(true);
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <Link href="/home" className="text-xl font-bold tracking-tight text-slate-950">
-            MeetFlow
-          </Link>
-          <nav aria-label="Navegación principal" className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-screen flex-col bg-mf-blue text-mf-navy">
+      <header className="mx-auto grid w-full max-w-[1440px] grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-7 md:min-h-[72px] md:grid-cols-[1fr_auto_1fr] md:py-0">
+        <Link
+          href="/home"
+          aria-label="MeetFlow, ir al inicio"
+          className={`justify-self-start rounded-lg ${onBlueFocus}`}
+        >
+          <Image
+            src={LOGO_URL}
+            alt="MeetFlow"
+            width={180}
+            height={60}
+            priority
+            className="h-10 w-auto sm:h-12"
+          />
+        </Link>
+
+        <nav
+          aria-label="Navegación principal"
+          className="order-last col-span-2 flex justify-center md:order-none md:col-span-1"
+        >
+          <ul className="flex items-center gap-2 rounded-2xl bg-mf-nav px-3 py-2 sm:gap-6 sm:px-6">
             {navigation.map((item) => {
               const isActive = pathname === item.href;
-
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                  }`}
-                >
-                  {item.label}
-                </Link>
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`block rounded-lg px-3 py-2 text-sm font-bold transition-colors sm:text-base ${onBlueFocus} ${
+                      isActive
+                        ? "text-mf-yellow underline underline-offset-4"
+                        : "text-white hover:text-mf-yellow"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
               );
             })}
-          </nav>
+          </ul>
+        </nav>
+
+        <div className="flex items-center gap-3 justify-self-end text-sm font-bold">
           {isAuthenticated ? (
-            <button type="button" onClick={logout} className="text-sm font-medium text-slate-600 hover:text-slate-950">Cerrar sesión</button>
-          ) : (
-            <div className="flex gap-3 text-sm font-semibold">
+            <>
+              {user && (
+                <span className="hidden max-w-[10rem] truncate font-normal text-white/80 lg:inline">
+                  {user.nombre}
+                </span>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  setAuthMode("login");
-                  setLoginOpen(true);
-                }}
-                className="text-slate-600 hover:text-slate-950"
+                onClick={logout}
+                className={`rounded-lg border border-white/40 px-3 py-2 text-white transition-colors hover:bg-white/10 ${onBlueFocus}`}
+              >
+                Cerrar sesión
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => openAuth("login")}
+                className={`rounded-lg px-2 py-2 text-white transition-colors hover:text-mf-yellow ${onBlueFocus}`}
               >
                 Iniciar sesión
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setAuthMode("register");
-                  setLoginOpen(true);
-                }}
-                className="text-blue-600 hover:text-blue-700"
+                onClick={() => openAuth("register")}
+                className={`rounded-lg bg-mf-yellow px-3 py-2 text-mf-navy transition-colors hover:brightness-95 ${onBlueFocus}`}
               >
                 Registrarse
               </button>
-            </div>
+            </>
           )}
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-6 py-10">{children}</main>
+
+      <div className="mx-auto flex w-full max-w-[1440px] flex-1 px-2 sm:px-4">
+        <main className="w-full flex-1 rounded-t-3xl bg-mf-light px-4 py-8 sm:px-6 sm:py-10">
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        </main>
+      </div>
+
       <LoginModal
         open={loginOpen}
         initialMode={authMode}
