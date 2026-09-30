@@ -441,7 +441,7 @@ client.test("auth/me del host 200", function() {
 GET {{host}}/salas/{{salaTransferId}}/participantes
 Authorization: Bearer {{accessToken}}
 
->{%
+> {%
 client.test("captura participante HOST de la sala", function() {
   client.assert(response.status === 200, "status " + response.status);
   const hostParticipant = response.body.participantes.find(function(p) {
