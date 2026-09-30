@@ -83,8 +83,8 @@ export class UsuarioFotoService {
   }
 
   async removeFoto(userId: string): Promise<void> {
-    this.assertEnabled();
-
+    // No exige storage: quitar la foto es solo limpiar la DB. Sin Cloudinary
+    // configurado no hay a quién pedirle el borrado remoto (solo PUT da 503).
     const user = await this.users.findById(userId);
     if (!user) {
       throw new AppError(404, "USER_NOT_FOUND", "Usuario no encontrado");
@@ -100,8 +100,12 @@ export class UsuarioFotoService {
   }
 
   private async deleteQuietly(publicId: string): Promise<void> {
+    if (!this.storage) {
+      console.warn("[avatar] Cloudinary no configurado: se omite el borrado remoto de la imagen");
+      return;
+    }
     try {
-      await this.storage?.delete(publicId);
+      await this.storage.delete(publicId);
     } catch (error) {
       console.warn("[avatar] No se pudo borrar la imagen en Cloudinary:", errorMessage(error));
     }

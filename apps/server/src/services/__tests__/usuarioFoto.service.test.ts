@@ -142,9 +142,11 @@ describe("UsuarioFotoService.setFoto", () => {
 });
 
 describe("UsuarioFotoService.removeFoto", () => {
-  it("503 sin storage", async () => {
-    const { service } = setup(user(), false);
-    expect(await codeOf(service.removeFoto("u1"))).toEqual({ status: 503, code: "UPLOADS_NOT_CONFIGURED" });
+  it("sin storage igual limpia la DB, omite el borrado remoto y avisa con un warning", async () => {
+    const { service, users } = setup(user({ fotoUrl: "x", fotoPublicId: "a/u1" }), false);
+    await service.removeFoto("u1");
+    expect(users.updateFoto).toHaveBeenCalledWith("u1", { fotoUrl: null, fotoPublicId: null });
+    expect(console.warn).toHaveBeenCalled();
   });
 
   it("borra en Cloudinary y limpia ambos campos", async () => {

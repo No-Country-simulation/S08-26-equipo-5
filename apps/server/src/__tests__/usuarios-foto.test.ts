@@ -172,11 +172,11 @@ describe("DELETE /usuarios/me/foto", () => {
     expect((await request(app).delete("/api/v1/usuarios/me/foto")).status).toBe(401);
   });
 
-  it("503 sin storage", async () => {
-    const { app } = build({ storage: null });
+  it("204 sin Cloudinary configurado: limpia la DB (solo PUT responde 503)", async () => {
+    const { app, users } = build({ storage: null, stored: { fotoUrl: "x", fotoPublicId: "a/u1" } });
     const res = await request(app).delete("/api/v1/usuarios/me/foto").set(auth);
-    expect(res.status).toBe(503);
-    expect(res.body.error.code).toBe("UPLOADS_NOT_CONFIGURED");
+    expect(res.status).toBe(204);
+    expect(users.updateFoto).toHaveBeenCalledWith("u1", { fotoUrl: null, fotoPublicId: null });
   });
 
   it("204 y limpia los campos", async () => {

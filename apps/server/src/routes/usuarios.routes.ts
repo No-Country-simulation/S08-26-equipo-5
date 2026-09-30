@@ -74,7 +74,6 @@ export function createUsuariosRouter({ service, maxBytes, rateLimitMax }: Usuari
     "/usuarios/me/foto",
     verifyToken,
     limiter,
-    requireUploads,
     controller.removeFoto.bind(controller),
   );
 
