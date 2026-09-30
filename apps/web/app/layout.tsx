@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Arimo, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./lib/auth";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const arimo = Arimo({
+  variable: "--font-arimo",
   subsets: ["latin"],
+  display: "swap",
+  fallback: ["Arial", "sans-serif"],
 });
 
 const geistMono = Geist_Mono({
@@ -22,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${arimo.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col"><AuthProvider>{children}</AuthProvider></body>
     </html>

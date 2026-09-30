@@ -26,7 +26,22 @@
   --ux-color-primary: var(--ux-color-primary-600);
   --ux-color-primary-foreground: #ffffff;
 
-  --ux-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Tokens de marca MeetFlow (meetflow.tokens.json) */
+  --mf-blue: #3d4ed7;
+  --mf-blue-dark: #2f3cb0; /* hover de botones primarios */
+  --mf-nav: #2b3590; /* fondo de la pastilla de navegación */
+  --mf-yellow: #f3e477;
+  --mf-light: #f4f5f8;
+  --mf-navy: #20274f;
+  --mf-coral: #d95763;
+  --mf-muted: #6b7190; /* texto secundario, >= 4.5:1 sobre blanco y --mf-light */
+  --mf-line: #d9dce8;
+  --mf-blue-tint: #e9ebfb;
+  --mf-coral-tint: #fce9eb;
+  --mf-green: #1f7a4d;
+  --mf-green-tint: #e2f4ea;
+
+  --ux-font-sans: var(--font-arimo), Arial, ui-sans-serif, system-ui, sans-serif;
   --ux-font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --ux-space-1: 0.25rem;
   --ux-space-2: 0.5rem;
@@ -62,6 +77,19 @@
   --color-neutral-500: var(--ux-color-neutral-500);
   --color-neutral-700: var(--ux-color-neutral-700);
   --color-neutral-900: var(--ux-color-neutral-900);
+  --color-mf-blue: var(--mf-blue);
+  --color-mf-blue-dark: var(--mf-blue-dark);
+  --color-mf-nav: var(--mf-nav);
+  --color-mf-yellow: var(--mf-yellow);
+  --color-mf-light: var(--mf-light);
+  --color-mf-navy: var(--mf-navy);
+  --color-mf-coral: var(--mf-coral);
+  --color-mf-muted: var(--mf-muted);
+  --color-mf-line: var(--mf-line);
+  --color-mf-blue-tint: var(--mf-blue-tint);
+  --color-mf-coral-tint: var(--mf-coral-tint);
+  --color-mf-green: var(--mf-green);
+  --color-mf-green-tint: var(--mf-green-tint);
   --font-sans: var(--ux-font-sans);
   --font-mono: var(--ux-font-mono);
   --spacing-1: var(--ux-space-1);
@@ -96,6 +124,39 @@
 
 body {
   margin: 0;
+}
+
+/* ── MeetFlow: animación de entrada escalonada (solo CSS) ─────────────────── */
+@keyframes mf-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mf-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.mf-enter {
+  animation: mf-fade-up 0.35s ease-out both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+.mf-skeleton {
+  animation: mf-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-enter,
+  .mf-skeleton {
+    animation: none;
+  }
 }
 
 /* ── GetStream: forzar texto blanco en etiquetas de participante ─────────── */
