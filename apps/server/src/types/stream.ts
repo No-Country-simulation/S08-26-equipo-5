@@ -77,6 +77,8 @@ export interface ParticipanteInfo {
   rol: RoomRole;
   estado: string;
   fechaIngreso: string | null;
+  /** Foto de la cuenta vinculada; null para invitados o sin foto. */
+  fotoUrl: string | null;
 }
 
 export interface CreadorInfo {

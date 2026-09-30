@@ -101,10 +101,22 @@ function dentroDeVentanaDeReingreso(fechaIngreso: Date | null): boolean {
   return Date.now() < vencimiento;
 }
 
-function emitJoinPending(
+async function emitJoinPending(
+  deps: WaitingRoomDeps,
   salaId: string,
   participante: Participante,
-): void {
+): Promise<void> {
+  // Foto de la cuenta vinculada (si la hay). Es decorativa: si la consulta
+  // falla, el host igual debe enterarse de la solicitud.
+  let fotoUrl: string | null = null;
+  if (participante.usuarioId) {
+    try {
+      fotoUrl = (await deps.usuarios.findById(participante.usuarioId))?.fotoUrl ?? null;
+    } catch {
+      fotoUrl = null;
+    }
+  }
+
   getReunionesNamespace()
     ?.to(rooms.salaHost(salaId))
     .emit("join:pending", {
@@ -112,6 +124,7 @@ function emitJoinPending(
       nombre: participante.nombre,
       apellido: participante.apellido,
       email: participante.email,
+      fotoUrl,
       timestamp: new Date().toISOString(),
     });
 }
@@ -304,7 +317,7 @@ export async function requestJoin(
         EstadoParticipante.PENDIENTE,
         null,
       );
-      emitJoinPending(sala.id, reiniciado);
+      await emitJoinPending(deps, sala.id, reiniciado);
       return {
         participanteId: reiniciado.id,
         estado: EstadoParticipante.PENDIENTE,
@@ -318,7 +331,7 @@ export async function requestJoin(
     }
 
     // PENDIENTE: reutilizar y volver a avisar al host (pudo recargar el panel).
-    emitJoinPending(sala.id, existente);
+    await emitJoinPending(deps, sala.id, existente);
     return {
       participanteId: existente.id,
       estado: EstadoParticipante.PENDIENTE,
@@ -340,7 +353,7 @@ export async function requestJoin(
     email: input.email,
   });
 
-  emitJoinPending(sala.id, participante);
+  await emitJoinPending(deps, sala.id, participante);
 
   return {
     participanteId: participante.id,

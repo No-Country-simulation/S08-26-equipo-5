@@ -56,3 +56,27 @@ describe("PrismaParticipanteRepository.createPendiente — P2002", () => {
     ).rejects.toBe(otro);
   });
 });
+
+describe("PrismaParticipanteRepository.findAprobadosBySala — fotoUrl", () => {
+  it("aplana la foto de la cuenta vinculada y usa null para invitados", async () => {
+    const findMany = vitest.fn().mockResolvedValue([
+      { id: "p1", nombre: "Ana", estado: "APROBADO", usuario: { fotoUrl: "https://cdn/v1/ana.jpg" } },
+      { id: "p2", nombre: "Luz", estado: "APROBADO", usuario: { fotoUrl: null } },
+      { id: "p3", nombre: "Invitado", estado: "APROBADO", usuario: null },
+    ]);
+    const repo = new PrismaParticipanteRepository({ participante: { findMany } } as any);
+
+    const out = await repo.findAprobadosBySala("sala-1");
+
+    expect(out).toEqual([
+      { id: "p1", nombre: "Ana", estado: "APROBADO", fotoUrl: "https://cdn/v1/ana.jpg" },
+      { id: "p2", nombre: "Luz", estado: "APROBADO", fotoUrl: null },
+      { id: "p3", nombre: "Invitado", estado: "APROBADO", fotoUrl: null },
+    ]);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ usuario: { select: { fotoUrl: true } } }),
+      }),
+    );
+  });
+});

@@ -34,6 +34,7 @@ import {
 } from "../services/waitingRoom.service.js";
 import { verifyParticipantToken } from "../utils/participantToken.js";
 import { AppError } from "../utils/AppError.js";
+import { setReunionesNamespace } from "../realtime/registry.js";
 
 const SALA_ID = "sala-1";
 const HOST_USER_ID = "host-user-1";
@@ -586,5 +587,112 @@ describe("requestJoin — el HOST entra a su propia sala con otro email", () => 
         email: "concurrente@test.com",
       }),
     ).rejects.toMatchObject({ statusCode: 409, code: "ALREADY_PARTICIPANT" });
+  });
+});
+
+describe("join:pending — fotoUrl del solicitante", () => {
+  function fakeNamespace() {
+    const emit = vitest.fn();
+    const to = vitest.fn().mockReturnValue({ emit });
+    return { nsp: { to } as never, emit, to };
+  }
+
+  it("incluye fotoUrl si el participante está vinculado a una cuenta con foto", async () => {
+    const { nsp, emit } = fakeNamespace();
+    setReunionesNamespace(nsp);
+    try {
+      const deps = makeDeps({
+        createPendiente: vitest.fn().mockResolvedValue({
+          id: "participante-nuevo",
+          salaId: SALA_ID,
+          usuarioId: "user-1",
+          rol: "PARTICIPANTE",
+          estado: "PENDIENTE",
+          nombre: "Ana",
+          apellido: "Pérez",
+          email: "ana@test.com",
+        }),
+      });
+      deps.usuarios.findById.mockResolvedValue({ id: "user-1", fotoUrl: "https://cdn/v1/ana.jpg" });
+
+      await requestJoin(deps, {
+        salaCodigo: "ABCD1234",
+        nombre: "Ana",
+        apellido: "Pérez",
+        email: "ana@test.com",
+        usuarioId: "user-1",
+      });
+
+      expect(emit).toHaveBeenCalledWith(
+        "join:pending",
+        expect.objectContaining({ participanteId: "participante-nuevo", fotoUrl: "https://cdn/v1/ana.jpg" }),
+      );
+    } finally {
+      setReunionesNamespace(null as never);
+    }
+  });
+
+  it("fotoUrl es null para un invitado sin cuenta (y no consulta usuarios)", async () => {
+    const { nsp, emit } = fakeNamespace();
+    setReunionesNamespace(nsp);
+    try {
+      const deps = makeDeps({
+        createPendiente: vitest.fn().mockResolvedValue({
+          id: "participante-invitado",
+          salaId: SALA_ID,
+          usuarioId: null,
+          rol: "PARTICIPANTE",
+          estado: "PENDIENTE",
+          nombre: "Luz",
+          apellido: "G",
+          email: "luz@test.com",
+        }),
+      });
+
+      await requestJoin(deps, {
+        salaCodigo: "ABCD1234",
+        nombre: "Luz",
+        apellido: "G",
+        email: "luz@test.com",
+      });
+
+      expect(deps.usuarios.findById).not.toHaveBeenCalled();
+      expect(emit).toHaveBeenCalledWith("join:pending", expect.objectContaining({ fotoUrl: null }));
+    } finally {
+      setReunionesNamespace(null as never);
+    }
+  });
+
+  it("si falla la consulta de la foto, el join igual avisa al host con fotoUrl null", async () => {
+    const { nsp, emit } = fakeNamespace();
+    setReunionesNamespace(nsp);
+    try {
+      const deps = makeDeps({
+        createPendiente: vitest.fn().mockResolvedValue({
+          id: "p-x",
+          salaId: SALA_ID,
+          usuarioId: "user-1",
+          rol: "PARTICIPANTE",
+          estado: "PENDIENTE",
+          nombre: "Ana",
+          apellido: "P",
+          email: "ana@test.com",
+        }),
+      });
+      deps.usuarios.findById.mockRejectedValue(new Error("db down"));
+
+      const result = await requestJoin(deps, {
+        salaCodigo: "ABCD1234",
+        nombre: "Ana",
+        apellido: "P",
+        email: "ana@test.com",
+        usuarioId: "user-1",
+      });
+
+      expect(result.estado).toBe("PENDIENTE");
+      expect(emit).toHaveBeenCalledWith("join:pending", expect.objectContaining({ fotoUrl: null }));
+    } finally {
+      setReunionesNamespace(null as never);
+    }
   });
 });
