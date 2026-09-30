@@ -232,6 +232,8 @@ function RoomContent() {
               }}
               callType={streamConnection.callType}
               callId={streamConnection.callId}
+              salaId={salaId}
+              isHost={isHost}
               onLeave={(error) => {
                 if (error) {
                   setConnectionError(error.message);

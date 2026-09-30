@@ -17,6 +17,8 @@ function formatMeetingDate(value: string) {
 
 export default function HomePage() {
   const [createMode, setCreateMode] = useState<CreateMode>("instant");
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [meetingDescription, setMeetingDescription] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [createdSala, setCreatedSala] = useState<Sala | null>(null);
@@ -36,6 +38,10 @@ export default function HomePage() {
       setError("Elegí una fecha y hora para programar la reunión.");
       return;
     }
+    if (!meetingTitle.trim()) {
+      setError("Ingresá un título para la reunión.");
+      return;
+    }
     if (isReady && !isAuthenticated) {
       setLoginOpen(true);
       return;
@@ -44,7 +50,8 @@ export default function HomePage() {
     setLoading("create");
     try {
       const sala = await createSala({
-        nombre: createMode === "instant" ? "Reunión instantánea" : "Reunión programada",
+        nombre: meetingTitle.trim(),
+        resumen: meetingDescription.trim() || undefined,
         fechaInicio:
           createMode === "instant"
             ? new Date().toISOString()
@@ -136,6 +143,30 @@ export default function HomePage() {
               </label>
             ))}
           </div>
+
+          <label className="mt-5 block text-sm font-medium text-slate-700">
+            Título
+            <input
+              type="text"
+              value={meetingTitle}
+              onChange={(event) => setMeetingTitle(event.target.value)}
+              placeholder="Ej. Planificación del equipo"
+              maxLength={150}
+              className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950 placeholder:text-slate-400"
+              required
+            />
+          </label>
+
+          <label className="mt-4 block text-sm font-medium text-slate-700">
+            Descripción <span className="font-normal text-slate-500">(opcional)</span>
+            <textarea
+              value={meetingDescription}
+              onChange={(event) => setMeetingDescription(event.target.value)}
+              placeholder="¿De qué se va a tratar la reunión?"
+              rows={3}
+              className="mt-2 block w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950 placeholder:text-slate-400"
+            />
+          </label>
 
           {createMode === "scheduled" && (
             <label className="mt-5 block text-sm font-medium text-slate-700">
