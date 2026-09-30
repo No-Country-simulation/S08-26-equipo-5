@@ -7,7 +7,11 @@ import { createSala, getSalaByCode } from "../lib/salas-api";
 import { parseJoinInput } from "../lib/join-code";
 import { HomeHero } from "../components/home-hero";
 import { HomeHeader } from "../components/home-header";
-import { ScheduleMeetingModal, type ScheduleMeetingInput } from "../components/schedule-meeting-modal";
+import {
+  ScheduleMeetingModal,
+  type ImmediateMeetingInput,
+  type ScheduleMeetingInput,
+} from "../components/schedule-meeting-modal";
 import { AuthModal } from "../components/auth-modal";
 
 function roomHostHref(sala: {
@@ -22,18 +26,16 @@ export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated, isReady } = useAuth();
 
-  const [startingNow, setStartingNow] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
-
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [meetingMode, setMeetingMode] = useState<"now" | "schedule" | null>(null);
+  const [meetingSubmitting, setMeetingSubmitting] = useState(false);
+  const [meetingError, setMeetingError] = useState<string | null>(null);
 
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
   const [loginOpen, setLoginOpen] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   function requireAuth(action: () => void) {
     if (isReady && !isAuthenticated) {
@@ -44,57 +46,59 @@ export default function HomePage() {
     action();
   }
 
-  async function doStartNow() {
-    if (startingNow) return;
-    setStartError(null);
-    setStartingNow(true);
-    try {
-      const sala = await createSala({
-        nombre: "Reunión instantánea",
-        fechaInicio: new Date().toISOString(),
-      });
-      router.push(roomHostHref(sala));
-    } catch (requestError) {
-      setStartError(
-        requestError instanceof Error
-          ? requestError.message
-          : "No se pudo iniciar la reunión.",
-      );
-      setStartingNow(false);
-    }
+  function rememberOpener() {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
 
-  async function doScheduleSubmit(input: ScheduleMeetingInput) {
-    setScheduleError(null);
-    setScheduleSubmitting(true);
+  function openMeeting(mode: "now" | "schedule") {
+    setMeetingError(null);
+    setMeetingMode(mode);
+  }
+
+  async function handleMeetingSubmit(input: ScheduleMeetingInput | ImmediateMeetingInput) {
+    if (meetingSubmitting || !meetingMode) return;
+    setMeetingError(null);
+    setMeetingSubmitting(true);
     try {
-      const sala = await createSala(input);
-      setScheduleOpen(false);
+      const sala = await createSala(
+        meetingMode === "schedule" && "fechaInicio" in input
+          ? {
+              nombre: input.nombre,
+              resumen: input.resumen,
+              fechaInicio: input.fechaInicio,
+            }
+          : {
+              nombre: input.nombre,
+              resumen: input.resumen,
+            },
+      );
+      setMeetingMode(null);
       router.push(roomHostHref(sala));
-    } catch (requestError) {
-      setScheduleError(
-        requestError instanceof Error
-          ? requestError.message
-          : "No se pudo programar la reunión.",
+    } catch {
+      setMeetingError(
+        meetingMode === "now"
+          ? "No se pudo crear la reunión. Intentá de nuevo."
+          : "No se pudo programar la reunión. Intentá de nuevo.",
       );
     } finally {
-      setScheduleSubmitting(false);
+      setMeetingSubmitting(false);
     }
   }
 
   function handleStartNow() {
-    requireAuth(doStartNow);
+    rememberOpener();
+    requireAuth(() => openMeeting("now"));
   }
 
   function handleOpenSchedule() {
-    requireAuth(() => {
-      setScheduleError(null);
-      setScheduleOpen(true);
-    });
+    rememberOpener();
+    requireAuth(() => openMeeting("schedule"));
   }
 
-  function handleScheduleSubmit(input: ScheduleMeetingInput) {
-    requireAuth(() => doScheduleSubmit(input));
+  function handleMeetingRequest(input: ScheduleMeetingInput | ImmediateMeetingInput) {
+    requireAuth(() => {
+      void handleMeetingSubmit(input);
+    });
   }
 
   async function handleJoin(rawInput: string) {
@@ -139,28 +143,21 @@ export default function HomePage() {
       <HomeHero
         header={<HomeHeader />}
         onStartNow={handleStartNow}
-        startingNow={startingNow}
+        startingNow={meetingSubmitting && meetingMode === "now"}
         onOpenSchedule={handleOpenSchedule}
         onJoin={handleJoin}
         joining={joining}
         joinError={joinError}
       />
 
-      {startError && (
-        <p
-          role="alert"
-          className="fixed inset-x-4 bottom-4 mx-auto max-w-md rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-lg sm:inset-x-auto sm:right-4"
-        >
-          {startError}
-        </p>
-      )}
-
       <ScheduleMeetingModal
-        open={scheduleOpen}
-        submitting={scheduleSubmitting}
-        error={scheduleError}
-        onClose={() => setScheduleOpen(false)}
-        onSubmit={handleScheduleSubmit}
+        mode={meetingMode ?? "schedule"}
+        open={meetingMode !== null}
+        submitting={meetingSubmitting}
+        error={meetingError}
+        returnFocusRef={openerRef}
+        onClose={() => setMeetingMode(null)}
+        onSubmit={handleMeetingRequest}
       />
 
       <AuthModal
