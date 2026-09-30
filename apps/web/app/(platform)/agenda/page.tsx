@@ -1,11 +1,10 @@
-import { PlaceholderPage } from "../../components/placeholder-page";
+import { AgendaScreen } from "../../components/agenda/agenda-screen";
+import { AuthGuard } from "../../components/auth-guard";
 
 export default function AgendaPage() {
   return (
-    <PlaceholderPage
-      eyebrow="Agenda"
-      title="Agenda"
-      description="Consulta y organiza tus próximas reuniones."
-    />
+    <AuthGuard>
+      <AgendaScreen />
+    </AuthGuard>
   );
 }
