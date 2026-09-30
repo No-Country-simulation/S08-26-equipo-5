@@ -1,0 +1,28 @@
+# Combined MeetFlow stack: ONE image (Next.js web + Express API + nginx proxy).
+# The container listens only on port 80, so the host needs a single domain and
+# no path-based routing at all.
+#
+# Local run (add a host port):
+#   docker compose -f combined/docker-compose.yml up -d
+#
+# Coolify: either use a "Docker Image" Application pointing at xocris/meetflow:v1
+# (Port = 80), or paste this file as a "Docker Compose Empty" Service.
+
+services:
+  meetflow:
+    image: xocris/meetflow:v1
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 15m
+      REFRESH_TOKEN_TTL_DAYS: "7"
+      BCRYPT_SALT_ROUNDS: "12"
+      GETSTREAM_API_KEY: ${GETSTREAM_API_KEY}
+      GETSTREAM_API_SECRET: ${GETSTREAM_API_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://meetflow.servidordilanalbert.online}
+    expose:
+      - "80"
+    ports:
+      - "8090:80"
