@@ -6,8 +6,9 @@ import { useAuth } from "../lib/auth";
 import { createSala, getSalaByCode } from "../lib/salas-api";
 import { parseJoinInput } from "../lib/join-code";
 import { HomeHero } from "../components/home-hero";
+import { HomeHeader } from "../components/home-header";
 import { ScheduleMeetingModal, type ScheduleMeetingInput } from "../components/schedule-meeting-modal";
-import { LoginModal } from "../components/login-modal";
+import { AuthModal } from "../components/auth-modal";
 
 function roomHostHref(sala: {
   codigo: string;
@@ -121,15 +122,22 @@ export default function HomePage() {
     }
   }
 
+  function handleAuthClose() {
+    pendingActionRef.current = null;
+    setLoginOpen(false);
+  }
+
   function handleLoginSuccess() {
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
+    setLoginOpen(false);
     action?.();
   }
 
   return (
     <>
       <HomeHero
+        header={<HomeHeader />}
         onStartNow={handleStartNow}
         startingNow={startingNow}
         onOpenSchedule={handleOpenSchedule}
@@ -155,9 +163,9 @@ export default function HomePage() {
         onSubmit={handleScheduleSubmit}
       />
 
-      <LoginModal
+      <AuthModal
         open={loginOpen}
-        onClose={() => setLoginOpen(false)}
+        onClose={handleAuthClose}
         onSuccess={handleLoginSuccess}
       />
     </>

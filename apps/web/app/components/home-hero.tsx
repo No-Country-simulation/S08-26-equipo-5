@@ -1,15 +1,9 @@
 "use client";
 
-import { Yellowtail } from "next/font/google";
-import { FormEvent, useState } from "react";
-
-const yellowtail = Yellowtail({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-});
+import { FormEvent, type ReactNode, useState } from "react";
 
 export type HomeHeroProps = {
+  header: ReactNode;
   onStartNow: () => void;
   startingNow: boolean;
   onOpenSchedule: () => void;
@@ -106,6 +100,7 @@ function JoinByCodeForm({
 }
 
 export function HomeHero({
+  header,
   onStartNow,
   startingNow,
   onOpenSchedule,
@@ -115,11 +110,7 @@ export function HomeHero({
 }: HomeHeroProps) {
   return (
     <div className="flex min-h-screen flex-col bg-[#3d4fdb]">
-      <header className="flex h-[60px] shrink-0 items-center px-5 sm:px-8">
-        <span className={`${yellowtail.className} text-[28px] leading-none text-white`}>
-          Meetflow
-        </span>
-      </header>
+      {header}
 
       <div className="mx-3.5 flex flex-1 flex-col items-center justify-center rounded-t-[28px] bg-[#f3f4f8] px-5 py-12 sm:px-8">
         <h1 className="max-w-md text-center text-[30px] font-bold leading-tight text-[#1c2452]">
