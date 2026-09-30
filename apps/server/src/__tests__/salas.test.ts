@@ -486,18 +486,26 @@ describe("S2-01 — Salas API", () => {
     });
 
     it("400 — Target INVITADO (aún no aceptó): no se promueve y no se ejecuta transacción", async () => {
-      mockParticipanteFindUnique.mockImplementation(async ({ where }: any) => {
-        const uid = where.salaId_usuarioId.usuarioId;
-        if (uid === hostId) {
-          return { salaId, usuarioId: hostId, rol: "HOST", estado: "APROBADO" };
-        }
-        return { salaId, usuarioId: targetId, rol: "PARTICIPANTE", estado: "INVITADO", fechaIngreso: null };
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: hostParticipantId,
+        salaId,
+        usuarioId: hostId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
+      mockParticipanteFindFirst.mockResolvedValue({
+        id: targetParticipantId,
+        salaId,
+        usuarioId: targetId,
+        rol: "PARTICIPANTE",
+        estado: "INVITADO",
+        fechaIngreso: null,
       });
 
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
         .set("Authorization", `Bearer ${hostToken}`)
-        .send({ nuevoHostId: targetId });
+        .send({ nuevoHostId: targetParticipantId });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("invitación");
