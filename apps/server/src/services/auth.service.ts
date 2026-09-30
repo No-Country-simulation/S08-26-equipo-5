@@ -122,6 +122,7 @@ export class AuthService {
       nombre: user.nombre,
       apellido: user.apellido,
       email: user.email,
+      fotoUrl: user.fotoUrl ?? null,
     };
   }
 }

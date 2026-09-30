@@ -13,6 +13,7 @@ export interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   create(data: CreateUserData): Promise<User>;
+  updateFoto(id: string, foto: { fotoUrl: string | null; fotoPublicId: string | null }): Promise<User>;
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -28,6 +29,14 @@ export class PrismaUserRepository implements IUserRepository {
 
   async create(data: CreateUserData): Promise<User> {
     const usuario = await prisma.usuario.create({ data });
+    return toUser(usuario);
+  }
+
+  async updateFoto(
+    id: string,
+    foto: { fotoUrl: string | null; fotoPublicId: string | null },
+  ): Promise<User> {
+    const usuario = await prisma.usuario.update({ where: { id }, data: foto });
     return toUser(usuario);
   }
 }
