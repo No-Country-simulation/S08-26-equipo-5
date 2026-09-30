@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IUserRepository } from "../repositories/user.repository.js";
 import type { ImageStorage } from "../storage/image-storage.port.js";
 import { AppError } from "../utils/AppError.js";
@@ -61,20 +62,27 @@ export class UsuarioFotoService {
 
     let uploaded;
     try {
-      uploaded = await storage.uploadAvatar(file.buffer, { publicId: userId });
+      // publicId opaco por subida: la URL pública no revela el id del usuario
+      // y cada foto nueva tiene URL propia (no hace falta invalidar el CDN).
+      uploaded = await storage.uploadAvatar(file.buffer, { publicId: randomUUID() });
     } catch (error) {
       // Solo el mensaje: el error del SDK puede arrastrar la config/credenciales.
       console.error("[avatar] Falló la subida a Cloudinary:", errorMessage(error));
       throw new AppError(502, "UPLOAD_FAILED", "No se pudo subir la imagen, intentá de nuevo");
     }
 
-    await this.users.updateFoto(userId, {
-      fotoUrl: uploaded.url,
-      fotoPublicId: uploaded.publicId,
-    });
+    try {
+      await this.users.updateFoto(userId, {
+        fotoUrl: uploaded.url,
+        fotoPublicId: uploaded.publicId,
+      });
+    } catch (error) {
+      // No dejar el asset recién subido huérfano (best-effort).
+      await this.deleteQuietly(uploaded.publicId);
+      throw error;
+    }
 
-    // El publicId es determinístico, así que normalmente se pisa el mismo
-    // asset. Si cambió la carpeta configurada, limpiamos el viejo (best-effort).
+    // Recién con el nuevo persistido se borra el anterior (best-effort).
     if (user.fotoPublicId && user.fotoPublicId !== uploaded.publicId) {
       await this.deleteQuietly(user.fotoPublicId);
     }

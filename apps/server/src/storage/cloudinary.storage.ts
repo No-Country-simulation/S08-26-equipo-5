@@ -11,9 +11,6 @@ export class CloudinaryStorage implements ImageStorage {
       const stream = cloudinary.uploader.upload_stream(
         {
           public_id: publicId,
-          // Id determinístico por usuario: subir otra foto pisa la anterior.
-          overwrite: true,
-          invalidate: true,
           resource_type: "image",
           // 256x256 centrado en la cara; el original nunca se sirve.
           transformation: [

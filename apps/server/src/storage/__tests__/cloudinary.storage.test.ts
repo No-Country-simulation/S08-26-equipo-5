@@ -58,7 +58,7 @@ describe("createImageStorage", () => {
 });
 
 describe("CloudinaryStorage.uploadAvatar", () => {
-  it("sube con public_id determinístico, overwrite, invalidate y transformación 256x256 face", async () => {
+  it("sube con public_id carpeta/id, sin overwrite ni invalidate (id nuevo por subida) y transformación 256x256 face", async () => {
     stubUpload({ secure_url: "https://res.cloudinary.com/mi-cloud/image/upload/v99/meetflow/avatars/u1.jpg", public_id: "meetflow/avatars/u1" });
     const storage = new CloudinaryStorage("meetflow/avatars");
 
@@ -71,8 +71,6 @@ describe("CloudinaryStorage.uploadAvatar", () => {
     expect(mockUploadStream).toHaveBeenCalledWith(
       expect.objectContaining({
         public_id: "meetflow/avatars/u1",
-        overwrite: true,
-        invalidate: true,
         resource_type: "image",
         transformation: [
           { width: 256, height: 256, crop: "fill", gravity: "face" },

@@ -26,7 +26,12 @@ function setup(u: ReturnType<typeof user> | null = user(), withStorage = true) {
     updateFoto: vi.fn().mockImplementation(async (_id, foto) => ({ ...u, ...foto })),
   };
   const storage = {
-    uploadAvatar: vi.fn().mockResolvedValue({ url: "https://cdn/v2/a/u1.jpg", publicId: "a/u1" }),
+    uploadAvatar: vi
+      .fn()
+      .mockImplementation(async (_b: Buffer, o: { publicId: string }) => ({
+        url: "https://cdn/v2/a/" + o.publicId + ".jpg",
+        publicId: "a/" + o.publicId,
+      })),
     delete: vi.fn().mockResolvedValue(undefined),
   };
   const service = new UsuarioFotoService(
@@ -103,16 +108,42 @@ describe("UsuarioFotoService.setFoto", () => {
     });
   });
 
-  it("sube con el id del usuario, guarda url+publicId y devuelve fotoUrl", async () => {
-    const { service, storage, users } = setup();
-    const out = await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
-    expect(out).toEqual({ fotoUrl: "https://cdn/v2/a/u1.jpg" });
-    expect(storage.uploadAvatar).toHaveBeenCalledWith(JPEG, { publicId: "u1" });
-    expect(users.updateFoto).toHaveBeenCalledWith("u1", {
-      fotoUrl: "https://cdn/v2/a/u1.jpg",
-      fotoPublicId: "a/u1",
+  it("sube con un publicId opaco (UUID aleatorio, sin el id del usuario) y guarda url+publicId", async () => {
+    const { service, storage, users } = setup(user({ id: "usuario-secreto-123" }));
+    const out = await service.setFoto("usuario-secreto-123", { buffer: JPEG, size: JPEG.length });
+
+    const [, opts] = storage.uploadAvatar.mock.calls[0];
+    expect(opts.publicId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(opts.publicId).not.toContain("usuario-secreto-123");
+    expect(out.fotoUrl).toBe("https://cdn/v2/a/" + opts.publicId + ".jpg");
+    expect(users.updateFoto).toHaveBeenCalledWith("usuario-secreto-123", {
+      fotoUrl: out.fotoUrl,
+      fotoPublicId: "a/" + opts.publicId,
     });
     expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it("cada subida usa un publicId distinto", async () => {
+    const { service, storage } = setup();
+    await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
+    await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
+    expect(storage.uploadAvatar.mock.calls[0][1].publicId).not.toBe(storage.uploadAvatar.mock.calls[1][1].publicId);
+  });
+
+  it("si falla el update de DB, borra el asset recién subido (sin huérfanos) y propaga el error", async () => {
+    const { service, storage, users } = setup(user({ fotoPublicId: "viejo/x" }));
+    users.updateFoto.mockRejectedValue(new Error("db down"));
+    await expect(service.setFoto("u1", { buffer: JPEG, size: JPEG.length })).rejects.toThrow("db down");
+    const nuevo = "a/" + storage.uploadAvatar.mock.calls[0][1].publicId;
+    expect(storage.delete).toHaveBeenCalledWith(nuevo);
+    expect(storage.delete).not.toHaveBeenCalledWith("viejo/x");
+  });
+
+  it("el borrado del asset nuevo tras fallo de DB también es best-effort", async () => {
+    const { service, storage, users } = setup();
+    users.updateFoto.mockRejectedValue(new Error("db down"));
+    storage.delete.mockRejectedValue(new Error("cloud down"));
+    await expect(service.setFoto("u1", { buffer: JPEG, size: JPEG.length })).rejects.toThrow("db down");
   });
 
   it("502 UPLOAD_FAILED si Cloudinary falla, sin tocar la DB; loguea solo el mensaje", async () => {
@@ -130,14 +161,18 @@ describe("UsuarioFotoService.setFoto", () => {
     const { service, storage } = setup(user({ fotoUrl: "old", fotoPublicId: "viejo/u1" }));
     storage.delete.mockRejectedValue(new Error("nope"));
     const out = await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
-    expect(out.fotoUrl).toBe("https://cdn/v2/a/u1.jpg");
+    expect(out.fotoUrl).toContain("https://cdn/v2/a/");
     expect(storage.delete).toHaveBeenCalledWith("viejo/u1");
   });
 
-  it("no borra si el publicId anterior es el mismo (overwrite)", async () => {
-    const { service, storage } = setup(user({ fotoUrl: "old", fotoPublicId: "a/u1" }));
+  it("borra el anterior DESPUÉS de persistir el nuevo", async () => {
+    const { service, storage, users } = setup(user({ fotoUrl: "old", fotoPublicId: "a/anterior" }));
+    const orden: string[] = [];
+    users.updateFoto.mockImplementation(async () => void orden.push("db"));
+    storage.delete.mockImplementation(async () => void orden.push("delete"));
     await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
-    expect(storage.delete).not.toHaveBeenCalled();
+    expect(orden).toEqual(["db", "delete"]);
+    expect(storage.delete).toHaveBeenCalledWith("a/anterior");
   });
 });
 
