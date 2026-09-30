@@ -21,6 +21,17 @@ function parseBool(name: string, value: string | undefined): boolean | null {
   );
 }
 
+// Entero positivo estricto: undefined/"" → default; cualquier otra cosa que no
+// sea un entero > 0 revienta al boot en vez de caer silenciosamente a un valor.
+function parsePositiveInt(name: string, value: string | undefined, fallback: number): number {
+  if (value === undefined || value === "") return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`Valor inválido para ${name}: "${value}". Debe ser un entero positivo`);
+  }
+  return n;
+}
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
 
 export const env = {
@@ -51,4 +62,14 @@ export const env = {
   webhookSignatureRequired:
     parseBool("WEBHOOK_SIGNATURE_REQUIRED", process.env.WEBHOOK_SIGNATURE_REQUIRED) ??
     nodeEnv !== "development",
+
+  // ── Foto de perfil (Cloudinary) ──────────────────────────
+  // OPCIONAL: sin CLOUDINARY_URL (cloudinary://key:secret@cloud_name) el
+  // servidor arranca igual y los endpoints de foto responden 503
+  // UPLOADS_NOT_CONFIGURED. Contiene el secret: nunca loguear.
+  cloudinaryUrl: process.env.CLOUDINARY_URL || undefined,
+  cloudinaryFolder: process.env.CLOUDINARY_FOLDER || "meetflow/avatars",
+  avatarMaxBytes: parsePositiveInt("AVATAR_MAX_BYTES", process.env.AVATAR_MAX_BYTES, 2 * 1024 * 1024),
+  // Tope de subidas/borrados de foto por IP cada 15 min.
+  rateLimitAvatarMax: parsePositiveInt("RATE_LIMIT_AVATAR_MAX", process.env.RATE_LIMIT_AVATAR_MAX, 10),
 };
