@@ -298,7 +298,16 @@ Retorna la lista de participantes de una sala.
 
 ## Invitaciones por correo
 
-El host invita a 1..20 emails; cada invitado recibe un enlace `FRONTEND_URL/invitacion/<token>`. El token es opaco (32 bytes aleatorios), **solo viaja por correo**: la API nunca lo devuelve y en base de datos solo se guarda su hash SHA-256. Vigencia: `INVITACION_TTL_HORAS` (72 h por defecto). El correo sale por el `MailPort` según `MAIL_PROVIDER` (`console` por defecto: loguea sin red; `resend`: requiere `RESEND_API_KEY`, remitente `MAIL_FROM`).
+El host invita a 1..20 emails; cada invitado recibe un enlace `FRONTEND_URL/invitacion/<token>`. El token es opaco (32 bytes aleatorios), **solo viaja por correo**: la API nunca lo devuelve y en base de datos solo se guarda su hash SHA-256. Vigencia: `INVITACION_TTL_HORAS` (72 h por defecto). El correo sale por el `MailPort` según `MAIL_PROVIDER` (`console` por defecto: loguea sin red; `resend`: requiere `RESEND_API_KEY`; `brevo`: requiere `BREVO_API_KEY`; remitente `MAIL_FROM`, ver "Configurar Brevo" abajo).
+
+### Configurar Brevo (enviar a cualquier destinatario sin dominio propio)
+
+1. Crear una cuenta gratis en https://www.brevo.com.
+2. Verificar el remitente (Senders & IP): puede ser un Gmail; Brevo envía un código de 6 dígitos a ese correo.
+3. Crear una API key (SMTP & API > API Keys).
+4. En el `.env` del server: `MAIL_PROVIDER=brevo`, `BREVO_API_KEY=<tu key>` y `MAIL_FROM` con el remitente verificado (`MeetFlow <tu@gmail.com>` o solo el email).
+
+Limitaciones: el plan gratis permite 300 correos/día. Sin un dominio autenticado, Brevo reescribe el From a `@brevosend.com`, lo que aumenta la chance de caer en spam. Recomendado a largo plazo: dominio propio autenticado (SPF/DKIM) en Brevo o Resend.
 
 Estado nuevo de participante: `INVITADO` (invitado que todavía no aceptó; `nombre`/`apellido` pueden ser `null`). Nunca es aprobable directamente ni aparece entre los aprobados.
 
