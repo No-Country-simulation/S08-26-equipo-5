@@ -212,10 +212,19 @@ describe("PrismaInvitacionRepository.consumirYActivar", () => {
     expect(tx.participante.updateMany).not.toHaveBeenCalled();
   });
 
-  it("si el participante ya no estaba INVITADO (count 0) informa participanteActivado=false", async () => {
+  it("W2: si el participante ya no estaba INVITADO (count 0) revierte la transacción (no quema el token) y devuelve no-consumida", async () => {
     const { prisma, tx } = makePrisma();
     tx.invitacion.updateMany.mockResolvedValue({ count: 1 });
     tx.participante.updateMany.mockResolvedValue({ count: 0 });
+    let callbackRechazo: unknown;
+    prisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => Promise<unknown>) => {
+      try {
+        return await fn(tx);
+      } catch (e) {
+        callbackRechazo = e; // Prisma haría rollback ante este rechazo
+        throw e;
+      }
+    });
     const repo = new PrismaInvitacionRepository(prisma);
 
     const result = await repo.consumirYActivar({
@@ -225,7 +234,17 @@ describe("PrismaInvitacionRepository.consumirYActivar", () => {
       apellido: "Pérez",
     });
 
-    expect(result).toEqual({ invitacionConsumida: true, participanteActivado: false });
+    expect(callbackRechazo).toBeInstanceOf(Error);
+    expect(result).toEqual({ invitacionConsumida: false, participanteActivado: false });
+  });
+
+  it("errores inesperados de la transacción se propagan", async () => {
+    const { prisma, tx } = makePrisma();
+    tx.invitacion.updateMany.mockResolvedValue({ count: 1 });
+    tx.participante.updateMany.mockRejectedValue(new Error("db caída"));
+    const repo = new PrismaInvitacionRepository(prisma);
+
+    await expect(repo.consumirYActivar({ invitacionId: "i-1", participanteId: "p-1" })).rejects.toThrow("db caída");
   });
 
   it("sin nombre/apellido (usuario registrado) no los incluye en el update", async () => {

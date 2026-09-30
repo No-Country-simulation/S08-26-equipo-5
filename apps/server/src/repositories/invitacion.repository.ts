@@ -60,6 +60,9 @@ export interface IInvitacionRepository {
     consumirYActivar(data: ConsumirYActivarData): Promise<ConsumirYActivarResult>;
 }
 
+/** Centinela interno: fuerza el rollback de la transacción de aceptación. */
+class ActivacionPerdidaError extends Error { }
+
 export class PrismaInvitacionRepository implements IInvitacionRepository {
     constructor(private readonly prisma: PrismaClient) { }
 
@@ -120,31 +123,40 @@ export class PrismaInvitacionRepository implements IInvitacionRepository {
         });
     }
 
-    async consumirYActivar(data: ConsumirYActivarData) {
-        return this.prisma.$transaction(async (tx) => {
-            const ahora = new Date();
+    async consumirYActivar(data: ConsumirYActivarData): Promise<ConsumirYActivarResult> {
+        try {
+            return await this.prisma.$transaction(async (tx) => {
+                const ahora = new Date();
 
-            const invitacion = await tx.invitacion.updateMany({
-                where: { id: data.invitacionId, usedAt: null, expiresAt: { gt: ahora } },
-                data: { usedAt: ahora },
+                const invitacion = await tx.invitacion.updateMany({
+                    where: { id: data.invitacionId, usedAt: null, expiresAt: { gt: ahora } },
+                    data: { usedAt: ahora },
+                });
+                if (invitacion.count === 0) {
+                    return { invitacionConsumida: false, participanteActivado: false };
+                }
+
+                const participante = await tx.participante.updateMany({
+                    where: { id: data.participanteId, estado: EstadoParticipante.INVITADO },
+                    data: {
+                        estado: EstadoParticipante.PENDIENTE,
+                        ...(data.nombre !== undefined ? { nombre: data.nombre } : {}),
+                        ...(data.apellido !== undefined ? { apellido: data.apellido } : {}),
+                    },
+                });
+                // Si el participante ya no está INVITADO, revertir también el
+                // usedAt: el token no debe quemarse sin activar a nadie.
+                if (participante.count !== 1) {
+                    throw new ActivacionPerdidaError();
+                }
+
+                return { invitacionConsumida: true, participanteActivado: true };
             });
-            if (invitacion.count === 0) {
+        } catch (error) {
+            if (error instanceof ActivacionPerdidaError) {
                 return { invitacionConsumida: false, participanteActivado: false };
             }
-
-            const participante = await tx.participante.updateMany({
-                where: { id: data.participanteId, estado: EstadoParticipante.INVITADO },
-                data: {
-                    estado: EstadoParticipante.PENDIENTE,
-                    ...(data.nombre !== undefined ? { nombre: data.nombre } : {}),
-                    ...(data.apellido !== undefined ? { apellido: data.apellido } : {}),
-                },
-            });
-
-            return {
-                invitacionConsumida: true,
-                participanteActivado: participante.count === 1,
-            };
-        });
+            throw error;
+        }
     }
 }
