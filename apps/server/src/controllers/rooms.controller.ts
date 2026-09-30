@@ -12,6 +12,7 @@ import { AppError } from "../utils/AppError.js";
 import {
   createRoom as createRoomService,
   issueCallAccess,
+  addCallMember,
 } from "../services/stream.service.js";
 import {
   requestJoin,
@@ -23,6 +24,7 @@ import {
 import { PrismaParticipanteRepository } from "../repositories/participante.repository.js";
 import { PrismaSalaRepository } from "../repositories/sala.repository.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
+import { getReunionesNamespace, rooms } from "../realtime/registry.js";
 import type {
   CreateSalaBody,
   CreateSalaResponse,
@@ -443,6 +445,65 @@ export async function deleteSala(
   res.status(200).json({ message: "Sala cancelada exitosamente" });
 }
 
+// ─── POST /salas/:id/finalizar — Finalizar sala explícitamente (solo HOST) ──
+
+/**
+ * Finaliza una sala (cambia estado a FINALIZADA).
+ * Es un fallback explícito cuando el webhook de GetStream no llega (ej. en desarrollo local).
+ * Solo el HOST puede finalizarla.
+ * Requiere: Authorization: Bearer <jwt>
+ */
+export async function finalizarSala(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const userId = req.user?.sub;
+
+  if (!userId) {
+    throw new ValidationError("Usuario no autenticado");
+  }
+
+  // Verificar que la sala existe
+  const sala = await prisma.sala.findUnique({ where: { id } });
+  if (!sala) {
+    throw new NotFoundError("Sala no encontrada");
+  }
+
+  // Verificar que el usuario es HOST
+  const userIsHost = await isHost(id, userId);
+  if (!userIsHost) {
+    throw new ForbiddenError("Solo el HOST puede finalizar la sala");
+  }
+
+  // Si ya está finalizada, respondemos con éxito de todos modos (idempotente)
+  if (sala.estado === "FINALIZADA") {
+    res.status(200).json({ message: "La sala ya estaba finalizada" });
+    return;
+  }
+
+  // Finalizar sala
+  const fechaFin = new Date();
+  await prisma.sala.update({
+    where: { id },
+    data: {
+      estado: "FINALIZADA",
+      fechaFin,
+    },
+  });
+
+  // Emitir evento por WebSockets para que los clientes sean redirigidos
+  getReunionesNamespace()
+    ?.to(rooms.sala(sala.id))
+    .emit("room:ended", {
+      salaId: sala.id,
+      estado: "FINALIZADA",
+      fechaFin: fechaFin.toISOString(),
+    });
+
+  res.status(200).json({ message: "Sala finalizada exitosamente" });
+}
+
 // ─── POST /salas/:id/transfer-host — Transferir rol HOST ─
 
 /**
@@ -475,22 +536,26 @@ export async function transferHost(
   }
 
   // Verificar que el usuario es HOST
-  const userIsHost = await isHost(id, userId);
-  if (!userIsHost) {
+  const callerParticipante = await prisma.participante.findUnique({
+    where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+  });
+  if (callerParticipante?.rol !== "HOST") {
     throw new ForbiddenError("Solo el HOST puede transferir el rol");
   }
 
-  // No permitir auto-transferencia
-  if (nuevoHostId === userId) {
-    throw new ValidationError("No puedes transferir el rol a ti mismo");
+  // El nuevo host (que viene del frontend como GetStream userId = Participante.id)
+  // debe ser participante de la sala y tener cuenta de usuario (usuarioId != null).
+  const target = await prisma.participante.findFirst({
+    where: { id: nuevoHostId, salaId: id },
+  });
+  if (!target || !target.usuarioId) {
+    throw new NotFoundError("El nuevo host debe ser participante de la sala y tener una cuenta registrada");
   }
 
-  // El nuevo host debe ser participante existente de la sala
-  const target = await prisma.participante.findUnique({
-    where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
-  });
-  if (!target) {
-    throw new NotFoundError("El nuevo host debe ser participante de la sala");
+  // nuevoHostId es el ID del participante en GetStream/MeetFlow, no el ID
+  // de usuario; comparar usuarioId detecta correctamente una auto-transferencia.
+  if (target.usuarioId === userId) {
+    throw new ValidationError("No puedes transferir el rol a ti mismo");
   }
 
   // Demover caller y promover target en una sola transacción.
@@ -516,7 +581,7 @@ export async function transferHost(
       throw new ForbiddenError("Solo el HOST puede transferir el rol");
     }
     await tx.participante.update({
-      where: { salaId_usuarioId: { salaId: id, usuarioId: nuevoHostId } },
+      where: { id: target.id },
       data: {
         rol: "HOST",
         estado: "APROBADO",
@@ -525,9 +590,19 @@ export async function transferHost(
     });
   });
 
+  // Sincronizar roles en GetStream (server-side con API secret).
+  // Sin esto el nuevo host queda como "user" en GetStream y no puede
+  // finalizar la llamada, expulsar, etc.
+  const callRef = getStreamCallRef(sala);
+  if (callRef) {
+    // GetStream identifica a los usuarios por su Participante.id, no por su usuarioId.
+    await addCallMember(callRef.callType, callRef.callId, target.id, "admin");
+    await addCallMember(callRef.callType, callRef.callId, callerParticipante.id, "user");
+  }
+
   const response: TransferHostResponse = {
     message: "Rol de HOST transferido exitosamente",
-    host: { usuarioId: nuevoHostId },
+    host: { usuarioId: target.usuarioId },
     previousHost: { usuarioId: userId },
   };
 
@@ -689,6 +764,7 @@ export async function getStreamToken(
     role: ctx.rol,
     callType: call.callType,
     callId: call.callId,
+    isRegistered: ctx.usuarioId !== null,
   });
 
   res.status(200).json({

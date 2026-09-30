@@ -14,6 +14,7 @@ import {
   joinSala,
   getStreamToken,
   getMiEstado,
+  finalizarSala,
 } from "../controllers/rooms.controller.js";
 
 const router = Router();
@@ -70,6 +71,9 @@ router.put("/salas/:id", verifyToken, wrap(updateSala));
 
 // Cancelar sala (solo HOST)
 router.delete("/salas/:id", verifyToken, wrap(deleteSala));
+
+// Finalizar sala explícitamente (fallback del webhook de GetStream) (solo HOST)
+router.post("/salas/:id/finalizar", verifyToken, wrap(finalizarSala));
 
 // ─── Rutas públicas por código ────────────────────────────
 
