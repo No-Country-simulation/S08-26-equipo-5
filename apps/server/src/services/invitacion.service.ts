@@ -1,6 +1,7 @@
 import { EstadoParticipante } from "@prisma/client";
 import { env } from "../config/env.js";
 import type { MailPort } from "../mail/mail.port.js";
+import { renderInvitacionEmail } from "../mail/templates/invitacion.template.js";
 import type { IInvitacionRepository } from "../repositories/invitacion.repository.js";
 import type { IParticipanteRepository } from "../repositories/participante.repository.js";
 import type { ISalaRepository } from "../repositories/sala.repository.js";
@@ -80,16 +81,20 @@ function normalizarEmails(raw: unknown): string[] {
   return [...emails];
 }
 
-function armarMail(params: { to: string; salaNombre: string; token: string }) {
-  const link = `${env.frontendUrl}/invitacion/${params.token}`;
-  const horas = env.invitacionTtlHoras;
+function armarMail(params: {
+  to: string;
+  salaNombre: string;
+  hostNombre: string | null;
+  token: string;
+}) {
   return {
     to: params.to,
-    subject: `Te invitaron a la sala "${params.salaNombre}"`,
-    text:
-      `Te invitaron a unirte a la sala "${params.salaNombre}" en MeetFlow.\n\n` +
-      `Ingresá desde este enlace: ${link}\n\n` +
-      `El enlace es personal y vence en ${horas} horas.`,
+    ...renderInvitacionEmail({
+      salaNombre: params.salaNombre,
+      hostNombre: params.hostNombre,
+      link: `${env.frontendUrl}/invitacion/${params.token}`,
+      horas: env.invitacionTtlHoras,
+    }),
   };
 }
 
@@ -127,6 +132,8 @@ export async function invitar(
   }
 
   const emails = normalizarEmails(input.emails);
+  const hostNombre =
+    [host.nombre, host.apellido].filter(Boolean).join(" ").trim() || null;
 
   const expiresAt = () => new Date(Date.now() + env.invitacionTtlHoras * 3600 * 1000);
   const resultados: ResultadoInvitacion[] = [];
@@ -177,7 +184,7 @@ export async function invitar(
 
     envios.push({
       indice: resultados.length - 1,
-      message: armarMail({ to: email, salaNombre: sala.nombre, token }),
+      message: armarMail({ to: email, salaNombre: sala.nombre, hostNombre, token }),
     });
   }
 

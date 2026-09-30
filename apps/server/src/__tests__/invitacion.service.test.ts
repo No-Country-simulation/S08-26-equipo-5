@@ -86,6 +86,19 @@ describe("invitar", () => {
     ]);
   });
 
+  it("manda el correo en HTML con el enlace y el nombre del host", async () => {
+    m.participantes.findHost.mockResolvedValue({ id: "p-host", nombre: "Ana", apellido: "Pérez" });
+
+    await invitar(m.deps, { salaId: SALA_ID, hostUserId: HOST_ID, emails: ["a@x.com"] });
+
+    const mail = m.mailer.send.mock.calls[0][0];
+    const token = /\/invitacion\/([\w-]+)/.exec(mail.text)?.[1];
+    expect(mail.html).toContain(`href="http://front.test/invitacion/${token}"`);
+    expect(mail.html).toContain("Ana Pérez");
+    expect(mail.html).toContain("Sala Q4");
+    expect(mail.text).toContain("Ana Pérez te invitó");
+  });
+
   it("solo persiste el hash del token; el enlace lleva el token en claro", async () => {
     await invitar(m.deps, { salaId: SALA_ID, hostUserId: HOST_ID, emails: ["a@x.com"] });
 
