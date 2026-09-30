@@ -1,3 +1,5 @@
+export type SalaEstado = "PROGRAMADA" | "ACTIVA" | "FINALIZADA" | "CANCELADA";
+
 export type Sala = {
   id: string;
   codigo: string;
@@ -5,7 +7,7 @@ export type Sala = {
   resumen?: string | null;
   fechaInicio: string;
   fechaFin?: string | null;
-  estado: string;
+  estado: SalaEstado;
   streamRoomId?: string;
 };
 
@@ -265,6 +267,12 @@ export function transferHost(
       body: JSON.stringify({ nuevoHostId }),
     },
   );
+}
+
+export function cancelSala(salaId: string): Promise<{ message: string }> {
+  return request(`/salas/${encodeURIComponent(salaId)}`, {
+    method: "DELETE",
+  });
 }
 
 export function finalizarSala(salaId: string): Promise<{ message: string }> {
