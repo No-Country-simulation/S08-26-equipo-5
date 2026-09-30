@@ -137,6 +137,7 @@ export function authParticipante(
       req.participante = {
         participanteId: participante.id,
         salaId: participante.salaId,
+        usuarioId: participante.usuarioId,
         rol: participante.rol as RoomRole,
         estado: participante.estado,
         nombre: participante.nombre,

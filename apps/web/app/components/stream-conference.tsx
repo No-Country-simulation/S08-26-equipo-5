@@ -298,32 +298,42 @@ export function StreamConference({
     if (!showLeaveModal || !call || !salaId) return;
 
     let active = true;
+    setOtherParticipants([]);
 
     // Stream asigna IDs de participante tanto a cuentas como a invitados.
     // Usamos el indicador de cuenta registrada que el servidor guarda en el
-    // perfil de Stream y solo ofrecemos destinos que estén en la llamada.
-    const members = call.state.members ?? [];
-    const registeredIds = new Set(
-      members
-        .filter((member) => member.user?.custom?.registered === true)
-        .map((member) => member.user_id),
-    );
-    const participants = call.state.participants ?? [];
-    const others: CallParticipant[] = participants
-      .filter((participant) => !participant.isLocalParticipant)
-      .filter((participant) => participant.userId !== user.id)
-      .filter((participant) => registeredIds.has(participant.userId))
-      .map((participant) => ({
-        userId: participant.userId,
-        name: participant.name || participant.userId,
-      }));
+    // perfil de Stream. Refrescamos miembros para no depender de metadatos
+    // que pudieron quedar en caché antes de que la cuenta ingresara.
+    void call
+      .get()
+      .then(() => {
+        if (!active) return;
+        const members = call.state.members ?? [];
+        const registeredIds = new Set(
+          members
+            .filter((member) => member.user?.custom?.registered === true)
+            .map((member) => member.user_id),
+        );
+        const participants = call.state.participants ?? [];
+        const others: CallParticipant[] = participants
+          .filter((participant) => !participant.isLocalParticipant)
+          .filter((participant) => participant.userId !== user.id)
+          .filter((participant) => registeredIds.has(participant.userId))
+          .map((participant) => ({
+            userId: participant.userId,
+            name: participant.name || participant.userId,
+          }));
 
-    setOtherParticipants(others);
+        setOtherParticipants(others);
+      })
+      .catch((err) => {
+        console.error("No se pudo actualizar la lista de participantes de GetStream", err);
+      });
 
     return () => {
       active = false;
     };
-  }, [showLeaveModal, call, user.id]);
+  }, [showLeaveModal, call, salaId, user.id]);
 
   const handleLeave = useCallback(async () => {
     if (!call) return;
