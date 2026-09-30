@@ -13,6 +13,8 @@ export interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   create(data: CreateUserData): Promise<User>;
+  /** Solo la foto: evita traer el usuario completo (passwordHash) para un dato decorativo. */
+  findFotoUrl(id: string): Promise<string | null>;
   updateFoto(id: string, foto: { fotoUrl: string | null; fotoPublicId: string | null }): Promise<User>;
 }
 
@@ -25,6 +27,14 @@ export class PrismaUserRepository implements IUserRepository {
   async findById(id: string): Promise<User | null> {
     const usuario = await prisma.usuario.findUnique({ where: { id } });
     return usuario ? toUser(usuario) : null;
+  }
+
+  async findFotoUrl(id: string): Promise<string | null> {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id },
+      select: { fotoUrl: true },
+    });
+    return usuario?.fotoUrl ?? null;
   }
 
   async create(data: CreateUserData): Promise<User> {

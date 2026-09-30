@@ -28,6 +28,7 @@ import {
   buildJoinApprovedPayload,
   getStreamCallRef,
   requestJoin,
+  emitJoinPending,
   validateJoinInput,
   resolveJoinIdentity,
   type WaitingRoomDeps,
@@ -68,6 +69,7 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
   const usuarios = {
     findByEmail: vitest.fn(),
     findById: vitest.fn(),
+    findFotoUrl: vitest.fn().mockResolvedValue(null),
     create: vitest.fn(),
   };
   return { participantes, salas, usuarios } as unknown as WaitingRoomDeps & {
@@ -485,7 +487,8 @@ describe("resolveJoinIdentity — identidad del participante logueado", () => {
     });
 
     expect(result).toEqual({ nombre: "Ana", apellido: "Pérez", email: "ana@test.com" });
-    expect(deps.usuarios.findById).not.toHaveBeenCalled();
+    expect(deps.usuarios.findFotoUrl).not.toHaveBeenCalled();
+      expect(deps.usuarios.findById).not.toHaveBeenCalled();
   });
 });
 
@@ -590,6 +593,25 @@ describe("requestJoin — el HOST entra a su propia sala con otro email", () => 
   });
 });
 
+describe("emitJoinPending — firma pública", () => {
+  it("es síncrona, exportada y fotoUrl es opcional (default null)", () => {
+    const emit = vitest.fn();
+    setReunionesNamespace({ to: vitest.fn().mockReturnValue({ emit }) } as never);
+    try {
+      const out = emitJoinPending("sala-1", {
+        id: "p1",
+        nombre: "Ana",
+        apellido: "P",
+        email: "a@t.com",
+      } as never);
+      expect(out).toBeUndefined();
+      expect(emit).toHaveBeenCalledWith("join:pending", expect.objectContaining({ fotoUrl: null }));
+    } finally {
+      setReunionesNamespace(null as never);
+    }
+  });
+});
+
 describe("join:pending — fotoUrl del solicitante", () => {
   function fakeNamespace() {
     const emit = vitest.fn();
@@ -613,7 +635,7 @@ describe("join:pending — fotoUrl del solicitante", () => {
           email: "ana@test.com",
         }),
       });
-      deps.usuarios.findById.mockResolvedValue({ id: "user-1", fotoUrl: "https://cdn/v1/ana.jpg" });
+      deps.usuarios.findFotoUrl.mockResolvedValue("https://cdn/v1/ana.jpg");
 
       await requestJoin(deps, {
         salaCodigo: "ABCD1234",
@@ -679,7 +701,7 @@ describe("join:pending — fotoUrl del solicitante", () => {
           email: "ana@test.com",
         }),
       });
-      deps.usuarios.findById.mockRejectedValue(new Error("db down"));
+      deps.usuarios.findFotoUrl.mockRejectedValue(new Error("db down"));
 
       const result = await requestJoin(deps, {
         salaCodigo: "ABCD1234",
