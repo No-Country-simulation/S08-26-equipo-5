@@ -35,11 +35,13 @@ function RoomContent() {
   const [connectionStatus, setConnectionStatus] = useState("Preparando conexión…");
   const [connectionError, setConnectionError] = useState("");
   const [streamConnection, setStreamConnection] = useState<StreamTokenResponse | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [callId, setCallId] = useState(requestedCallId);
   const { accessToken } = useAuth();
   const guestSession = getGuestSession();
   const roomAccessToken =
     guestSession?.salaId === salaId ? guestSession.accessToken : accessToken;
+  const waitingRoomPath = `/waiting-room?code=${encodeURIComponent(code)}${isDemo ? "&demo=true" : ""}`;
   const {
     requests,
     approve,
@@ -51,6 +53,16 @@ function RoomContent() {
     salaId: isHost ? salaId : null,
     accessToken: isHost ? accessToken : null,
   });
+
+  async function copyWaitingRoomLink() {
+    try {
+      await navigator.clipboard.writeText(new URL(waitingRoomPath, window.location.origin).toString());
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      setLinkCopied(false);
+    }
+  }
 
   useEffect(() => {
     if (isDemo || !salaId || !roomAccessToken) return;
@@ -171,6 +183,24 @@ function RoomContent() {
     });
   }, [microphoneEnabled]);
 
+  if (hasRealAccess && !streamConnection) {
+    return (
+      <section className="room-loading-state" role={connectionError ? "alert" : "status"}>
+        {connectionError ? (
+          <div className="room-loading-state__message">
+            <p>{connectionError}</p>
+            <Link href="/home">Volver al inicio</Link>
+          </div>
+        ) : (
+          <div className="room-loading-state__message">
+            <span className="room-loading-spinner" aria-hidden="true" />
+            <p>Preparando la sala…</p>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   // No code → not accessed correctly
   if (!code) {
     return (
@@ -188,8 +218,8 @@ function RoomContent() {
   }
 
   return (
-    <section className="space-y-8">
-      <div>
+    <section className={streamConnection ? "room-page" : "space-y-8"}>
+      {!streamConnection ? <div>
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">
           {isDemo ? "Modo demo local" : "Sala de reunión"}
         </p>
@@ -217,11 +247,26 @@ function RoomContent() {
             Estado de conexión: <strong>{connectionStatus}</strong>
           </p>
         )}
-      </div>
+      </div> : (
+        <header className="room-page__header">
+          <h1>Reunión MeetFlow</h1>
+          <div className="room-page__share-link">
+            <p title={`Código de sala: ${code}`}>{code}</p>
+            <button type="button" onClick={() => void copyWaitingRoomLink()} aria-label="Copiar enlace completo de la sala de espera" title="Copiar enlace completo de la sala de espera">
+              {linkCopied ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></svg>
+              )}
+            </button>
+            <span aria-live="polite" className="room-page__copy-status">{linkCopied ? "Copiado" : ""}</span>
+          </div>
+        </header>
+      )}
 
-      <div className={`grid gap-6 ${streamConnection ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]"}`}>
+      <div className={streamConnection ? "room-page__call" : "grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]"}>
         {/* Video preview */}
-        <div className="overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
+        <div className={streamConnection ? "room-page__conference" : "overflow-hidden rounded-2xl bg-slate-950 shadow-sm"}>
           {streamConnection ? (
             <StreamConference
               apiKey={streamConnection.apiKey}
@@ -234,6 +279,11 @@ function RoomContent() {
               callId={streamConnection.callId}
               salaId={salaId}
               isHost={isHost}
+              requests={requests}
+              requestsConnected={hostSocketConnected}
+              requestsError={hostSocketError}
+              onApproveRequest={approve}
+              onRejectRequest={reject}
               onLeave={(error) => {
                 if (error) {
                   setConnectionError(error.message);
@@ -285,7 +335,7 @@ function RoomContent() {
         </div>
 
         {/* Sidebar */}
-        <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm h-fit">
+        {!streamConnection && <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm h-fit">
           <details className="group" open={!streamConnection}>
             <summary className="text-xl font-semibold text-slate-950 cursor-pointer list-none flex items-center justify-between outline-none">
               Participantes y opciones
@@ -342,7 +392,7 @@ function RoomContent() {
               </Link>
             </div>
           </details>
-        </aside>
+        </aside>}
       </div>
     </section>
   );
@@ -350,7 +400,7 @@ function RoomContent() {
 
 export default function RoomPage() {
   return (
-    <Suspense fallback={<section>Cargando sala…</section>}>
+    <Suspense fallback={<section className="room-loading-state" role="status"><span className="room-loading-spinner" aria-hidden="true" /><span className="sr-only">Cargando sala…</span></section>}>
       <RoomContent />
     </Suspense>
   );

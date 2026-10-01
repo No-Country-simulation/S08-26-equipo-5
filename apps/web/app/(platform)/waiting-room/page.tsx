@@ -67,7 +67,6 @@ function ParticipantView({
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true);
   const [joinStatus, setJoinStatus] = useState<JoinStatus>("idle");
-  const [participantId, setParticipantId] = useState("");
   const [joinError, setJoinError] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
   const [participantSession, setParticipantSession] = useState<GuestSession | null>(null);
@@ -89,14 +88,12 @@ function ParticipantView({
       resolutionRef.current = null;
       const session = getGuestSession();
       if (session?.salaId !== sala.id) {
-        setParticipantId("");
         setParticipantSession(null);
         setParticipantIsHost(false);
         setJoinStatus("idle");
         setCountdown(null);
         return;
       }
-      setParticipantId(session.participanteId);
       setParticipantSession(session);
       setJoinStatus("waiting");
     });
@@ -110,7 +107,10 @@ function ParticipantView({
     let cancelled = false;
 
     async function startPreview() {
-      if (!navigator.mediaDevices?.getUserMedia) return;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMediaError("Este navegador no permite acceder a cámara y micrófono.");
+        return;
+      }
       setMediaError("");
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -192,7 +192,6 @@ function ParticipantView({
         clearGuestSession();
         resolutionRef.current = null;
         setParticipantSession(null);
-        setParticipantId("");
         setJoinStatus("idle");
         setCountdown(null);
       }
@@ -229,7 +228,6 @@ function ParticipantView({
             } else if (error.code === "UNAUTHORIZED") {
               clearGuestSession();
               setParticipantSession(null);
-              setParticipantId("");
               setJoinStatus("idle");
             }
           }
@@ -264,7 +262,6 @@ function ParticipantView({
     setJoinError("");
 
     if (isDemo) {
-      setParticipantId("demo-participant");
       setJoinStatus("waiting");
       window.setTimeout(() => {
         setJoinStatus("approved");
@@ -284,7 +281,6 @@ function ParticipantView({
       resolutionRef.current =
         result.estado === "PENDIENTE" ? null : toJoinStatus(result.estado);
       saveGuestSession(session);
-      setParticipantId(result.participanteId);
       setParticipantSession(session);
       setJoinStatus(toJoinStatus(result.estado));
       if (result.estado === "APROBADO") setCountdown(3);
@@ -299,187 +295,150 @@ function ParticipantView({
     }
   }
 
+  const meetingDate = new Date(sala.fechaInicio);
+  const meetingDetails = Number.isNaN(meetingDate.getTime())
+    ? sala.resumen
+    : `${new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long" }).format(meetingDate)} · ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(meetingDate)} hs`;
+  const inputClass = "mt-2 block w-full rounded-[16px] border border-[#252c5d] bg-white px-3.5 py-4 font-normal text-[#1c2452] placeholder:text-[#c5c8d5] focus:border-[#3d4fdb] focus:outline-none focus:ring-2 focus:ring-[#3d4fdb]/15";
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.8fr)]">
-      {/* Camera preview */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
-        <div className="relative aspect-video">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            aria-label="Vista previa de tu cámara"
-            className={`h-full w-full object-cover ${cameraEnabled ? "" : "hidden"}`}
-          />
-          {!cameraEnabled && (
-            <div className="flex h-full items-center justify-center text-slate-300">
-              Cámara apagada
-            </div>
-          )}
-          <div className="absolute bottom-4 left-4 rounded-full bg-slate-950/75 px-3 py-1.5 text-sm text-white">
-            Vista previa local
+    <section aria-labelledby="participant-page-title" className="mx-auto w-full max-w-[880px] p-5 sm:p-8">
+      <header className="mb-3">
+        {isDemo && <p className="mb-2 text-xs font-semibold text-[#3d4fdb]">Modo demo</p>}
+        <h1 id="participant-page-title" className="text-[26px] font-bold leading-tight text-[#1c2452]">Antes de unirte</h1>
+        <h2 className="mt-1 text-base font-semibold text-[#555d7a]">{sala.nombre}</h2>
+        <p className="mt-1 text-sm text-[#626982]">{meetingDetails || sala.resumen || `Código de reunión: ${sala.codigo}`}</p>
+      </header>
+
+      <div className="relative aspect-video overflow-hidden rounded-[18px] bg-[#434343]">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          aria-label="Vista previa de tu cámara"
+          className={`h-full w-full object-cover ${cameraEnabled ? "" : "hidden"}`}
+        />
+        {!cameraEnabled && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-white/75">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold text-white">
+              {joinForm.nombre.trim().charAt(0).toUpperCase() || user?.nombre?.charAt(0).toUpperCase() || "?"}
+            </span>
+            <span className="text-sm font-medium">Tu cámara está apagada</span>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-3 p-4">
+        )}
+        <div className="absolute inset-x-0 bottom-4 flex justify-center gap-3">
           <button
             type="button"
-            onClick={() => setCameraEnabled((v) => !v)}
-            className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            aria-label={microphoneEnabled ? "Silenciar micrófono" : "Activar micrófono"}
+            aria-pressed={microphoneEnabled}
+            onClick={() => setMicrophoneEnabled((v) => !v)}
+            className={`flex h-14 w-14 items-center justify-center rounded-[15px] text-white transition ${microphoneEnabled ? "bg-[#3d4fdb] hover:bg-[#3344c4]" : "bg-[#29304b] hover:bg-[#20263c]"}`}
           >
-            {cameraEnabled ? "Apagar cámara" : "Encender cámara"}
+            <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="12" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8" />
+            </svg>
           </button>
           <button
             type="button"
-            onClick={() => setMicrophoneEnabled((v) => !v)}
-            className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            aria-label={cameraEnabled ? "Apagar cámara" : "Encender cámara"}
+            aria-pressed={cameraEnabled}
+            onClick={() => setCameraEnabled((v) => !v)}
+            className={`flex h-14 w-14 items-center justify-center rounded-[15px] text-white transition ${cameraEnabled ? "bg-[#3d4fdb] hover:bg-[#3344c4]" : "bg-[#29304b] hover:bg-[#20263c]"}`}
           >
-            {microphoneEnabled ? "Silenciar micrófono" : "Activar micrófono"}
+            <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <rect x="3" y="6" width="13" height="12" rx="3" />
+              <path d="m16 10 5-3v10l-5-3" />
+            </svg>
           </button>
         </div>
       </div>
 
-      {/* Sidebar */}
-      <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-widest text-slate-500">
-          Reunión
+      {mediaError && (
+        <p role="alert" className="mt-4 rounded-[14px] border border-amber-200 bg-amber-50 p-3.5 text-sm leading-relaxed text-amber-900">
+          {mediaError} Podés continuar sin medios.
         </p>
-        <h2 className="mt-2 text-2xl font-semibold text-slate-950">{sala.nombre}</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Código: <strong className="tracking-widest">{sala.codigo}</strong>
-        </p>
+      )}
 
-        {mediaError && (
-          <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-            {mediaError} Podés continuar sin medios.
-          </p>
-        )}
-
-        {/* Join form — only shown while idle or rejected */}
-        {joinStatus === "idle" && (
-          <form id="join-request" onSubmit={handleRequestJoin} className="mt-6 space-y-4">
-            {isAuthenticated ? (
-              <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
-                Vas a solicitar el ingreso como {user?.nombre} {user?.apellido}
+      {joinStatus === "idle" && (
+        <form id="join-request" onSubmit={handleRequestJoin} className="mt-5">
+          {isAuthenticated ? (
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <p className="text-sm leading-relaxed text-[#626982]">
+                Vas a solicitar el ingreso como <strong className="text-[#1c2452]">{user?.nombre} {user?.apellido}</strong>
                 {user?.email ? ` (${user.email})` : ""}.
               </p>
-            ) : (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-slate-700">
-                    Nombre
-                    <input
-                      required
-                      value={joinForm.nombre}
-                      onChange={(e) => setJoinForm((f) => ({ ...f, nombre: e.target.value }))}
-                      className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
-                    />
-                  </label>
-                  <label className="text-sm font-medium text-slate-700">
-                    Apellido
-                    <input
-                      required
-                      value={joinForm.apellido}
-                      onChange={(e) => setJoinForm((f) => ({ ...f, apellido: e.target.value }))}
-                      className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
-                    />
-                  </label>
-                </div>
-                <label className="block text-sm font-medium text-slate-700">
-                  Email
-                  <input
-                    required
-                    type="email"
-                    value={joinForm.email}
-                    onChange={(e) => setJoinForm((f) => ({ ...f, email: e.target.value }))}
-                    className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal text-slate-950"
-                  />
-                </label>
-              </>
-            )}
-          </form>
-        )}
-
-        {joinError && (
-          <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            {joinError}
-          </p>
-        )}
-
-        {/* Status card */}
-        <div
-          className={`mt-6 rounded-xl p-4 transition-colors ${
-            joinStatus === "approved"
-              ? "bg-green-50 ring-1 ring-green-200"
-              : joinStatus === "rejected"
-                ? "bg-red-50 ring-1 ring-red-200"
-                : joinStatus === "waiting"
-                  ? "bg-blue-50 ring-1 ring-blue-200"
-                  : "bg-slate-50"
-          }`}
-        >
-          <p className="font-semibold text-slate-900">
-            {joinStatus === "waiting" && "Esperando aprobación del anfitrión…"}
-            {joinStatus === "approved" && "✓ Ingreso aprobado"}
-            {joinStatus === "rejected" && "✗ Ingreso rechazado"}
-            {joinStatus === "idle" && "Listo para solicitar ingreso"}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            {joinStatus === "waiting" &&
-              "Te avisaremos en tiempo real cuando el anfitrión decida."}
-            {joinStatus === "approved" && countdown !== null && (
-              <>Redirigiendo a la sala en <strong>{countdown}</strong>…</>
-            )}
-            {joinStatus === "approved" && countdown === null &&
-              "Ya podés continuar a la sala de conferencia."}
-            {joinStatus === "rejected" &&
-              "El anfitrión rechazó tu solicitud. Contactalo si necesitás acceso."}
-            {joinStatus === "idle" &&
-              "El anfitrión deberá aprobar tu ingreso antes de entrar."}
-          </p>
-          {joinStatus === "waiting" && (
-            <div className="mt-3 flex justify-center">
-              <span className="inline-flex gap-1.5">
-                <span className="h-2 w-2 animate-bounce rounded-full bg-blue-400 [animation-delay:0ms]" />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-blue-400 [animation-delay:150ms]" />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-blue-400 [animation-delay:300ms]" />
-              </span>
+              <button type="submit" id="request-join-btn" disabled={joinLoading} className="shrink-0 rounded-[18px] bg-[#3d4fdb] px-7 py-4 font-bold text-white transition hover:bg-[#3344c4] disabled:cursor-wait disabled:opacity-60">
+                {joinLoading ? "Solicitando..." : "Solicitar unirse"}
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.15fr_auto] xl:items-end">
+              <label className="block text-sm font-medium text-[#1c2452]">
+                Tu nombre*<input required value={joinForm.nombre} onChange={(e) => setJoinForm((f) => ({ ...f, nombre: e.target.value }))} autoComplete="given-name" placeholder="Escribe tu nombre" className={inputClass} />
+              </label>
+              <label className="block text-sm font-medium text-[#1c2452]">
+                Tu apellido*<input required value={joinForm.apellido} onChange={(e) => setJoinForm((f) => ({ ...f, apellido: e.target.value }))} autoComplete="family-name" placeholder="Escribe tu apellido" className={inputClass} />
+              </label>
+              <label className="block text-sm font-medium text-[#1c2452]">
+                Tu mail*<input required type="email" value={joinForm.email} onChange={(e) => setJoinForm((f) => ({ ...f, email: e.target.value }))} autoComplete="email" placeholder="Escribe tu mail" className={inputClass} />
+              </label>
+              <button type="submit" id="request-join-btn" disabled={joinLoading} className="min-h-[58px] rounded-[18px] bg-[#3d4fdb] px-6 font-bold text-white transition hover:bg-[#3344c4] disabled:cursor-wait disabled:opacity-60">
+                {joinLoading ? "Solicitando..." : "Solicitar unirse"}
+              </button>
             </div>
           )}
-          {participantId && (
-            <p className="mt-2 text-xs text-slate-400">ID: {participantId}</p>
-          )}
-        </div>
+        </form>
+      )}
 
-        {/* CTA buttons */}
-        {joinStatus === "approved" ? (
-          <Link
-            href={`/room?code=${encodeURIComponent(sala.codigo)}&salaId=${encodeURIComponent(sala.id)}`}
-            id="enter-room-btn"
-            className="mt-6 inline-flex w-full justify-center rounded-lg bg-green-600 px-4 py-3 font-semibold text-white transition-colors hover:bg-green-700"
-          >
-            {countdown !== null ? `Entrando en ${countdown}…` : "Continuar a la sala"}
+      {joinError && (
+        <p role="alert" className="mt-4 rounded-[14px] border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">{joinError}</p>
+      )}
+
+      {joinStatus === "waiting" && (
+        <div aria-live="polite" className="mt-5 rounded-[16px] border border-[#dfe2ff] bg-[#f5f6ff] p-4">
+          <p className="font-bold text-[#1c2452]">
+            Esperando aprobación del anfitrión…
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-[#626982]">
+            Te avisaremos en tiempo real cuando el anfitrión decida.
+          </p>
+          <Link href="/home" className="mt-4 inline-flex rounded-full border border-[#dfe1eb] bg-white px-5 py-2.5 font-bold text-[#1c2452] transition hover:bg-[#f7f7fb]">Salir de la sala de espera</Link>
+        </div>
+      )}
+
+      {joinStatus === "approved" && (
+        <div role="status" aria-live="polite" className="mt-5 text-[#1c2452]">
+          <div className="flex items-center gap-2 text-lg font-bold">
+            <span>¡Solicitud aceptada!</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-[#f4d94e]">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+              <path d="m8.5 12 2.3 2.3 4.8-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <p className="mt-1 text-sm leading-relaxed text-[#626982]">Te estamos conectando a la reunión...</p>
+        </div>
+      )}
+
+      {joinStatus === "rejected" && (
+        <div role="status" aria-live="polite" className="mt-5 flex flex-col gap-4 text-[#1c2452] sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-lg font-bold text-[#e94e5d]">
+              <span>No pudiste ingresar</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+                <path d="m9 9 6 6m0-6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </div>
+            <p className="mt-1 text-sm leading-relaxed">El anfitrión rechazó tu solicitud de acceso</p>
+          </div>
+          <Link href="/home" className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full border border-[#e94e5d] px-8 py-2 text-sm font-bold text-[#e94e5d] transition hover:bg-red-50">
+            Volver al inicio
           </Link>
-        ) : joinStatus === "waiting" ? (
-          <Link
-            href="/home"
-            className="mt-6 inline-flex w-full justify-center rounded-lg border border-slate-300 px-4 py-3 font-semibold text-slate-900 hover:bg-slate-50"
-          >
-            Salir de la sala de espera
-          </Link>
-        ) : joinStatus === "idle" ? (
-          <button
-            type="submit"
-            form="join-request"
-            id="request-join-btn"
-            disabled={joinLoading}
-            className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
-          >
-            {joinLoading ? "Solicitando..." : "Solicitar ingreso"}
-          </button>
-        ) : null}
-      </aside>
-    </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -615,9 +574,9 @@ function WaitingRoomContent() {
   const isLoading = loadingSala || !sala;
 
   return (
-    <section aria-labelledby="page-title" className="space-y-8">
+    <section aria-label={sala && !isHost ? "Sala de espera" : undefined} aria-labelledby={sala && !isHost ? undefined : "page-title"} className="space-y-8">
       {/* Page header */}
-      <div className="max-w-3xl">
+      {(!sala || isHost) && <div className="max-w-3xl">
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">
           {isHost ? "Sala de espera · Anfitrión" : "Waiting room"}
         </p>
@@ -637,7 +596,7 @@ function WaitingRoomContent() {
             Modo demo: no se realizan llamadas al backend ni a Socket.io.
           </p>
         )}
-      </div>
+      </div>}
 
       {isLoading && !roomError && (
         <p
