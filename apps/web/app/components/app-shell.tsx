@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
-import { LoginModal } from "./login-modal";
+import { AuthModal } from "./auth-modal";
 
 const navigation = [
   { href: "/home", label: "Inicio" },
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto w-full max-w-7xl px-6 py-10">{children}</main>
-      <LoginModal
+      <AuthModal
         open={loginOpen}
         initialMode={authMode}
         onClose={() => setLoginOpen(false)}

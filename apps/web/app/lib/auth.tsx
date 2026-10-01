@@ -41,8 +41,21 @@ type AuthContextValue = {
 type ApiErrorResponse = {
   error?: {
     message?: string;
+    code?: string;
   };
 };
+
+export class AuthRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message);
+    this.name = "AuthRequestError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -55,7 +68,8 @@ async function authRequest<T>(path: string, body: unknown): Promise<T> {
 
   if (!response.ok) {
     const responseBody = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-    throw new Error(responseBody?.error?.message ?? "No se pudo completar la solicitud.");
+    const message = responseBody?.error?.message ?? "No se pudo completar la solicitud.";
+    throw new AuthRequestError(message, response.status, responseBody?.error?.code ?? null);
   }
 
   return response.json() as Promise<T>;
