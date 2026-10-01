@@ -17,6 +17,8 @@ import {
 import { Call, CallingState, StreamVideoClient } from "@stream-io/video-client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { StreamChatPanel } from "./stream-chat-panel";
+import { HostRequestPanel } from "./host-request-panel";
+import type { JoinRequest } from "../lib/host-socket";
 import { transferHost, finalizarSala } from "../lib/salas-api";
 
 type StreamConferenceProps = {
@@ -30,6 +32,11 @@ type StreamConferenceProps = {
   callId: string;
   salaId?: string;
   isHost?: boolean;
+  requests?: JoinRequest[];
+  requestsConnected?: boolean;
+  requestsError?: string;
+  onApproveRequest?: (participanteId: string) => void;
+  onRejectRequest?: (participanteId: string) => void;
   onLeave?: (error?: Error) => void;
 };
 
@@ -154,12 +161,21 @@ export function StreamConference({
   callId,
   salaId,
   isHost,
+  requests = [],
+  requestsConnected = false,
+  requestsError = "",
+  onApproveRequest,
+  onRejectRequest,
   onLeave,
 }: StreamConferenceProps) {
   const [client, setClient] = useState<StreamVideoClient | null>(null);
   const [call, setCall] = useState<Call | null>(null);
   const [error, setError] = useState("");
-  const [chatOpen, setChatOpen] = useState(true);
+  const [activeSidebar, setActiveSidebar] = useState<"chat" | "participants" | null>("participants");
+  const [participants, setParticipants] = useState<Array<{ sessionId: string; name: string; isLocal: boolean }>>([]);
+  const [requestToast, setRequestToast] = useState<JoinRequest | null>(null);
+  const notifiedRequestIdsRef = useRef(new Set<string>());
+  const requestToastTimeoutRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isEndingCall, setIsEndingCall] = useState(false);
@@ -167,8 +183,55 @@ export function StreamConference({
   const [transferring, setTransferring] = useState(false);
   const [otherParticipants, setOtherParticipants] = useState<CallParticipant[]>([]);
   const [isStreamHost, setIsStreamHost] = useState(false);
+  const connectionGenerationRef = useRef(0);
 
   const effectiveIsHost = Boolean(isHost || isStreamHost);
+  const pendingRequestsCount = requests.filter(
+    (request) => request.status === "pending" || request.status === "approving" || request.status === "rejecting",
+  ).length;
+
+  useEffect(() => {
+    const newRequests = requests.filter(
+      (request) => request.status === "pending" && !notifiedRequestIdsRef.current.has(request.participanteId),
+    );
+    if (newRequests.length === 0) return;
+
+    newRequests.forEach((request) => notifiedRequestIdsRef.current.add(request.participanteId));
+    setRequestToast(newRequests[newRequests.length - 1]);
+    if (requestToastTimeoutRef.current !== null) {
+      window.clearTimeout(requestToastTimeoutRef.current);
+    }
+    requestToastTimeoutRef.current = window.setTimeout(() => {
+      setRequestToast(null);
+      requestToastTimeoutRef.current = null;
+    }, 6000);
+  }, [requests]);
+
+  useEffect(() => () => {
+    if (requestToastTimeoutRef.current !== null) {
+      window.clearTimeout(requestToastTimeoutRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!call) return;
+
+    const syncParticipants = () => {
+      setParticipants((call.state.participants ?? []).map((participant) => ({
+        sessionId: participant.sessionId,
+        name: participant.name || participant.userId,
+        isLocal: Boolean(participant.isLocalParticipant || participant.userId === user.id),
+      })));
+    };
+
+    syncParticipants();
+    const unsubJoined = call.on("call.session_participant_joined", syncParticipants);
+    const unsubLeft = call.on("call.session_participant_left", syncParticipants);
+    return () => {
+      unsubJoined();
+      unsubLeft();
+    };
+  }, [call, user.id]);
 
   // ── Dynamically check if the user is an admin/host in GetStream ──
   useEffect(() => {
@@ -240,6 +303,7 @@ export function StreamConference({
     if (!callType || !callId) {
       return;
     }
+    const connectionGeneration = ++connectionGenerationRef.current;
 
     const nextClient = StreamVideoClient.getOrCreateInstance({
       apiKey,
@@ -248,47 +312,82 @@ export function StreamConference({
     });
     const nextCall = nextClient.call(callType, callId);
 
-    void nextClient
-      .connectUser({ id: user.id, name: user.name }, token)
-      .then(async () => {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error(
-            "El navegador no permite acceder a la cámara desde este contexto.",
-          );
-        }
+    let joined = false;
+    let disconnectPromise: Promise<void> | null = null;
+    const disconnectClient = () => {
+      disconnectPromise ??= nextClient.disconnectUser();
+      return disconnectPromise;
+    };
 
-        const permissionStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
-        permissionStream.getTracks().forEach((track) => track.stop());
-        await nextCall.join({ create: false });
-      })
-      .then(async () => {
-        await nextCall.camera.enable();
-        await nextCall.microphone.enable();
-        if (active) {
-          setClient(nextClient);
-          setCall(nextCall);
-        }
-      })
-      .catch((joinError) => {
-        if (active) {
-          setError(
-            joinError instanceof Error
-              ? joinError.message
-              : "No se pudo conectar a la videollamada.",
-          );
-        }
-        void nextClient.disconnectUser();
+    const setupPromise = (async () => {
+      await nextClient.connectUser({ id: user.id, name: user.name }, token);
+      if (!active) return;
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          "El navegador no permite acceder a la cámara desde este contexto.",
+        );
+      }
+
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
       });
+      permissionStream.getTracks().forEach((track) => track.stop());
+      if (!active) return;
+
+      await nextCall.join({ create: false });
+      joined = true;
+      if (!active) {
+        await nextCall.leave();
+        joined = false;
+        return;
+      }
+
+      await nextCall.camera.enable();
+      if (!active) {
+        await nextCall.leave();
+        joined = false;
+        return;
+      }
+      await nextCall.microphone.enable();
+      if (!active) {
+        await nextCall.leave();
+        joined = false;
+        return;
+      }
+
+      setClient(nextClient);
+      setCall(nextCall);
+    })().catch(async (joinError: unknown) => {
+      if (active) {
+        setError(
+          joinError instanceof Error
+            ? joinError.message
+            : "No se pudo conectar a la videollamada.",
+        );
+      }
+      if (joined && nextCall.state.callingState !== CallingState.LEFT) {
+        await nextCall.leave().catch(() => {});
+        joined = false;
+      }
+      if (connectionGenerationRef.current === connectionGeneration) {
+        await disconnectClient().catch(() => {});
+      }
+    });
 
     return () => {
       active = false;
-      if (nextCall.state.callingState !== CallingState.LEFT && !isEndingCall) {
-        void nextCall.leave();
-      }
-      void nextClient.disconnectUser();
+      void (async () => {
+        await setupPromise;
+        if (joined && nextCall.state.callingState !== CallingState.LEFT && !isEndingCall) {
+          await nextCall.leave().catch(() => {});
+          joined = false;
+        }
+        if (connectionGenerationRef.current === connectionGeneration) {
+          await disconnectClient().catch(() => {});
+        }
+      })();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, callId, callType, token, user.id, user.name]);
@@ -388,7 +487,7 @@ export function StreamConference({
 
   if (!callType || !callId) {
     return (
-      <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+      <p role="alert" className="stream-conference-error">
         El identificador de la llamada de GetStream no es válido.
       </p>
     );
@@ -396,7 +495,7 @@ export function StreamConference({
 
   if (error) {
     return (
-      <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+      <p role="alert" className="stream-conference-error">
         {error}
       </p>
     );
@@ -404,22 +503,40 @@ export function StreamConference({
 
   if (!client) {
     return (
-      <p role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-slate-600">
-        Conectando a la videollamada…
-      </p>
+      <div role="status" className="stream-conference-loading">
+        <span className="room-loading-spinner" aria-hidden="true" />
+        <span>Conectando a la sala…</span>
+      </div>
     );
   }
 
   if (!call) {
     return (
-      <p role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-slate-600">
-        Preparando la videollamada…
-      </p>
+      <div role="status" className="stream-conference-loading">
+        <span className="room-loading-spinner" aria-hidden="true" />
+        <span>Preparando la sala…</span>
+      </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="str-video overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
+    <div ref={containerRef} className="str-video stream-conference-shell overflow-hidden bg-[#080b19] text-white">
+      {requestToast && (
+        <div className="stream-conference-request-toast" role="status" aria-live="polite">
+          <span className="stream-conference-request-toast__dot" aria-hidden="true" />
+          <p><strong>{requestToast.nombre} {requestToast.apellido}</strong> se quiere unir</p>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSidebar("participants");
+              setRequestToast(null);
+            }}
+          >
+            Ver solicitudes
+          </button>
+          <button type="button" aria-label="Cerrar aviso" onClick={() => setRequestToast(null)}>×</button>
+        </div>
+      )}
       {!isHost && isStreamHost && (
         <div className="bg-blue-600 px-4 py-2 text-center text-xs font-semibold text-white shadow-inner">
           👑 Ahora sos el host de esta reunión. Podés transferir el rol o finalizarla para todos.
@@ -459,57 +576,88 @@ export function StreamConference({
                   </Restricted>
                   <CancelCallButton onClick={handleLeave} />
                 </div>
-                {/* Chat toggle button */}
-                <button
-                  type="button"
-                  id="toggle-chat-btn"
-                  onClick={() => setChatOpen((v) => !v)}
-                  className="stream-conference-layout__chat-toggle"
-                  aria-label={chatOpen ? "Cerrar chat" : "Abrir chat"}
-                  title={chatOpen ? "Cerrar chat" : "Abrir chat"}
-                >
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                    />
-                  </svg>
-                </button>
-                {/* Fullscreen toggle button */}
-                <button
-                  type="button"
-                  id="toggle-fullscreen-btn"
-                  onClick={toggleFullscreen}
-                  className="stream-conference-layout__chat-toggle"
-                  aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-                  title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-                >
-                  {isFullscreen ? (
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  ) : (
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                    </svg>
-                  )}
-                </button>
+
               </div>
             </div>
 
             {/* ── Chat sidebar ── */}
-            {chatOpen && (
-              <div className="stream-conference-layout__chat">
-                <StreamChatPanel
-                  apiKey={apiKey}
-                  token={token}
-                  user={user}
-                  channelId={callId}
-                />
-              </div>
+            {activeSidebar && (
+              <aside className="stream-conference-layout__chat stream-conference-sidebar" aria-label={activeSidebar === "chat" ? "Chat de la reunión" : "Participantes de la reunión"}>
+                <div className="stream-conference-sidebar__header">
+                  <h2>{activeSidebar === "chat" ? "Chat" : `Participantes (${participants.length})`}</h2>
+                  <button type="button" onClick={() => setActiveSidebar(null)} aria-label="Cerrar panel">×</button>
+                </div>
+                {activeSidebar === "chat" ? (
+                  <StreamChatPanel apiKey={apiKey} token={token} user={user} channelId={callId} />
+                ) : (
+                  <div className="stream-conference-sidebar__content">
+                    {isHost && (
+                      <section className="stream-conference-sidebar__section">
+                        <h3>Solicitudes de ingreso</h3>
+                        {onApproveRequest && onRejectRequest ? (
+                          <HostRequestPanel requests={requests} connected={requestsConnected} error={requestsError} onApprove={onApproveRequest} onReject={onRejectRequest} embedded />
+                        ) : <p className="stream-conference-sidebar__muted">No hay solicitudes disponibles.</p>}
+                      </section>
+                    )}
+                    <section className="stream-conference-sidebar__section">
+                      <h3>Participantes conectados</h3>
+                      <ul className="stream-conference-sidebar__participants">
+                        {participants.map((participant) => (
+                          <li key={participant.sessionId}>
+                            <span className="stream-conference-sidebar__avatar" aria-hidden="true">{participant.name.charAt(0).toUpperCase()}</span>
+                            <span className="stream-conference-sidebar__participant-name">{participant.name}{participant.isLocal ? " (Vos)" : ""}</span>
+                            <span className="stream-conference-sidebar__role">{participant.isLocal && effectiveIsHost ? "Anfitrión" : "Participante"}</span>
+                          </li>
+                        ))}
+                        {participants.length === 0 && <li className="stream-conference-sidebar__muted">Esperando a otros participantes…</li>}
+                      </ul>
+                    </section>
+                  </div>
+                )}
+              </aside>
             )}
+          </div>
+
+          <div className="stream-conference-layout__panel-actions">
+            <button
+              type="button"
+              id="toggle-chat-btn"
+              onClick={() => setActiveSidebar((current) => current === "chat" ? null : "chat")}
+              className="stream-conference-layout__chat-toggle"
+              aria-label={activeSidebar === "chat" ? "Cerrar chat" : "Abrir chat"}
+              aria-pressed={activeSidebar === "chat"}
+              title={activeSidebar === "chat" ? "Cerrar chat" : "Abrir chat"}
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+              <span>Chat</span>
+            </button>
+            <button
+              type="button"
+              id="toggle-participants-btn"
+              onClick={() => setActiveSidebar((current) => current === "participants" ? null : "participants")}
+              className="stream-conference-layout__chat-toggle"
+              aria-label={`${activeSidebar === "participants" ? "Cerrar participantes" : "Abrir participantes"}${pendingRequestsCount > 0 ? `, ${pendingRequestsCount} solicitudes de ingreso` : ""}`}
+              aria-pressed={activeSidebar === "participants"}
+              title="Participantes y solicitudes"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m16 0v-2a4 4 0 0 0-3-3.87M14 3.13a4 4 0 0 1 0 7.75M14 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" /></svg>
+              <span>Participantes</span>
+              {pendingRequestsCount > 0 && <span className="stream-conference-request-badge" aria-hidden="true">{pendingRequestsCount}</span>}
+            </button>
+            <button
+              type="button"
+              id="toggle-fullscreen-btn"
+              onClick={toggleFullscreen}
+              className="stream-conference-layout__chat-toggle"
+              aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+              title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            >
+              {isFullscreen ? (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              ) : (
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+              )}
+            </button>
           </div>
 
           {/* ── Host Leave Modal ── */}
