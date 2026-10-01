@@ -124,6 +124,28 @@ client.test("invitar no-host 403", function() {
 });
 %}
 
+### 7b. GET participantes como cuenta ajena a la sala -> 403 NOT_A_PARTICIPANT
+GET {{host}}/salas/{{salaId}}/participantes
+Authorization: Bearer {{otherToken}}
+
+> {%
+client.test("participantes ajeno 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+  client.assert(response.body.error.code === "NOT_A_PARTICIPANT", "code " + response.body.error.code);
+});
+%}
+
+### 7c. GET detalle como cuenta ajena a la sala -> 403 NOT_A_PARTICIPANT
+GET {{host}}/salas/{{salaId}}/detalle
+Authorization: Bearer {{otherToken}}
+
+> {%
+client.test("detalle ajeno 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+  client.assert(response.body.error.code === "NOT_A_PARTICIPANT", "code " + response.body.error.code);
+});
+%}
+
 ### 8. Invitar a sala inexistente -> 404
 POST {{host}}/salas/{{missingId}}/invitaciones
 Content-Type: application/json

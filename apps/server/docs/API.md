@@ -119,6 +119,8 @@ Retorna todas las salas donde el usuario autenticado es participante (HOST o PAR
 
 Retorna el detalle completo de una sala con lista de participantes.
 
+**Visibilidad (PR #104):** solo puede consultar quien es HOST o un participante **no `INVITADO`** vinculado a su cuenta; si no → `403 NOT_A_PARTICIPANT`. El HOST ve todas las filas (incluidos los `INVITADO`) con su `email`. Cualquier otro participante **no ve las filas `INVITADO`** y recibe `email: null` en todas las filas (también en `creador.email`); `total`/`totalParticipantes` cuentan solo las filas visibles.
+
 **Auth:** JWT requerido
 
 **Response 200:**
@@ -272,6 +274,8 @@ finalizar. Idempotente: si la sala ya estaba `FINALIZADA`, responde 200 igual.
 
 Retorna la lista de participantes de una sala.
 
+**Visibilidad (PR #104):** solo puede consultar quien es HOST o un participante **no `INVITADO`** vinculado a su cuenta; si no → `403 NOT_A_PARTICIPANT`. El HOST ve todas las filas (incluidos los `INVITADO`) con su `email`. Cualquier otro participante **no ve las filas `INVITADO`** y recibe `email: null` en todas las filas (también en `creador.email`); `total`/`totalParticipantes` cuentan solo las filas visibles.
+
 **Auth:** JWT requerido
 
 **Response 200:**
@@ -399,7 +403,7 @@ Sesión **opcional** (`Authorization: Bearer <access token>`). Pasa al invitado 
 
 **Ingreso por código:** un `INVITADO` que llama `POST /salas/:code/join` (o el socket `join:request`) con su email también se promueve a `PENDIENTE` reutilizando su fila (sin duplicar) y su invitación queda usada. Si la fila es de una cuenta registrada y el caller no tiene sesión de esa cuenta → `401 LOGIN_REQUIRED`.
 
-**Guardas:** `participant:approve/reject` solo actúan sobre `PENDIENTE` (sobre un `INVITADO`, `409 PARTICIPANT_STATE_CONFLICT`); `POST /salas/:id/transfer-host` rechaza un `INVITADO` como destino (`400`). `GET /salas/:id/participantes` y `/detalle` lo listan con `estado: "INVITADO"` (y `nombre`/`apellido` `null` si es un invitado sin cuenta); las listas de aprobados no lo incluyen.
+**Guardas:** `participant:approve/reject` solo actúan sobre `PENDIENTE` (sobre un `INVITADO`, `409 PARTICIPANT_STATE_CONFLICT`); `POST /salas/:id/transfer-host` rechaza un `INVITADO` como destino (`400`). `GET /salas/:id/participantes` y `/detalle` lo listan con `estado: "INVITADO"` (y `nombre`/`apellido` `null` si es un invitado sin cuenta) **solo al HOST**; el resto de los participantes no ve las filas `INVITADO` ni los emails (`email: null`). Las listas de aprobados no lo incluyen.
 
 ---
 

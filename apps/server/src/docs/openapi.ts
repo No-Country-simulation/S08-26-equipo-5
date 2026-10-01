@@ -192,7 +192,7 @@ export const openApiSpec = {
           id: { type: "string", format: "uuid" },
           nombre: { type: "string", nullable: true, description: "null mientras el participante está INVITADO sin cuenta" },
           apellido: { type: "string", nullable: true, description: "null mientras el participante está INVITADO sin cuenta" },
-          email: { type: "string", format: "email" },
+          email: { type: "string", format: "email", nullable: true, description: "null para quien no es HOST (solo el HOST ve los emails)" },
           rol: { $ref: "#/components/schemas/RolParticipante" },
           estado: { $ref: "#/components/schemas/EstadoParticipante" },
           fechaIngreso: { type: "string", format: "date-time", nullable: true },
@@ -300,7 +300,7 @@ export const openApiSpec = {
               id: { type: "string", format: "uuid" },
               nombre: { type: "string" },
               apellido: { type: "string" },
-              email: { type: "string", format: "email" },
+              email: { type: "string", format: "email", nullable: true, description: "null para quien no es HOST" },
             },
           },
         },
@@ -600,6 +600,8 @@ export const openApiSpec = {
       get: {
         tags: ["Salas"],
         summary: "Obtener detalle de sala (con participantes)",
+        description:
+          "Visibilidad: solo participa quien es HOST o un participante no INVITADO vinculado a su cuenta (si no, 403 `NOT_A_PARTICIPANT`). Solo el HOST ve las filas `INVITADO` y los emails; para el resto se omiten los INVITADO y `email` viene en `null`.",
         operationId: "salas_get_detalle",
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -610,6 +612,7 @@ export const openApiSpec = {
             description: "Detalle completo de la sala",
             content: { "application/json": { schema: { $ref: "#/components/schemas/SalaDetalle" } } },
           },
+          403: { description: "La cuenta no es participante de la sala (NOT_A_PARTICIPANT)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
@@ -757,6 +760,8 @@ export const openApiSpec = {
       get: {
         tags: ["Salas"],
         summary: "Listar participantes de una sala",
+        description:
+          "Visibilidad: solo participa quien es HOST o un participante no INVITADO vinculado a su cuenta (si no, 403 `NOT_A_PARTICIPANT`). Solo el HOST ve las filas `INVITADO` y los emails; para el resto se omiten los INVITADO y `email` viene en `null`.",
         operationId: "salas_get_participantes",
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -767,6 +772,7 @@ export const openApiSpec = {
             description: "Listado de participantes",
             content: { "application/json": { schema: { $ref: "#/components/schemas/ParticipantesResponse" } } },
           },
+          403: { description: "La cuenta no es participante de la sala (NOT_A_PARTICIPANT)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },

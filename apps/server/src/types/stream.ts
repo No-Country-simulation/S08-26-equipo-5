@@ -74,7 +74,8 @@ export interface ParticipanteInfo {
   // null mientras el participante es INVITADO y no completó sus datos.
   nombre: string | null;
   apellido: string | null;
-  email: string;
+  // null para quien no es HOST (solo el HOST ve los emails).
+  email: string | null;
   rol: RoomRole;
   estado: string;
   fechaIngreso: string | null;
@@ -84,7 +85,8 @@ export interface CreadorInfo {
   id: string;
   nombre: string;
   apellido: string;
-  email: string;
+  // null para quien no es HOST.
+  email: string | null;
 }
 
 // ─── PUT /salas/:id ──────────────────────────────────────
