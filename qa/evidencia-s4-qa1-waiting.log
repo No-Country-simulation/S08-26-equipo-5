@@ -1,0 +1,282 @@
+
+---------------------
+
+=== 1. Register host -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/register
+=> 201 (2192 ms, 878 B)
+✓ register host 201
+
+---------------------
+
+=== 2. Login host -> 200 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/login
+=> 200 (1979 ms, 1.13 kB)
+✓ login host 200
+
+---------------------
+
+=== 3. Register invitado -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/register
+=> 201 (1991 ms, 878 B)
+✓ register guest 201
+
+---------------------
+
+=== 4. Login invitado -> 200 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/login
+=> 200 (1990 ms, 1.14 kB)
+✓ login guest 200
+
+---------------------
+
+=== 5. Crear sala -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+accept-encoding: gzip, deflate, br
+accept: */*
+authorization: Bearer [redacted]
+content-length: 28
+content-type: application/json
+user-agent: httpyac
+
+{
+  "nombre": "Waiting QA"
+}
+HTTP/1.1 500  - Internal Server Error
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2f00fbdfd786-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 78
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:33:39 GMT
+etag: W/"50-zMrWSYNKbEgjlkX8KfAMYl0njSQ"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: ada1a397-5dbb-451b
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Ocurrió un error interno"
+  }
+}
+✖ crear sala 201 (AssertionError [ERR_ASSERTION]: status 500 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 6. Waiting room Socket.IO ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/health
+accept-encoding: gzip, deflate, br
+accept: */*
+user-agent: httpyac
+HTTP/1.1 200  - OK
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2f049c24d786-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 76
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:33:39 GMT
+etag: W/"59-yS0t4dv2jzucldbwR6PWEXMmuk8"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: 2feea4a6-ae62-4f9b
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "status": "success",
+  "message": "Backend operativo",
+  "timestamp": "2026-10-01T14:33:39.398Z"
+}
+✖ waiting room: flujo completo sin errores (AssertionError [ERR_ASSERTION]: falta salaId de requests previos - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✓ join:request a sala inexistente -> ROOM_NOT_FOUND
+✓ host:subscribe anonimo -> UNAUTHORIZED
+✓ host:subscribe de no-host -> HOST_ONLY
+✖ join:pending llega al host (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ join:approved trae streamCallId (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ join:rejected trae streamCallId null (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ segundo reject -> PARTICIPANT_STATE_CONFLICT (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ approve de participanteId inexistente -> NOT_FOUND (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ approve sin token -> UNAUTHORIZED (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ approve de no-host -> HOST_ONLY (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 7. POST /salas/:code/join (anónimo) -> 200 PENDIENTE + accessToken ===
+
+POST {{host}}/salas/{{salaCodigo}}/join
+Content-Type: application/json
+
+{
+  "nombre": "Carla",
+  "apellido": "Gomez",
+  "email": "carla-wait-{{$timestamp}}@example.com"
+}
+✖ salaCodigo is not defined (ReferenceError: salaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:278:20)
+✖ salaCodigo is not defined (ReferenceError: salaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:278:20)
+expression salaCodigo throws error
+
+---------------------
+
+=== 8. GET /salas/:salaId/mi-estado con el guest token -> PENDIENTE ===
+
+GET {{host}}/salas/{{salaId}}/mi-estado
+Authorization: Bearer {{carlaToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:298:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:298:20)
+expression salaId throws error
+
+---------------------
+
+=== 9. POST /salas/:salaId/stream-token con guest PENDIENTE -> 403 JOIN_NOT_APPROVED ===
+
+POST {{host}}/salas/{{salaId}}/stream-token
+Authorization: Bearer {{carlaToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:309:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:309:20)
+expression salaId throws error
+
+---------------------
+
+=== 10. Socket con guest token pendiente: auto-subscribe + approve + join:subscribe ajeno ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/health
+accept-encoding: gzip, deflate, br
+accept: */*
+user-agent: httpyac
+HTTP/1.1 200  - OK
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2f419c7083fc-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 76
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:33:49 GMT
+etag: W/"59-d1tP83AKHZTjWEwcRCKg/DhZvuA"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: 64d2254a-5918-4736
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "status": "success",
+  "message": "Backend operativo",
+  "timestamp": "2026-10-01T14:33:49.166Z"
+}
+✖ guest JWT socket: flujo sin errores (AssertionError [ERR_ASSERTION]: falta carlaToken del request anterior - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ join:subscribe ajeno -> FORBIDDEN (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ guest JWT autosuscripto recibe join:approved (AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value: (e,r)}log(e){this.context.scriptConsole&&this.context.scriptConsole.info(e)}exit(){var e;(e=this.context.scriptConsole)==null||e.warn("exit not supported")}};var gd=require("crypto"),hd=q(require("open"));var nd=require("lodash"),id=q(require("lodash/get")),ad=require("url");var Zm="http://localhost:3000/callback",ld="oauth2";function ec(t,e,r){let o=`${r}_${e}`,s=t[o],n=Object.entries(t).filter(([i])=>i.toLowerCase()===o.toLowerCase()).map(([,i])=>i);return n.length===1?n.pop():(s===void 0&&(s=(0,id.default)(t,`${r}.${e}`)),s)}function Et(t,e,r){let o=i=>ec(t,r,i),s;return e&&(s=o(e)),s===void 0&&(s=o(ld)),Tr(s,t)}function tn(t,e){let r=d=>{let u=Et(e,t,d);return Re(u)},o=d=>{let u=Et(e,t,d);return Array.isArray(u)?u.map(c=>Re(c)):Re(u)},s=(d,u)=>{let c=Re(Et(e,t,d));try{return new ad.URL(c||u)}catch{throw new Error(`Expected a valid URL, but received ${c}`)}},n=d=>{let u=Et(e,t,d);if(typeof u=="function")return u},i=(d,u=!1)=>{let c=Et(e,t,d);return G(c,u)},a=(d,u=void 0)=>{let c=Et(e,t,d);return S(c)||u};return{variablePrefix:t||ld,authorizationEndpoint:r("authorizationEndpoint"),deviceCodeEndpoint:r("deviceCodeEndpoint"),tokenEndpoint:r("tokenEndpoint"),clientId:r("clientId"),clientSecret:r("clientSecret"),responseType:r("responseType"),responseMode:r("responseMode"),audience:o("audience"),scope:r("scope"),resource:o("resource"),username:r("username"),password:r("password"),proxy:r("proxy"),subjectIssuer:r("subjectIssuer")||void 0,redirectUri:s("redirectUri",Zm),keepAlive:i("keepAlive",!0),useAuthorizationHeader:i("useAuthorizationHeader",!0),useDeviceCodeClientSecret:i("useDeviceCodeClientSecret"),usePkce:i("usePkce"),serverPort:a("serverPort"),interceptRequest:n("interceptRequest")}}function dd(t,e){return(0,nd.isEqualWith)(t,e,(r,o,s)=>{if(s&&["redirectUri"].some(i=>i===s))return`${r}`==`${o}`})}function he(t,e){let r=[];for(let o of e)Object.entries(t).some(([s,n])=>s===o&&!!n)||r.push(o);if(r.length>0){let o=`missing configuration: ${r.map(s=>`${t.variablePrefix}_${s}`).join(", ")}`;throw p.error(o),new Error(o)}}var pd=require("http");var Ae=[],pt,Ro,ko=0;function wo(t){Ae.push(t),tc(t.port,t.path)}function Ve(t){let e=Ae.findIndex(r=>r.id===t);e>=0&&Ae.splice(e,1),Ae.length===0&&cd(60)}function md(){Ro&&(clearTimeout(Ro),Ro=!1,ko=0)}function cd(t){md();let e=t*1e3;ko=new Date().getTime()+e,Ro=setTimeout(()=>fd(),e)}function fd(){for(let t of Ae)t.reject();Ae.length=0,pt&&(md(),pt.close(t=>{t?p.error(t):p.debug("http server closed")}),pt=!1)}function tc(t,e){if(cd(600),!pt){pt=(0,pd.createServer)((o,s)=>{try{let n="invalid",i=500,a=[];if(o.url){let l=rc(o.url),d=o.url.split("?")[0];if(d===e){let u=Ae.find(c=>c.id===l.state);if(u){let c=u.resolve(l);a.push(dr(c.message,c.valid)),c.valid&&(i=200,Ve(u.id)),n=c.statusMessage}else a.push(dr("invalid state received",!1)),a.push(` - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+✖ el socket ajeno no recibe join:approved (AssertionError [ERR_ASSERTION]: el socket ajeno recibió join: approved - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 11. POST /salas/:salaId/stream-token con guest ya APROBADO -> 200 apiKey/token/callType/callId ===
+
+POST {{host}}/salas/{{salaId}}/stream-token
+Authorization: Bearer {{carlaToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:405:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:405:20)
+expression salaId throws error
+
+---------------------
+
+=== 12. POST /salas/:code/join logueado con body vacío -> 200, identidad autocompletada desde la cuenta ===
+
+POST {{host}}/salas/{{salaCodigo}}/join
+Authorization: Bearer {{guestToken}}
+Content-Type: application/json
+
+{}
+✖ salaCodigo is not defined (ReferenceError: salaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:419:20)
+✖ salaCodigo is not defined (ReferenceError: salaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_waiting.http:419:20)
+expression salaCodigo throws error
+
+---------------------
+
+=== 13. join:request con payload inválido (sin nombre/apellido/email) -> error VALIDATION_ERROR ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/health
+accept-encoding: gzip, deflate, br
+accept: */*
+user-agent: httpyac
+HTTP/1.1 200  - OK
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2f6fdd0a1e76-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 76
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:33:57 GMT
+etag: W/"59-purj3xJ7oZZrice4Q6lgG0NlMoU"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: 9c448371-a1d9-451d
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "status": "success",
+  "message": "Backend operativo",
+  "timestamp": "2026-10-01T14:33:56.949Z"
+}
+✖ join:request sin campos requeridos -> VALIDATION_ERROR (AssertionError [ERR_ASSERTION]: {"type":"error","err":{"code":"INTERNAL_SERVER_ERROR","message": "Ocurrió un error interno"}} - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+13 requests processed (4 succeeded, 4 failed, 5 errored)

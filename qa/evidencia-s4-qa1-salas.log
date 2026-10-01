@@ -1,0 +1,528 @@
+
+---------------------
+
+=== 1. Register host -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/register
+=> 201 (2609 ms, 878 B)
+✓ register host 201
+
+---------------------
+
+=== 2. Login host -> 200 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/login
+=> 200 (1960 ms, 1.13 kB)
+✓ login host 200
+
+---------------------
+
+=== 3. Register invitado -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/register
+=> 201 (1898 ms, 878 B)
+✓ register guest 201
+
+---------------------
+
+=== 4. Login invitado -> 200 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/login
+=> 200 (1998 ms, 1.13 kB)
+✓ login guest 200
+
+---------------------
+
+=== 5. POST /salas -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+accept-encoding: gzip, deflate, br
+accept: */*
+authorization: Bearer [redacted]
+content-length: 113
+content-type: application/json
+user-agent: httpyac
+
+{
+  "nombre": "Daily Backend",
+  "resumen": "Revisión del sprint",
+  "fechaInicio": "2026-10-15T18:00:00.000Z"
+}
+HTTP/1.1 500  - Internal Server Error
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2cf7ce561eb0-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 78
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:32:17 GMT
+etag: W/"50-zMrWSYNKbEgjlkX8KfAMYl0njSQ"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: 3aa27e4f-e571-46c6
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Ocurrió un error interno"
+  }
+}
+✖ crear sala 201 (AssertionError [ERR_ASSERTION]: status 500 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 6. POST /salas sin nombre -> 400 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+=> 400 (238 ms, 783 B)
+✓ crear sala 400
+
+---------------------
+
+=== 7. POST /salas sin token -> 401 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+=> 401 (238 ms, 798 B)
+✓ crear sala 401
+
+---------------------
+
+=== 8. GET /salas/:code -> 200 ===
+
+GET {{host}}/salas/{{salaCodigo}}
+✖ salaCodigo is not defined (ReferenceError: salaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:133:20)
+✖ salaCodigo is not defined (ReferenceError: salaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:133:20)
+expression salaCodigo throws error
+
+---------------------
+
+=== 8b. GET /salas/:code en minúsculas -> 200 ===
+
+GET {{host}}/salas/{{salaCodigoLower}}
+✖ salaCodigoLower is not defined (ReferenceError: salaCodigoLower is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:143:20)
+✖ salaCodigoLower is not defined (ReferenceError: salaCodigoLower is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:143:20)
+expression salaCodigoLower throws error
+
+---------------------
+
+=== 8c. POST /salas nombre de 151 -> 400 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+=> 400 (211 ms, 778 B)
+✓ nombre 151 es 400
+
+---------------------
+
+=== 9. GET /salas/:code inexistente -> 404 ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/ZZZZ0000
+=> 404 (576 ms, 747 B)
+✓ sala pública 404
+
+---------------------
+
+=== 10. GET /salas/mis-participaciones -> 200 ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/mis-participaciones
+=> 200 (559 ms, 728 B)
+✓ agenda 200
+
+---------------------
+
+=== 11. GET /salas/mis-participaciones sin token -> 401 ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/mis-participaciones
+=> 401 (237 ms, 798 B)
+✓ agenda 401
+
+---------------------
+
+=== 12. GET /salas/:id/detalle -> 200 ===
+
+GET {{host}}/salas/{{salaId}}/detalle
+Authorization: Bearer {{accessToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:196:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:196:20)
+expression salaId throws error
+
+---------------------
+
+=== 13. GET /salas/:id/detalle sin token -> 401 ===
+
+GET {{host}}/salas/{{salaId}}/detalle
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:206:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:206:20)
+expression salaId throws error
+
+---------------------
+
+=== 14. GET /salas/:id/detalle inexistente -> 404 ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/00000000-0000-4000-8000-000000000099/detalle
+=> 404 (583 ms, 747 B)
+✓ detalle 404
+
+---------------------
+
+=== 15. PUT /salas/:id host -> 200 ===
+
+PUT {{host}}/salas/{{salaId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Daily Backend + Demo"
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:225:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:225:20)
+expression salaId throws error
+
+---------------------
+
+=== 16. PUT /salas/:id invitado -> 403 ===
+
+PUT {{host}}/salas/{{salaId}}
+Authorization: Bearer {{guestToken}}
+Content-Type: application/json
+
+{
+  "nombre": "No debería"
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:240:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:240:20)
+expression salaId throws error
+
+---------------------
+
+=== 17. PUT /salas/:id sin token -> 401 ===
+
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+
+{
+  "nombre": "Sin token"
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:255:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:255:20)
+expression salaId throws error
+
+---------------------
+
+=== 18. PUT /salas/:id inexistente -> 404 ===
+
+PUT https://meetflow-server-tm9i.onrender.com/api/v1/salas/00000000-0000-4000-8000-000000000099
+=> 404 (390 ms, 747 B)
+✓ update 404
+
+---------------------
+
+=== 19. GET participantes -> 200 ===
+
+GET {{host}}/salas/{{salaId}}/participantes
+Authorization: Bearer {{accessToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:284:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:284:20)
+expression salaId throws error
+
+---------------------
+
+=== 20. GET participantes sin token -> 401 ===
+
+GET {{host}}/salas/{{salaId}}/participantes
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:294:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:294:20)
+expression salaId throws error
+
+---------------------
+
+=== 21. GET participantes inexistente -> 404 ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/00000000-0000-4000-8000-000000000099/participantes
+=> 404 (586 ms, 747 B)
+✓ participantes 404
+
+---------------------
+
+=== 22. DELETE sin token -> 401 ===
+
+DELETE {{host}}/salas/{{salaId}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:313:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:313:20)
+expression salaId throws error
+
+---------------------
+
+=== 23. DELETE invitado -> 403 ===
+
+DELETE {{host}}/salas/{{salaId}}
+Authorization: Bearer {{guestToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:322:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:322:20)
+expression salaId throws error
+
+---------------------
+
+=== 24. DELETE inexistente -> 404 ===
+
+DELETE https://meetflow-server-tm9i.onrender.com/api/v1/salas/00000000-0000-4000-8000-000000000099
+=> 404 (410 ms, 747 B)
+✓ delete 404
+
+---------------------
+
+=== 25. DELETE host -> 200 ===
+
+DELETE {{host}}/salas/{{salaId}}
+Authorization: Bearer {{accessToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:342:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:342:20)
+expression salaId throws error
+
+---------------------
+
+=== 26. POST /salas con fechaInicio en el pasado -> S2-QA2 (sala "expirada") ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+accept-encoding: gzip, deflate, br
+accept: */*
+authorization: Bearer [redacted]
+content-length: 78
+content-type: application/json
+user-agent: httpyac
+
+{
+  "nombre": "Sala vencida QA",
+  "fechaInicio": "2020-01-01T00:00:00.000Z"
+}
+HTTP/1.1 500  - Internal Server Error
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2d20a8f71eb0-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 78
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:32:22 GMT
+etag: W/"50-zMrWSYNKbEgjlkX8KfAMYl0njSQ"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: 7bf28cfc-be9a-440c
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Ocurrió un error interno"
+  }
+}
+✖ crear sala con fecha pasada sigue devolviendo 201 (BUG-04) (AssertionError [ERR_ASSERTION]: status 500 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 27. GET /salas/:code de la sala "vencida" -> sigue resolviendo (BUG-04) ===
+
+GET {{host}}/salas/{{salaVencidaCodigo}}
+✖ salaVencidaCodigo is not defined (ReferenceError: salaVencidaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:375:20)
+✖ salaVencidaCodigo is not defined (ReferenceError: salaVencidaCodigo is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:375:20)
+expression salaVencidaCodigo throws error
+
+---------------------
+
+=== 28. GET /salas/:code con código con formato inválido -> 404 (no 400) ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/@@@---123
+=> 404 (392 ms, 747 B)
+✓ codigo con formato invalido da 404, no 400
+
+---------------------
+
+=== 29. GET /salas/:id/detalle con id que no es UUID -> BUG-07: revienta con 500 ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/salas/no-es-un-uuid/detalle
+=> 500 (247 ms, 797 B)
+✓ detalle con id no-UUID devuelve 500 en vez de 400/404 (BUG-07)
+
+---------------------
+
+=== 30. POST /salas -> 201 (sala para probar transfer-host, S3-08 / S3-API) ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+accept-encoding: gzip, deflate, br
+accept: */*
+authorization: Bearer [redacted]
+content-length: 39
+content-type: application/json
+user-agent: httpyac
+
+{
+  "nombre": "Sala transfer-host QA"
+}
+HTTP/1.1 500  - Internal Server Error
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2d273cb61eb0-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 78
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:32:23 GMT
+etag: W/"50-zMrWSYNKbEgjlkX8KfAMYl0njSQ"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: be9feb07-e637-49cb
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Ocurrió un error interno"
+  }
+}
+✖ crear sala para transfer-host 201 (AssertionError [ERR_ASSERTION]: status 500 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 31. GET /auth/me del host -> captura hostUserId (no hay endpoint HTTP de ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/auth/me
+=> 200 (579 ms, 908 B)
+✓ auth/me del host 200
+
+---------------------
+
+=== 31b. GET participantes -> captura hostParticipantId para transfer-host ===
+
+GET {{host}}/salas/{{salaTransferId}}/participantes
+Authorization: Bearer {{accessToken}}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:442:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:442:20)
+expression salaTransferId throws error
+
+---------------------
+
+=== 32. POST transfer-host sin token -> 401 ===
+
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+
+{
+  "nuevoHostId": "00000000-0000-4000-8000-000000000099"
+}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:457:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:457:20)
+expression salaTransferId throws error
+
+---------------------
+
+=== 33. POST transfer-host sin nuevoHostId -> 400 ===
+
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:471:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:471:20)
+expression salaTransferId throws error
+
+---------------------
+
+=== 34. POST transfer-host a uno mismo -> 400 ===
+
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "nuevoHostId": "{{hostParticipantId}}"
+}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:484:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:484:20)
+expression salaTransferId throws error
+
+---------------------
+
+=== 35. POST transfer-host por un no-HOST -> 403 ===
+
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Authorization: Bearer {{guestToken}}
+Content-Type: application/json
+
+{
+  "nuevoHostId": "{{hostUserId}}"
+}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:499:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:499:20)
+expression salaTransferId throws error
+
+---------------------
+
+=== 36. POST transfer-host a alguien que no es participante de la sala -> 404 ===
+
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "nuevoHostId": "00000000-0000-4000-8000-000000000099"
+}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:514:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:514:20)
+expression salaTransferId throws error
+
+---------------------
+
+=== 37. POST /rooms/:id/token -> body ignorado (S3-08) ===
+
+POST {{host}}/rooms/{{salaTransferId}}/token
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "userId": "00000000-0000-4000-8000-000000000099",
+  "role": "PARTICIPANTE",
+  "callCid": "no-deberia-importar"
+}
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:532:20)
+✖ salaTransferId is not defined (ReferenceError: salaTransferId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_salas_agenda.http:532:20)
+expression salaTransferId throws error
+
+40 requests processed (17 succeeded, 3 failed, 20 errored)

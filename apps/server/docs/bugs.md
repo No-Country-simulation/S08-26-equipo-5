@@ -98,3 +98,17 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 - Hipótesis de causa: `createSala` en `rooms.controller.ts` llama a `createRoomService` (`stream.service.ts`, `call.getOrCreate` de GetStream) **antes** de la transacción Prisma. Si `GETSTREAM_API_KEY`/`GETSTREAM_API_SECRET` no están seteadas (o son distintas/inválidas) en el entorno de Render, o si Render bloquea el egress hacia la API de GetStream, `createRoom` relanza el error envuelto en un `Error` genérico, que el error-handler global mapea a 500 sin distinguirlo de otras fallas.
 - Efecto sobre esta tarea (S3-API): no se pudo completar el criterio de aceptación "`.http` actualizados y corridos contra el entorno Render" para los casos nuevos de `transfer-host` (#30-#37) — no hay forma de crear una sala en Render para probarlos. Quedan agregados al `.http` y **verificados 39/39 contra `localhost`** con la misma DB de Render; contra Render en sí solo se pudo reproducir y documentar este bug.
 - Fix sugerido: revisar en el dashboard de Render que `GETSTREAM_API_KEY`/`GETSTREAM_API_SECRET` estén seteadas y coincidan con las de GetStream Dashboard, y loguear el mensaje real de `createRoom` (hoy se pierde en el error-handler genérico) para confirmar la causa exacta antes de asumir más.
+- Re-verificado el 2026-10-01 en S4-QA1 (rama `QA-Sprint4`, `develop` @ `73d8291`) contra `https://meetflow-server-tm9i.onrender.com`. Sigue **abierto**: `POST /api/v1/salas` responde 500 `INTERNAL_SERVER_ERROR` en `api_salas_agenda.http` #5, #26 y #30, y también en `api_invitaciones.http` #5 y `api_waiting.http` #5. Auth (`api_auth.http`) quedó 14/14 en verde en la misma corrida. Evidencia: `qa/evidencia-s4-qa1.md`.
+
+## BUG-10 — El Render desplegado no sirve las rutas de invitaciones
+
+- Casos: suite `.http` `api_invitaciones.http` #13 y #14 (S4-QA1)
+- Severidad: **alta** — el contrato de invitaciones de `develop` (`GET/POST /api/v1/invitaciones/:token`) no está en el proceso que atiende el entorno público.
+- Estado: **abierto** (encontrado el 2026-10-01, `QA-Sprint4`, contra `https://meetflow-server-tm9i.onrender.com`).
+- Dónde: `apps/server/src/app.ts` responde 404 `NOT_FOUND` / "Recurso no encontrado" cuando ninguna ruta matchea. En el código de `develop` @ `73d8291` esas rutas existen (`invitaciones.routes.ts`) y un token desconocido debe responder **410** `INVITATION_INVALID`, no el 404 genérico.
+- Pasos de reproducción:
+  1. `GET /api/v1/invitaciones/token-que-no-existe` contra Render.
+  2. Respuesta real: `404 { "error": { "code": "NOT_FOUND", "message": "Recurso no encontrado" } }`.
+  3. `POST /api/v1/invitaciones/token-que-no-existe/aceptar` con JWT válido da el mismo 404 genérico.
+- Efecto: no se puede cerrar el flujo de invitación por correo contra el entorno deployado. El caso #8 (`POST /salas/:id/invitaciones` a un id inexistente → 404) queda en falso verde: el status coincide, pero no se pudo distinguir de "la ruta no está montada" porque crear sala falla antes (BUG-09) y no hay sala real para contrastar.
+- Fix sugerido: confirmar en el dashboard de Render que el servicio redesplegó `develop` después del merge `73d8291` (PR #104). Si el deploy está al día, revisar que el proceso en ejecución sea el build que monta `invitacionesRoutes`.
