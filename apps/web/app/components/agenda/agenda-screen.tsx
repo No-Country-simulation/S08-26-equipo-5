@@ -437,7 +437,6 @@ export function AgendaScreen() {
 
       <div
         role="status"
-        aria-live="polite"
         className="pointer-events-none fixed inset-x-4 bottom-6 z-50 flex justify-center"
       >
         {toast && (
