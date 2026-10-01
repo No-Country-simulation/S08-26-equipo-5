@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { env } from "../config/env.js";
 import { AppError } from "../utils/AppError.js";
 
 interface LimiterOptions {
@@ -27,3 +28,11 @@ export function createLimiter({ max, skip }: LimiterOptions) {
     },
   });
 }
+
+const enTest = env.nodeEnv === "test";
+
+/** POST /salas/:id/invitaciones (debe ir DESPUÉS de verifyToken para clavear por host). */
+export const inviteLimiter = createLimiter({ max: env.rateLimitInviteMax, skip: enTest });
+
+/** Endpoints públicos con token de invitación (clave por IP). */
+export const tokenLimiter = createLimiter({ max: env.rateLimitTokenMax, skip: enTest });

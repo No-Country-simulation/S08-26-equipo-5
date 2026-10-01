@@ -101,6 +101,11 @@ function dentroDeVentanaDeReingreso(fechaIngreso: Date | null): boolean {
   return Date.now() < vencimiento;
 }
 
+/**
+ * Avisa al host que hay alguien esperando. nombre/apellido pueden ser null
+ * (fila creada como INVITADO): se envían como null, sin inventar un valor; el
+ * email va siempre en su propio campo y la UI decide qué mostrar.
+ */
 export function emitJoinPending(
   salaId: string,
   participante: Participante,
@@ -110,8 +115,8 @@ export function emitJoinPending(
     ?.to(rooms.salaHost(salaId))
     .emit("join:pending", {
       participanteId: participante.id,
-      nombre: participante.nombre,
-      apellido: participante.apellido,
+      nombre: participante.nombre ?? null,
+      apellido: participante.apellido ?? null,
       email: participante.email,
       fotoUrl,
       timestamp: new Date().toISOString(),
@@ -287,9 +292,58 @@ export async function requestJoin(
     };
   }
 
-  const existente =
+  let existente: Participante | null =
     (await deps.participantes.findByEmail(sala.id, input.email)) ??
     existentePorUsuario;
+
+  // ── INVITADO: el host lo invitó por correo y ahora pide ingreso por código
+  // (o por socket). Se reutiliza la fila —sin duplicar— y se promueve a
+  // PENDIENTE; la invitación queda usada en la misma transacción.
+  if (existente?.estado === EstadoParticipante.INVITADO) {
+    // Fila de una cuenta registrada: solo esa cuenta puede activarla. Sin esto
+    // cualquiera que conozca el email podría entrar haciéndose pasar por ella.
+    if (existente.usuarioId && existente.usuarioId !== input.usuarioId) {
+      throw new AppError(
+        401,
+        "LOGIN_REQUIRED",
+        "Iniciá sesión con la cuenta invitada para ingresar",
+      );
+    }
+
+    // nombre/apellido solo se completan si la fila no los tiene (invitado sin cuenta).
+    const datos = {
+      ...(!existente.nombre && input.nombre ? { nombre: input.nombre } : {}),
+      ...(!existente.apellido && input.apellido ? { apellido: input.apellido } : {}),
+    };
+    const activados = await deps.participantes.activarInvitado(
+      existente.id,
+      Object.keys(datos).length > 0 ? datos : undefined,
+    );
+
+    if (activados === 1) {
+      const promovido: Participante = {
+        ...existente,
+        estado: EstadoParticipante.PENDIENTE,
+        nombre: existente.nombre ?? datos.nombre ?? null,
+        apellido: existente.apellido ?? datos.apellido ?? null,
+      };
+      emitJoinPending(sala.id, promovido);
+      return {
+        participanteId: promovido.id,
+        estado: EstadoParticipante.PENDIENTE,
+        salaId: sala.id,
+        accessToken: signParticipantToken({
+          participanteId: promovido.id,
+          salaId: sala.id,
+          rol: promovido.rol as RoomRole,
+        }),
+      };
+    }
+
+    // Carrera perdida: otra request ya la movió de estado. Se relee y sigue
+    // la rama que corresponda al estado real.
+    existente = await deps.participantes.findById(existente.id);
+  }
 
   // ── Ya existe: decidir según su estado ────────────────────
   if (existente) {

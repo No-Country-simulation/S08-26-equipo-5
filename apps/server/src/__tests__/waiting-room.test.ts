@@ -16,6 +16,7 @@ vi.mock("@prisma/client", () => ({
   PrismaClient: vi.fn().mockImplementation(() => ({})),
   RolParticipante: { HOST: "HOST", PARTICIPANTE: "PARTICIPANTE" },
   EstadoParticipante: {
+    INVITADO: "INVITADO",
     PENDIENTE: "PENDIENTE",
     APROBADO: "APROBADO",
     RECHAZADO: "RECHAZADO",
@@ -205,6 +206,24 @@ describe("resolveParticipant", () => {
         nuevoEstado: "APROBADO" as never,
       }),
     ).rejects.toMatchObject({ statusCode: 403, code: "HOST_ONLY" });
+  });
+
+  it("approve y reject sobre un INVITADO -> 409 PARTICIPANT_STATE_CONFLICT (solo PENDIENTE es resoluble)", async () => {
+    for (const nuevoEstado of ["APROBADO", "RECHAZADO"]) {
+      const deps = makeDeps({
+        findById: vitest.fn().mockResolvedValue({ ...pendiente, estado: "INVITADO", nombre: null, apellido: null }),
+        // El update condicional WHERE estado = PENDIENTE no matchea un INVITADO.
+        resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(0),
+      });
+
+      await expect(
+        resolveParticipant(deps, {
+          participanteId: "participante-1",
+          hostUsuarioId: HOST_USER_ID,
+          nuevoEstado: nuevoEstado as never,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409, code: "PARTICIPANT_STATE_CONFLICT" });
+    }
   });
 
   it("no re-resuelve un participante con estado final", async () => {

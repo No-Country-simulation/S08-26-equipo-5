@@ -48,6 +48,7 @@ function createDeps() {
             findAprobadosBySala: vi.fn(),
             findAprobadoByEmail: vi.fn(),
             findBySalaAndUsuario: vi.fn(),
+            activarInvitado: vi.fn(),
         },
         salas: { findByCodigo: vi.fn(), findById: vi.fn() },
         estado: new InMemoryEstadoMedioStore(),
@@ -61,15 +62,31 @@ describe("S3-09 — estado de medios realtime", () => {
         });
 
         it("merge es idempotente y preserva campos ausentes", () => {
-            const store = new InMemoryEstadoMedioStore();
-            store.merge("s1", "p1", { mic: true, cam: true });
-            const a = store.merge("s1", "p1", { screen: true });
-            const b = store.merge("s1", "p1", { screen: true });
+            // Reloj controlado: antes, a y b se generaban con new Date() real y
+            // el toEqual fallaba al azar si caían en milisegundos distintos
+            // (flaky bajo carga). Acá el reloj avanza A PROPOSITO entre ambos.
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+            try {
+                const store = new InMemoryEstadoMedioStore();
+                store.merge("s1", "p1", { mic: true, cam: true });
+                const a = store.merge("s1", "p1", { screen: true });
+                vi.setSystemTime(new Date("2026-01-01T00:00:00.005Z"));
+                const b = store.merge("s1", "p1", { screen: true });
 
-            expect(a.mic).toBe(true);
-            expect(a.cam).toBe(true);
-            expect(a.screen).toBe(true);
-            expect(b).toEqual(a);
+                expect(a.mic).toBe(true);
+                expect(a.cam).toBe(true);
+                expect(a.screen).toBe(true);
+                // Idempotente = mismo estado de medios; updatedAt es metadata
+                // y se refresca en cada merge.
+                const { updatedAt: uaA, ...estadoA } = a;
+                const { updatedAt: uaB, ...estadoB } = b;
+                expect(estadoB).toEqual(estadoA);
+                expect(uaA).toBe("2026-01-01T00:00:00.000Z");
+                expect(uaB).toBe("2026-01-01T00:00:00.005Z");
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
         it("join reporta joined solo en el primer socket", () => {
