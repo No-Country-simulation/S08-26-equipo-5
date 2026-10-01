@@ -35,6 +35,13 @@ type ScheduleMeetingModalProps = {
   initialValues?: { nombre: string; resumen?: string | null };
 };
 
+/** Inicio del minuto actual: mismo truncado que el `min` del input, para no rechazar ese valor. */
+function startOfCurrentMinute() {
+  const now = new Date();
+  now.setSeconds(0, 0);
+  return now.getTime();
+}
+
 /** Valor para <input type="datetime-local"> en hora local (no UTC). */
 function toLocalInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -165,7 +172,7 @@ export function ScheduleMeetingModal({
     }
     if (mode === "schedule" && !scheduledAt) {
       nextErrors.scheduledAt = "Elegí una fecha y hora para programar la reunión.";
-    } else if (mode === "schedule" && new Date(scheduledAt).getTime() < Date.now()) {
+    } else if (mode === "schedule" && new Date(scheduledAt).getTime() < startOfCurrentMinute()) {
       nextErrors.scheduledAt = "La fecha y hora no pueden estar en el pasado.";
     }
 
