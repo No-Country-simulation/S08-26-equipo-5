@@ -1,4 +1,9 @@
-import { ApiRequestError, MAX_INVITACIONES_POR_SOLICITUD, type InvitacionResultado } from "./salas-api";
+import {
+  ApiRequestError,
+  invitarASala,
+  MAX_INVITACIONES_POR_SOLICITUD,
+  type InvitacionResultado,
+} from "./salas-api";
 
 /** Formato mínimo razonable; la validación real la hace el backend. */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -79,4 +84,26 @@ export function describeInviteError(error: unknown): string {
     return error.message;
   }
   return "No se pudieron enviar las invitaciones. Intentá de nuevo.";
+}
+
+export type InviteOutcome = {
+  resultados: InvitacionResultado[];
+  error: string | null;
+  /** Emails que no llegaron a procesarse porque la llamada entera falló. */
+  unsent: string[];
+  /** true si no hay nada que reintentar. */
+  allSent: boolean;
+};
+
+/**
+ * Invita a `emails` justo después de crear una reunión. Nunca lanza: la reunión
+ * ya existe, así que un fallo se devuelve para mostrarlo y poder reintentar.
+ */
+export async function inviteAfterCreate(salaId: string, emails: string[]): Promise<InviteOutcome> {
+  try {
+    const { resultados } = await invitarASala(salaId, emails);
+    return { resultados, error: null, unsent: [], allSent: failedEmails(resultados).length === 0 };
+  } catch (error) {
+    return { resultados: [], error: describeInviteError(error), unsent: emails, allSent: false };
+  }
 }

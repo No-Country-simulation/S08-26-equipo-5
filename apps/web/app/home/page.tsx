@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { createSala, getSalaByCode } from "../lib/salas-api";
+import { createSala, getSalaByCode, type Sala } from "../lib/salas-api";
 import { parseJoinInput } from "../lib/join-code";
 import { HomeHero } from "../components/home-hero";
 import { HomeHeader } from "../components/home-header";
@@ -13,6 +13,8 @@ import {
   type ScheduleMeetingInput,
 } from "../components/schedule-meeting-modal";
 import { AuthModal } from "../components/auth-modal";
+import { InviteOutcomeDialog } from "../components/invite-dialogs";
+import { inviteAfterCreate, type InviteOutcome } from "../lib/invite-emails";
 
 function roomHostHref(sala: {
   codigo: string;
@@ -29,6 +31,12 @@ export default function HomePage() {
   const [meetingMode, setMeetingMode] = useState<"now" | "schedule" | null>(null);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
   const [meetingError, setMeetingError] = useState<string | null>(null);
+  // Reunión ya creada cuyo envío de invitaciones falló en parte: se muestra el
+  // resultado con reintento antes de entrar a la sala (si todo salió bien, no hay paso extra).
+  const [invitePending, setInvitePending] = useState<{
+    sala: Sala;
+    outcome: InviteOutcome;
+  } | null>(null);
 
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -72,6 +80,15 @@ export default function HomePage() {
               resumen: input.resumen,
             },
       );
+      const emails = input.emails ?? [];
+      if (emails.length > 0) {
+        const outcome = await inviteAfterCreate(sala.id, emails);
+        if (!outcome.allSent) {
+          setMeetingMode(null);
+          setInvitePending({ sala, outcome });
+          return;
+        }
+      }
       setMeetingMode(null);
       router.push(roomHostHref(sala));
     } catch {
@@ -155,10 +172,25 @@ export default function HomePage() {
         open={meetingMode !== null}
         submitting={meetingSubmitting}
         error={meetingError}
+        allowInvites
         returnFocusRef={openerRef}
         onClose={() => setMeetingMode(null)}
         onSubmit={handleMeetingRequest}
       />
+
+      {invitePending && (
+        <InviteOutcomeDialog
+          salaId={invitePending.sala.id}
+          title="Reunión creada"
+          initial={invitePending.outcome}
+          primaryLabel="Ir a la reunión"
+          onPrimary={() => {
+            const { sala } = invitePending;
+            setInvitePending(null);
+            router.push(roomHostHref(sala));
+          }}
+        />
+      )}
 
       <AuthModal
         open={loginOpen}

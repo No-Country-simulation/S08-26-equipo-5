@@ -95,11 +95,8 @@ export const InviteEmailsField = forwardRef<InviteEmailsFieldHandle, InviteEmail
 
     function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
       if (event.key === "Enter" || event.key === "," || event.key === ";") {
-        if (draft.trim().length === 0) {
-          // Sin texto, Enter envía el formulario y la coma no se escribe.
-          if (event.key !== "Enter") event.preventDefault();
-          return;
-        }
+        // Enter nunca envía el formulario desde este campo: evita crear la reunión
+        // por error mientras se cargan correos. La coma vacía tampoco se escribe.
         event.preventDefault();
         commit(draft);
       } else if (event.key === "Backspace" && draft.length === 0 && emails.length > 0) {

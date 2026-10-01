@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useId, useRef, useState, type RefObject } from "react";
+import { InviteEmailsField, type InviteEmailsFieldHandle } from "./invite-emails-field";
 
 const TITLE_MAX_LENGTH = 150;
 
@@ -8,11 +9,15 @@ export type ScheduleMeetingInput = {
   nombre: string;
   resumen?: string;
   fechaInicio: string;
+  /** Correos a invitar tras crear la reunión (solo con `allowInvites`). */
+  emails?: string[];
 };
 
 export type ImmediateMeetingInput = {
   nombre: string;
   resumen?: string;
+  /** Correos a invitar tras crear la reunión (solo con `allowInvites`). */
+  emails?: string[];
 };
 
 // "edit" reutiliza el formulario para cambiar título y descripción (sin fecha);
@@ -33,6 +38,8 @@ type ScheduleMeetingModalProps = {
   onSubmit: (input: ScheduleMeetingInput | ImmediateMeetingInput) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   initialValues?: { nombre: string; resumen?: string | null };
+  /** Muestra el campo opcional "Invitar por correo" (modos now y schedule). */
+  allowInvites?: boolean;
 };
 
 /** Inicio del minuto actual: mismo truncado que el `min` del input, para no rechazar ese valor. */
@@ -62,6 +69,7 @@ export function ScheduleMeetingModal({
   onSubmit,
   returnFocusRef,
   initialValues,
+  allowInvites = false,
 }: ScheduleMeetingModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -71,6 +79,8 @@ export function ScheduleMeetingModal({
   const [nombre, setNombre] = useState(initialValues?.nombre ?? "");
   const [resumen, setResumen] = useState(initialValues?.resumen ?? "");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [emails, setEmails] = useState<string[]>([]);
+  const inviteRef = useRef<InviteEmailsFieldHandle>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [wasOpen, setWasOpen] = useState(open);
 
@@ -80,6 +90,7 @@ export function ScheduleMeetingModal({
       setNombre("");
       setResumen("");
       setScheduledAt("");
+      setEmails([]);
       setFieldErrors({});
     }
   }
@@ -88,6 +99,7 @@ export function ScheduleMeetingModal({
     setNombre("");
     setResumen("");
     setScheduledAt("");
+    setEmails([]);
     setFieldErrors({});
   }
 
@@ -113,6 +125,7 @@ export function ScheduleMeetingModal({
         setNombre("");
         setResumen("");
         setScheduledAt("");
+        setEmails([]);
         setFieldErrors({});
         onCloseRef.current();
         return;
@@ -154,6 +167,7 @@ export function ScheduleMeetingModal({
 
   if (!open) return null;
 
+  const invitesEnabled = allowInvites && mode !== "edit";
   const trimmedTitle = nombre.trim();
   const nombreErrorId = `${titleId}-nombre-error`;
   const nombreCountId = `${titleId}-nombre-count`;
@@ -177,11 +191,14 @@ export function ScheduleMeetingModal({
     }
 
     setFieldErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    // flush() confirma lo escrito en el campo de correos; null = quedó algo inválido.
+    const inviteList = invitesEnabled && inviteRef.current ? inviteRef.current.flush() : [];
+    if (Object.keys(nextErrors).length > 0 || inviteList === null) return;
 
     const description = trimmedOrUndefined(resumen);
+    const invitees = inviteList.length > 0 ? { emails: inviteList } : {};
     if (mode === "now" || mode === "edit") {
-      onSubmit({ nombre: trimmedTitle, resumen: description });
+      onSubmit({ nombre: trimmedTitle, resumen: description, ...invitees });
       return;
     }
 
@@ -189,6 +206,7 @@ export function ScheduleMeetingModal({
       nombre: trimmedTitle,
       resumen: description,
       fechaInicio: new Date(scheduledAt).toISOString(),
+      ...invitees,
     });
   }
 
@@ -296,6 +314,16 @@ export function ScheduleMeetingModal({
                   </p>
                 )}
               </div>
+            )}
+
+            {invitesEnabled && (
+              <InviteEmailsField
+                ref={inviteRef}
+                label="Invitar por correo (opcional)"
+                emails={emails}
+                onChange={setEmails}
+                disabled={submitting}
+              />
             )}
 
             {error && (
