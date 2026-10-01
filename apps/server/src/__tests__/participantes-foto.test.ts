@@ -57,7 +57,7 @@ function p(id: string, usuario: { fotoUrl: string | null; [k: string]: unknown }
   return {
     id,
     salaId: "sala-1",
-    usuarioId: usuario ? `u-${id}` : null,
+    usuarioId: id === "host" ? "host-1" : usuario ? `u-${id}` : null,
     nombre: id,
     apellido: "X",
     email: `${id}@t.com`,
@@ -75,6 +75,7 @@ describe("GET /salas/:id/participantes — fotoUrl", () => {
   it("expone la foto de las cuentas y null para invitados o sin foto", async () => {
     mockSalaFindUnique.mockResolvedValue({ id: "sala-1", nombre: "Q4" });
     mockParticipanteFindMany.mockResolvedValue([
+      p("host", { fotoUrl: "https://cdn/v1/h.jpg" }, "HOST"),
       p("ana", { fotoUrl: "https://cdn/v1/ana.jpg" }),
       p("bob", { fotoUrl: null }),
       p("guest", null),
@@ -83,9 +84,32 @@ describe("GET /salas/:id/participantes — fotoUrl", () => {
     const res = await request(app).get("/api/v1/salas/sala-1/participantes").set(auth);
 
     expect(res.status).toBe(200);
-    expect(res.body.participantes.map((x: any) => x.fotoUrl)).toEqual(["https://cdn/v1/ana.jpg", null, null]);
+    expect(res.body.participantes.map((x: any) => x.fotoUrl)).toEqual([
+      "https://cdn/v1/h.jpg",
+      "https://cdn/v1/ana.jpg",
+      null,
+      null,
+    ]);
     // forma previa intacta
-    expect(res.body.participantes[0]).toMatchObject({ id: "ana", nombre: "ana", rol: "PARTICIPANTE" });
+    expect(res.body.participantes[1]).toMatchObject({ id: "ana", nombre: "ana", rol: "PARTICIPANTE" });
+  });
+
+  it("un participante no host ve fotoUrl pero no los emails", async () => {
+    mockSalaFindUnique.mockResolvedValue({ id: "sala-1", nombre: "Q4" });
+    // el caller (host-1) figura como PARTICIPANTE en la segunda fila: no es HOST
+    mockParticipanteFindMany.mockResolvedValue([
+      { ...p("host", { fotoUrl: "https://cdn/v1/h.jpg" }, "HOST"), usuarioId: "otro-host" },
+      { ...p("yo", { fotoUrl: "https://cdn/v1/yo.jpg" }), usuarioId: "host-1" },
+    ]);
+
+    const res = await request(app).get("/api/v1/salas/sala-1/participantes").set(auth);
+
+    expect(res.status).toBe(200);
+    expect(res.body.participantes.map((x: any) => x.email)).toEqual([null, null]);
+    expect(res.body.participantes.map((x: any) => x.fotoUrl)).toEqual([
+      "https://cdn/v1/h.jpg",
+      "https://cdn/v1/yo.jpg",
+    ]);
   });
 });
 

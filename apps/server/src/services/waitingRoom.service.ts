@@ -127,8 +127,8 @@ export function emitJoinPending(
  * Foto de la cuenta vinculada, para mostrarla en join:pending. Es decorativa:
  * si la consulta falla, el join NO se aborta (fotoUrl null).
  */
-async function lookupFotoUrl(
-  deps: WaitingRoomDeps,
+export async function lookupFotoUrl(
+  deps: { usuarios: Pick<IUserRepository, "findFotoUrl"> },
   usuarioId: string | null | undefined,
 ): Promise<string | null> {
   if (!usuarioId) return null;
@@ -327,7 +327,7 @@ export async function requestJoin(
         nombre: existente.nombre ?? datos.nombre ?? null,
         apellido: existente.apellido ?? datos.apellido ?? null,
       };
-      emitJoinPending(sala.id, promovido);
+      emitJoinPending(sala.id, promovido, await lookupFotoUrl(deps, promovido.usuarioId));
       return {
         participanteId: promovido.id,
         estado: EstadoParticipante.PENDIENTE,
