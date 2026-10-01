@@ -1,10 +1,21 @@
 "use client";
 
+import { Arimo } from "next/font/google";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./auth-modal";
-import { BrandLogo, onBlueFocus } from "./brand-logo";
-import { MainNav } from "./main-nav";
+import { HomeHeader } from "./home-header";
+
+// Arimo (token de marca) solo rige el área de plataforma (/agenda, salas);
+// el home de develop conserva su tipografía original.
+const arimo = Arimo({
+  subsets: ["latin"],
+  display: "swap",
+  fallback: ["Arial", "sans-serif"],
+});
+
+const headerButton =
+  "rounded-lg px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-white/10 focus-visible:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { isAuthenticated, logout, user } = useAuth();
@@ -16,60 +27,44 @@ export function AppShell({ children }: { children: ReactNode }) {
     setLoginOpen(true);
   }
 
+  // Mismo marco que HomeHero: fondo azul, cabecera de develop y superficie clara redondeada.
   return (
-    <div className="flex min-h-screen flex-col bg-mf-blue text-mf-navy">
-      <header className="mx-auto grid w-full max-w-[1440px] grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-7 md:min-h-[72px] md:grid-cols-[1fr_auto_1fr] md:py-0">
-        <BrandLogo />
-        <MainNav className="order-last col-span-2 md:order-none md:col-span-1" />
-
-        <div className="flex items-center gap-3 justify-self-end text-sm font-bold">
-          {isAuthenticated ? (
+    <div className={`${arimo.className} flex min-h-screen flex-col bg-[#3d4fdb] text-mf-navy`}>
+      <HomeHeader
+        trailing={
+          isAuthenticated ? (
             <>
               {user && (
-                <span className="hidden max-w-[10rem] truncate font-normal text-white/80 lg:inline">
+                <span className="hidden max-w-[10rem] truncate text-[12px] text-white/80 lg:inline">
                   {user.nombre}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={logout}
-                className={`rounded-lg border border-white/40 px-3 py-2 text-white transition-colors hover:bg-white/10 ${onBlueFocus}`}
-              >
+              <button type="button" onClick={logout} className={`${headerButton} border border-white/40`}>
                 Cerrar sesión
               </button>
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={() => openAuth("login")}
-                className={`rounded-lg px-2 py-2 text-white transition-colors hover:text-mf-yellow ${onBlueFocus}`}
-              >
+              <button type="button" onClick={() => openAuth("login")} className={headerButton}>
                 Iniciar sesión
               </button>
               <button
                 type="button"
                 onClick={() => openAuth("register")}
-                className={`rounded-lg bg-mf-yellow px-3 py-2 text-mf-navy transition-colors hover:brightness-95 ${onBlueFocus}`}
+                className={`${headerButton} bg-white !text-[#1c2452] hover:!bg-white/90`}
               >
                 Registrarse
               </button>
             </>
-          )}
-        </div>
-      </header>
-
-      <div className="mx-auto flex w-full max-w-[1440px] flex-1 px-2 sm:px-4">
-        <main className="w-full flex-1 rounded-t-3xl bg-mf-light px-4 py-8 sm:px-6 sm:py-10">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
-        </main>
-      </div>
-
-      <AuthModal
-        open={loginOpen}
-        initialMode={authMode}
-        onClose={() => setLoginOpen(false)}
+          )
+        }
       />
+
+      <main className="mx-3.5 flex-1 rounded-t-[28px] bg-mf-light px-4 py-8 sm:px-6 sm:py-10">
+        <div className="mx-auto w-full max-w-7xl">{children}</div>
+      </main>
+
+      <AuthModal open={loginOpen} initialMode={authMode} onClose={() => setLoginOpen(false)} />
     </div>
   );
 }

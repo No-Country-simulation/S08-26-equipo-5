@@ -41,7 +41,7 @@
   --mf-green: #1f7a4d;
   --mf-green-tint: #e2f4ea;
 
-  --ux-font-sans: var(--font-arimo), Arial, ui-sans-serif, system-ui, sans-serif;
+  --ux-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --ux-font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --ux-space-1: 0.25rem;
   --ux-space-2: 0.5rem;
