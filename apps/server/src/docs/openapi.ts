@@ -233,37 +233,27 @@ export const openApiSpec = {
       InvitarResponse: {
         type: "object",
         properties: {
-          data: {
-            type: "object",
-            properties: {
-              resultados: { type: "array", items: { $ref: "#/components/schemas/ResultadoInvitacion" } },
-            },
-          },
+          resultados: { type: "array", items: { $ref: "#/components/schemas/ResultadoInvitacion" } },
         },
       },
       PreviewInvitacionResponse: {
         type: "object",
         properties: {
-          data: {
+          sala: {
             type: "object",
             properties: {
-              sala: {
-                type: "object",
-                properties: {
-                  id: { type: "string", format: "uuid" },
-                  nombre: { type: "string" },
-                },
-              },
-              email: {
-                type: "string",
-                description:
-                  "Email enmascarado (endpoint público): primera letra + `***` + dominio completo. Ej.: `a***@example.com`. Nunca el email completo.",
-                example: "a***@example.com",
-              },
-              requiereDatos: { type: "boolean", description: "true si el invitado no tiene cuenta (deberá completar nombre y apellido)" },
-              requiereLogin: { type: "boolean", description: "true si el invitado tiene cuenta (deberá iniciar sesión)" },
+              id: { type: "string", format: "uuid" },
+              nombre: { type: "string" },
             },
           },
+          email: {
+            type: "string",
+            description:
+              "Email enmascarado (endpoint público): primera letra + `***` + dominio completo. Ej.: `a***@example.com`. Nunca el email completo.",
+            example: "a***@example.com",
+          },
+          requiereDatos: { type: "boolean", description: "true si el invitado no tiene cuenta (deberá completar nombre y apellido)" },
+          requiereLogin: { type: "boolean", description: "true si el invitado tiene cuenta (deberá iniciar sesión)" },
         },
       },
       AceptarInvitacionBody: {
@@ -693,12 +683,10 @@ export const openApiSpec = {
               "application/json": {
                 schema: { $ref: "#/components/schemas/InvitarResponse" },
                 example: {
-                  data: {
-                    resultados: [
-                      { email: "ana@example.com", estado: "INVITADO", emailEnviado: true },
-                      { email: "luis@example.com", estado: "YA_PARTICIPA", emailEnviado: false },
-                    ],
-                  },
+                  resultados: [
+                    { email: "ana@example.com", estado: "INVITADO", emailEnviado: true },
+                    { email: "luis@example.com", estado: "YA_PARTICIPA", emailEnviado: false },
+                  ],
                 },
               },
             },

@@ -325,12 +325,10 @@ Solo el HOST de la sala. Los emails se normalizan (trim + minúsculas) y se dedu
 **Response 200:**
 ```json
 {
-  "data": {
-    "resultados": [
-      { "email": "ana@example.com", "estado": "INVITADO", "emailEnviado": true },
-      { "email": "luis@example.com", "estado": "YA_PARTICIPA", "emailEnviado": false }
-    ]
-  }
+  "resultados": [
+    { "email": "ana@example.com", "estado": "INVITADO", "emailEnviado": true },
+    { "email": "luis@example.com", "estado": "YA_PARTICIPA", "emailEnviado": false }
+  ]
 }
 ```
 
@@ -353,12 +351,10 @@ Público. No consume el token (se puede consultar varias veces). Sirve a la UI p
 **Response 200:**
 ```json
 {
-  "data": {
-    "sala": { "id": "uuid", "nombre": "Reunión Q4" },
-    "email": "a***@example.com",
-    "requiereDatos": true,
-    "requiereLogin": false
-  }
+  "sala": { "id": "uuid", "nombre": "Reunión Q4" },
+  "email": "a***@example.com",
+  "requiereDatos": true,
+  "requiereLogin": false
 }
 ```
 

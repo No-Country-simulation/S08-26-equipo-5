@@ -149,7 +149,7 @@ describe("POST /api/v1/salas/:id/invitaciones", () => {
       .send({ emails: ["A@x.com", "a@x.com"] });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.resultados).toEqual([
+    expect(res.body.resultados).toEqual([
       { email: "a@x.com", estado: "INVITADO", emailEnviado: true },
     ]);
 
@@ -173,7 +173,7 @@ describe("POST /api/v1/salas/:id/invitaciones", () => {
 
     expect(res.status).toBe(200);
     expect(m.participanteCreate).toHaveBeenCalledTimes(1);
-    expect(res.body.data.resultados[0].emailEnviado).toBe(false);
+    expect(res.body.resultados[0].emailEnviado).toBe(false);
   });
 
   it("200 — registrado y no registrado tienen la misma forma de resultado", async () => {
@@ -195,7 +195,7 @@ describe("POST /api/v1/salas/:id/invitaciones", () => {
       .send({ emails: ["ana@x.com", "nuevo@x.com"] });
 
     expect(res.status).toBe(200);
-    const [a, b] = res.body.data.resultados;
+    const [a, b] = res.body.resultados;
     expect(Object.keys(a).sort()).toEqual(Object.keys(b).sort());
     expect(a.estado).toBe(b.estado);
     expect(m.participanteCreate.mock.calls[0][0].data.usuarioId).toBe("u-1");
@@ -231,7 +231,7 @@ describe("GET /api/v1/invitaciones/:token", () => {
 
     expect(r1.status).toBe(200);
     expect(r2.status).toBe(200);
-    expect(r1.body.data).toEqual({
+    expect(r1.body).toEqual({
       sala: { id: SALA_ID, nombre: "Reunión Q4" },
       email: "a***@x.com",
       requiereDatos: true,
@@ -248,8 +248,8 @@ describe("GET /api/v1/invitaciones/:token", () => {
 
     const res = await request(app).get(`/api/v1/invitaciones/${token}`);
 
-    expect(res.body.data.requiereLogin).toBe(true);
-    expect(res.body.data.requiereDatos).toBe(false);
+    expect(res.body.requiereLogin).toBe(true);
+    expect(res.body.requiereDatos).toBe(false);
   });
 
   it.each([

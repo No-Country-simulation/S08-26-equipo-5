@@ -183,7 +183,7 @@ Authorization: Bearer {{accessToken}}
 > {%
 client.test("invitar 200 uniforme", function() {
   client.assert(response.status === 200, "status " + response.status);
-  const r = response.body.data.resultados;
+  const r = response.body.resultados;
   client.assert(r.length === 2, "resultados " + r.length);
   client.assert(r[0].estado === "INVITADO", "estado " + r[0].estado);
   client.assert(r[1].estado === "INVITADO", "estado " + r[1].estado);
@@ -208,7 +208,7 @@ Authorization: Bearer {{accessToken}}
 > {%
 client.test("reinvitar 200 REENVIADO", function() {
   client.assert(response.status === 200, "status " + response.status);
-  client.assert(response.body.data.resultados[0].estado === "REENVIADO", "estado " + response.body.data.resultados[0].estado);
+  client.assert(response.body.resultados[0].estado === "REENVIADO", "estado " + response.body.resultados[0].estado);
 });
 %}
 

@@ -44,7 +44,7 @@ export async function invitarASala(
     emails: req.body?.emails,
   });
 
-  res.status(200).json({ data });
+  res.status(200).json(data);
 }
 
 // ─── GET /invitaciones/:token — vista previa pública (no consume) ──
@@ -54,7 +54,7 @@ export async function getInvitacion(
   res: Response,
 ): Promise<void> {
   const data = await previewInvitacion(deps, req.params.token);
-  res.status(200).json({ data });
+  res.status(200).json(data);
 }
 
 // ─── POST /invitaciones/:token/aceptar — aceptar (INVITADO → PENDIENTE) ──
