@@ -27,15 +27,13 @@
   --ux-color-primary-foreground: #ffffff;
 
   /* Tokens de marca MeetFlow (meetflow.tokens.json) */
-  --mf-blue: #3d4ed7;
-  --mf-blue-dark: #2f3cb0; /* hover de botones primarios */
-  --mf-nav: #2b3590; /* fondo de la pastilla de navegación */
-  --mf-yellow: #f3e477;
-  --mf-light: #f4f5f8;
-  --mf-navy: #20274f;
+  --mf-blue: #3d4fdb; /* azul de marca del home de develop */
+  --mf-yellow: #f4e28a; /* borde de tarjetas del home */
+  --mf-light: #f3f4f8;
+  --mf-navy: #1c2452;
   --mf-coral: #d95763;
-  --mf-muted: #6b7190; /* texto secundario, >= 4.5:1 sobre blanco y --mf-light */
-  --mf-line: #d9dce8;
+  --mf-muted: #5c647a; /* texto secundario del home */
+  --mf-line: #e4e6ee; /* borde de inputs del home */
   --mf-blue-tint: #e9ebfb;
   --mf-coral-tint: #fce9eb;
   --mf-green: #1f7a4d;
@@ -78,8 +76,6 @@
   --color-neutral-700: var(--ux-color-neutral-700);
   --color-neutral-900: var(--ux-color-neutral-900);
   --color-mf-blue: var(--mf-blue);
-  --color-mf-blue-dark: var(--mf-blue-dark);
-  --color-mf-nav: var(--mf-nav);
   --color-mf-yellow: var(--mf-yellow);
   --color-mf-light: var(--mf-light);
   --color-mf-navy: var(--mf-navy);
