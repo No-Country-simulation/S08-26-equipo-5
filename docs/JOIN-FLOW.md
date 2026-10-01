@@ -228,9 +228,17 @@ podía mandar un `participanteId` ajeno y quedar suscripto a su
 **`join:pending`** (al room del host)
 
 ```jsonc
-{ "participanteId": "uuid", "nombre": "Ana", "apellido": "Pérez",
-  "email": "ana@test.com", "timestamp": "ISO" }
+{ "participanteId": "uuid",
+  "nombre": "Ana",            // string | null
+  "apellido": "Pérez",        // string | null
+  "email": "ana@test.com",    // string, siempre presente
+  "timestamp": "ISO" }
 ```
+
+`nombre` y `apellido` son `null` cuando la fila viene de una invitación por correo
+y el invitado todavía no completó sus datos (no se rellenan con el email ni con
+`""`). El email viaja siempre aparte: si `nombre` es `null`, la UI del host debe
+mostrar `email` como etiqueta.
 
 **`join:approved`** (al participante)
 

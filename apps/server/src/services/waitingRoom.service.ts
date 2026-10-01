@@ -103,7 +103,8 @@ function dentroDeVentanaDeReingreso(fechaIngreso: Date | null): boolean {
 
 /**
  * Avisa al host que hay alguien esperando. nombre/apellido pueden ser null
- * (fila creada como INVITADO): se muestra el email en lugar del nombre.
+ * (fila creada como INVITADO): se envían como null, sin inventar un valor; el
+ * email va siempre en su propio campo y la UI decide qué mostrar.
  */
 export function emitJoinPending(
   salaId: string,
@@ -113,8 +114,8 @@ export function emitJoinPending(
     ?.to(rooms.salaHost(salaId))
     .emit("join:pending", {
       participanteId: participante.id,
-      nombre: participante.nombre ?? participante.email,
-      apellido: participante.apellido ?? "",
+      nombre: participante.nombre ?? null,
+      apellido: participante.apellido ?? null,
       email: participante.email,
       timestamp: new Date().toISOString(),
     });

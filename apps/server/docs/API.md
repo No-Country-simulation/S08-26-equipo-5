@@ -456,7 +456,7 @@ Resumen de eventos:
 | `join:subscribe` | C→S | `{ participanteId }` | exige ser dueño del participante (socket conectado con su `accessToken`) |
 | `host:subscribe` | C→S | `{ salaId }` | requiere access token de HOST |
 | `participant:approve` / `participant:reject` | C→S | `{ participanteId }` | update condicional (`WHERE estado = PENDIENTE`); el que pierde la carrera recibe `PARTICIPANT_STATE_CONFLICT` por su ack, no un evento |
-| `join:pending` | S→host | `{ participanteId, nombre, apellido, email, timestamp }` | |
+| `join:pending` | S→host | `{ participanteId, nombre, apellido, email, timestamp }` | `nombre`/`apellido` son `string \| null` (`null` si es un invitado por correo que aún no completó datos; no se rellenan con el email). `email` siempre presente. |
 | `join:approved` | S→participante | `{ participanteId, accessToken, expiresAt, sala, streamCallId (deprecado), stream: { callType, callId, callCid } }` | |
 | `join:rejected` | S→participante | `{ sala, streamCallId: null }` | |
 | `room:state` | S→sala y host | `{ salaId, estado, participantes }` | |

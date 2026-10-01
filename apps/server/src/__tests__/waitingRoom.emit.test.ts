@@ -57,7 +57,7 @@ describe("emitJoinPending — nombre/apellido nullables", () => {
     setReunionesNamespace({ to } as never);
   });
 
-  it("un PENDIENTE sin nombre (INVITADO promovido) se anuncia al host con su email como nombre", async () => {
+  it("un PENDIENTE sin nombre (INVITADO promovido) se anuncia al host con nombre/apellido null y su email aparte", async () => {
     const deps = makeDeps({
       id: "p-1",
       salaId: "sala-1",
@@ -81,8 +81,8 @@ describe("emitJoinPending — nombre/apellido nullables", () => {
       "join:pending",
       expect.objectContaining({
         participanteId: "p-1",
-        nombre: "ana@test.com",
-        apellido: "",
+        nombre: null,
+        apellido: null,
         email: "ana@test.com",
       }),
     );
