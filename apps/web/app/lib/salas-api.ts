@@ -1,3 +1,5 @@
+export type SalaEstado = "PROGRAMADA" | "ACTIVA" | "FINALIZADA" | "CANCELADA";
+
 export type Sala = {
   id: string;
   codigo: string;
@@ -5,7 +7,7 @@ export type Sala = {
   resumen?: string | null;
   fechaInicio: string;
   fechaFin?: string | null;
-  estado: string;
+  estado: SalaEstado;
   streamRoomId?: string;
 };
 
@@ -24,9 +26,11 @@ export type SalaDetalle = Sala & {
   totalParticipantes: number;
   participantes: Array<{
     id: string;
-    nombre: string;
-    apellido: string;
-    email: string;
+    // null en invitados por correo que todavía no aceptaron (estado INVITADO).
+    nombre: string | null;
+    apellido: string | null;
+    // null para quien no es HOST: el backend solo le muestra emails al host.
+    email: string | null;
     rol: "HOST" | "PARTICIPANTE";
     estado: string;
     fechaIngreso: string | null;
@@ -265,6 +269,12 @@ export function transferHost(
       body: JSON.stringify({ nuevoHostId }),
     },
   );
+}
+
+export function cancelSala(salaId: string): Promise<{ message: string }> {
+  return request(`/salas/${encodeURIComponent(salaId)}`, {
+    method: "DELETE",
+  });
 }
 
 export function finalizarSala(salaId: string): Promise<{ message: string }> {

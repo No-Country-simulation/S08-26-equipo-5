@@ -1,88 +1,61 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./auth-modal";
+import { HomeHeader } from "./home-header";
 
-const navigation = [
-  { href: "/home", label: "Inicio" },
-  { href: "/waiting-room", label: "Sala de espera" },
-  { href: "/room", label: "Sala" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/agenda", label: "Agenda" },
-  { href: "/historial", label: "Historial" },
-  { href: "/demo-sala", label: "🧪 Demo" },
-];
+const headerButton =
+  "rounded-lg px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-white/10 focus-visible:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, user } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <Link href="/home" className="text-xl font-bold tracking-tight text-slate-950">
-            MeetFlow
-          </Link>
-          <nav aria-label="Navegación principal" className="flex flex-wrap items-center gap-2">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href;
+  function openAuth(mode: "login" | "register") {
+    setAuthMode(mode);
+    setLoginOpen(true);
+  }
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-          {isAuthenticated ? (
-            <button type="button" onClick={logout} className="text-sm font-medium text-slate-600 hover:text-slate-950">Cerrar sesión</button>
+  // Mismo marco que HomeHero: fondo azul, cabecera de develop y superficie clara redondeada.
+  return (
+    <div className="flex min-h-screen flex-col bg-mf-blue text-mf-navy">
+      <HomeHeader
+        trailing={
+          isAuthenticated ? (
+            <>
+              {user && (
+                <span className="hidden max-w-[10rem] truncate text-[12px] text-white/80 lg:inline">
+                  {user.nombre}
+                </span>
+              )}
+              <button type="button" onClick={logout} className={`${headerButton} border border-white/40`}>
+                Cerrar sesión
+              </button>
+            </>
           ) : (
-            <div className="flex gap-3 text-sm font-semibold">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode("login");
-                  setLoginOpen(true);
-                }}
-                className="text-slate-600 hover:text-slate-950"
-              >
+            <>
+              <button type="button" onClick={() => openAuth("login")} className={headerButton}>
                 Iniciar sesión
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setAuthMode("register");
-                  setLoginOpen(true);
-                }}
-                className="text-blue-600 hover:text-blue-700"
+                onClick={() => openAuth("register")}
+                className={`${headerButton} bg-white !text-[#1c2452] hover:!bg-white/90`}
               >
                 Registrarse
               </button>
-            </div>
-          )}
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-7xl px-6 py-10">{children}</main>
-      <AuthModal
-        open={loginOpen}
-        initialMode={authMode}
-        onClose={() => setLoginOpen(false)}
+            </>
+          )
+        }
       />
+
+      <main className="mx-3.5 flex-1 rounded-t-[28px] bg-mf-light px-4 py-8 sm:px-6 sm:py-10">
+        <div className="mx-auto w-full max-w-7xl">{children}</div>
+      </main>
+
+      <AuthModal open={loginOpen} initialMode={authMode} onClose={() => setLoginOpen(false)} />
     </div>
   );
 }
