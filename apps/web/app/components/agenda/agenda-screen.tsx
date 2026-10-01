@@ -3,11 +3,20 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   addDays,
+  addMonths,
+  dayForMonth,
   findJumpDay,
+  findJumpMonth,
+  formatDateParam,
   formatDayLabel,
+  formatMonthLabel,
   getShareLink,
+  groupByDay,
   meetingsForDay,
+  meetingsForMonth,
+  parseDateParam,
   startOfDay,
+  type AgendaView,
   TAB_LABELS,
   toMeeting,
   type AgendaTab,
@@ -24,6 +33,7 @@ import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { MeetingCard } from "./meeting-card";
 import { SummaryDialog } from "./summary-dialog";
 import { Button, IconButton } from "../ui/button";
+import { SegmentedControl } from "../ui/segmented-control";
 
 const TABS: AgendaTab[] = ["proximas", "finalizadas"];
 
@@ -41,7 +51,20 @@ export function AgendaScreen() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [tab, setTab] = useState<AgendaTab>("proximas");
-  const [day, setDay] = useState(() => startOfDay(new Date()));
+  // Vista y fecha viven en la URL (?vista=mes&fecha=YYYY-MM-DD) para sobrevivir a recargas y "atrás".
+  // AgendaScreen solo se monta después de AuthGuard (ya en el cliente), por eso se puede leer la URL acá.
+  const [view, setView] = useState<AgendaView>(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vista") === "mes"
+      ? "mes"
+      : "dia",
+  );
+  const [day, setDay] = useState(() => {
+    const fromUrl =
+      typeof window !== "undefined"
+        ? parseDateParam(new URLSearchParams(window.location.search).get("fecha"))
+        : null;
+    return startOfDay(fromUrl ?? new Date());
+  });
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toast, setToast] = useState<Toast>(null);
   // Reloj para habilitar "Unirse" a los participantes 10 min antes (se refresca cada minuto).
@@ -100,9 +123,27 @@ export function AgendaScreen() {
     return () => clearTimeout(id);
   }, [toast]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (view === "mes") params.set("vista", "mes");
+    else params.delete("vista");
+    params.set("fecha", formatDateParam(day));
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}?${params}`);
+  }, [view, day]);
+
   const today = new Date(now);
-  const visible = meetingsForDay(meetings, tab, day);
-  const jumpDay = findJumpDay(meetings, tab, day);
+  const isMonth = view === "mes";
+  const visible = isMonth ? meetingsForMonth(meetings, tab, day) : meetingsForDay(meetings, tab, day);
+  const groups = isMonth ? groupByDay(visible) : [];
+  const jumpDay = isMonth ? findJumpMonth(meetings, tab, day) : findJumpDay(meetings, tab, day);
+  const periodKey = isMonth ? `${tab}-mes-${day.getFullYear()}-${day.getMonth()}` : `${tab}-dia-${day.getTime()}`;
+
+  function changeView(next: AgendaView) {
+    if (next === view) return;
+    // Día -> Mes conserva el mes del día elegido; Mes -> Día elige un día razonable del mes.
+    if (next === "dia") setDay(dayForMonth(meetings, tab, day, today));
+    setView(next);
+  }
 
   function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     const index = TABS.indexOf(tab);
@@ -171,8 +212,9 @@ export function AgendaScreen() {
     }
   }
 
-  const emptyTitle =
-    tab === "proximas"
+  const emptyTitle = isMonth
+    ? `No tienes reuniones ${tab === "proximas" ? "próximas" : "finalizadas"} en ${formatMonthLabel(day).toLowerCase()}`
+    : tab === "proximas"
       ? "Aún no tienes reuniones programadas"
       : "Aún no tienes reuniones finalizadas";
 
@@ -227,17 +269,34 @@ export function AgendaScreen() {
         tabIndex={-1}
         className="focus-visible:outline-none"
       >
-        <div className="mt-6 flex items-center justify-between gap-4">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <h2 aria-live="polite" className="text-lg leading-7 text-mf-navy sm:text-xl">
-            {formatDayLabel(day, today)}
+            {isMonth ? formatMonthLabel(day) : formatDayLabel(day, today)}
           </h2>
-          <div className="flex gap-2">
-            <IconButton aria-label="Día anterior" onClick={() => setDay((value) => addDays(value, -1))}>
-              <ChevronLeftIcon className="size-5" />
-            </IconButton>
-            <IconButton aria-label="Día siguiente" onClick={() => setDay((value) => addDays(value, 1))}>
-              <ChevronRightIcon className="size-5" />
-            </IconButton>
+          <div className="flex items-center gap-3">
+            <SegmentedControl
+              label="Vista de la agenda"
+              value={view}
+              onChange={changeView}
+              options={[
+                { value: "dia", label: "Día" },
+                { value: "mes", label: "Mes" },
+              ]}
+            />
+            <div className="flex gap-2">
+              <IconButton
+                aria-label={isMonth ? "Mes anterior" : "Día anterior"}
+                onClick={() => setDay((value) => (isMonth ? addMonths(value, -1) : addDays(value, -1)))}
+              >
+                <ChevronLeftIcon className="size-5" />
+              </IconButton>
+              <IconButton
+                aria-label={isMonth ? "Mes siguiente" : "Día siguiente"}
+                onClick={() => setDay((value) => (isMonth ? addMonths(value, 1) : addDays(value, 1)))}
+              >
+                <ChevronRightIcon className="size-5" />
+              </IconButton>
+            </div>
           </div>
         </div>
 
@@ -257,8 +316,8 @@ export function AgendaScreen() {
             </div>
           )}
 
-          {status === "ready" && visible.length > 0 && (
-            <ul key={`${tab}-${day.getTime()}`} className="space-y-4">
+          {status === "ready" && visible.length > 0 && !isMonth && (
+            <ul key={periodKey} className="space-y-4">
               {visible.map((meeting, index) => (
                 <MeetingCard
                   key={meeting.id}
@@ -274,9 +333,37 @@ export function AgendaScreen() {
             </ul>
           )}
 
+          {status === "ready" && visible.length > 0 && isMonth && (
+            <div key={periodKey} className="space-y-8">
+              {groups.map((group, groupIndex) => {
+                const offset = groups.slice(0, groupIndex).reduce((sum, g) => sum + g.meetings.length, 0);
+                const label = formatDayLabel(group.day, today);
+                return (
+                  <section key={group.day.getTime()} aria-label={label}>
+                    <h3 className="mb-3 text-base font-bold leading-6 text-mf-navy">{label}</h3>
+                    <ul className="space-y-4">
+                      {group.meetings.map((meeting, index) => (
+                        <MeetingCard
+                          key={meeting.id}
+                          meeting={meeting}
+                          index={offset + index}
+                          now={now}
+                          onSummary={(m) => setDialog({ type: "summary", meeting: m })}
+                          onCopy={copyLink}
+                          onEdit={(m) => openForm({ type: "edit", meeting: m })}
+                          onCancel={(m) => setDialog({ type: "cancel", meeting: m })}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+
           {status === "ready" && visible.length === 0 && (
             <div
-              key={`empty-${tab}-${day.getTime()}`}
+              key={`empty-${periodKey}`}
               className="mf-enter mx-auto flex max-w-md flex-col items-center py-6 text-center sm:py-10"
             >
               <span className="flex size-16 items-center justify-center rounded-2xl bg-mf-yellow/60 text-mf-navy">
@@ -297,7 +384,13 @@ export function AgendaScreen() {
               )}
               {jumpDay && (
                 <Button variant="ghost" size="md" onClick={() => setDay(jumpDay)} className="mt-3">
-                  {tab === "proximas" ? "Ir a la próxima reunión" : "Ir a la última reunión"}
+                  {isMonth
+                    ? tab === "proximas"
+                      ? "Ir al próximo mes con reuniones"
+                      : "Ir al último mes con reuniones"
+                    : tab === "proximas"
+                      ? "Ir a la próxima reunión"
+                      : "Ir a la última reunión"}
                 </Button>
               )}
             </div>

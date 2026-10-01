@@ -169,3 +169,79 @@ export function findJumpDay(meetings: Meeting[], tab: AgendaTab, from: Date) {
   if (days.length === 0) return null;
   return new Date(tab === "proximas" ? Math.min(...days) : Math.max(...days));
 }
+
+// ── Vista por mes ────────────────────────────────────────────────────────────
+
+export type AgendaView = "dia" | "mes";
+
+export function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+export function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+export function isSameMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
+/** "Octubre 2026". */
+export function formatMonthLabel(date: Date) {
+  return capitalize(`${monthFormatter.format(date)} ${date.getFullYear()}`);
+}
+
+/** Reuniones de la pestaña dentro del mes de `day`, ordenadas (Próximas asc, Finalizadas desc). */
+export function meetingsForMonth(meetings: Meeting[], tab: AgendaTab, day: Date) {
+  return meetings
+    .filter((m) => tabOf(m) === tab && isSameMonth(new Date(m.startAt), day))
+    .sort((a, b) => {
+      const diff = new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+      return tab === "proximas" ? diff : -diff;
+    });
+}
+
+/** Agrupa una lista ya ordenada por día, conservando el orden de aparición. */
+export function groupByDay(sorted: Meeting[]) {
+  const groups: { day: Date; meetings: Meeting[] }[] = [];
+  for (const meeting of sorted) {
+    const day = startOfDay(new Date(meeting.startAt));
+    const last = groups[groups.length - 1];
+    if (last && isSameDay(last.day, day)) last.meetings.push(meeting);
+    else groups.push({ day, meetings: [meeting] });
+  }
+  return groups;
+}
+
+/** Mes más cercano con reuniones: hacia adelante en "Próximas", hacia atrás en "Finalizadas". */
+export function findJumpMonth(meetings: Meeting[], tab: AgendaTab, from: Date) {
+  const base = startOfMonth(from).getTime();
+  const months = meetings
+    .filter((m) => tabOf(m) === tab)
+    .map((m) => startOfMonth(new Date(m.startAt)).getTime())
+    .filter((t) => (tab === "proximas" ? t > base : t < base));
+  if (months.length === 0) return null;
+  return new Date(tab === "proximas" ? Math.min(...months) : Math.max(...months));
+}
+
+/** Día al pasar de Mes a Día: hoy si cae en el mes, si no el primer día con reuniones, si no el 1. */
+export function dayForMonth(meetings: Meeting[], tab: AgendaTab, month: Date, today: Date) {
+  if (isSameMonth(month, today)) return startOfDay(today);
+  const groups = groupByDay(meetingsForMonth(meetings, tab, month));
+  if (groups.length === 0) return startOfMonth(month);
+  return groups.reduce((first, g) => (g.day < first ? g.day : first), groups[0].day);
+}
+
+// ── Parámetros de URL (?vista=mes&fecha=YYYY-MM-DD) ─────────────────────────
+
+export function formatDateParam(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function parseDateParam(value: string | null) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) || formatDateParam(date) !== value ? null : date;
+}
