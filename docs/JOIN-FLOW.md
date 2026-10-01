@@ -96,6 +96,23 @@ los tres campos son obligatorios (`400 VALIDATION_ERROR` si falta alguno).
 Mismo criterio en el socket `join:request`: con `socket.data.userId` seteado
 solo hace falta mandar `salaCodigo`.
 
+**Participante `INVITADO` (invitado por correo).** Si el host invitó ese email,
+existe una fila en estado `INVITADO` con su invitación. `requestJoin` (HTTP y
+socket `join:request` comparten el mismo servicio) la **reutiliza** —no crea otra—
+y la promueve a `PENDIENTE`: completa `nombre`/`apellido` solo si la fila no los
+tiene, marca la invitación como usada en la misma transacción y emite
+`join:pending` al host. Si la fila es de una **cuenta registrada** y el caller no
+viene logueado con esa cuenta, responde `401 LOGIN_REQUIRED`. Un `INVITADO` no es
+aprobable (`participant:approve/reject` solo actúan sobre `PENDIENTE`) ni puede
+recibir el rol HOST. La vía "natural" es `POST /invitaciones/:token/aceptar`
+(ver `apps/server/docs/API.md`), que devuelve la misma respuesta que este endpoint.
+
+Si el invitado **no tiene cuenta** pero acepta con sesión iniciada, el email de la
+cuenta (DB, por `sub` del JWT, sin distinguir mayúsculas) debe coincidir con el
+invitado: si coincide, la fila queda vinculada a esa cuenta (`usuarioId`) y
+`nombre`/`apellido` salen de ella; si no, `403 INVITATION_ACCOUNT_MISMATCH` y el
+token no se consume.
+
 ### `POST /salas/:salaId/stream-token` — token de GetStream
 
 Requiere `Authorization: Bearer <token>`, que puede ser **cualquiera de los dos**:
@@ -211,9 +228,17 @@ podía mandar un `participanteId` ajeno y quedar suscripto a su
 **`join:pending`** (al room del host)
 
 ```jsonc
-{ "participanteId": "uuid", "nombre": "Ana", "apellido": "Pérez",
-  "email": "ana@test.com", "timestamp": "ISO" }
+{ "participanteId": "uuid",
+  "nombre": "Ana",            // string | null
+  "apellido": "Pérez",        // string | null
+  "email": "ana@test.com",    // string, siempre presente
+  "timestamp": "ISO" }
 ```
+
+`nombre` y `apellido` son `null` cuando la fila viene de una invitación por correo
+y el invitado todavía no completó sus datos (no se rellenan con el email ni con
+`""`). El email viaja siempre aparte: si `nombre` es `null`, la UI del host debe
+mostrar `email` como etiqueta.
 
 **`join:approved`** (al participante)
 

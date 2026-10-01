@@ -26,6 +26,19 @@
   --ux-color-primary: var(--ux-color-primary-600);
   --ux-color-primary-foreground: #ffffff;
 
+  /* Tokens de marca MeetFlow (meetflow.tokens.json) */
+  --mf-blue: #3d4fdb; /* azul de marca del home de develop */
+  --mf-yellow: #f4e28a; /* borde de tarjetas del home */
+  --mf-light: #f3f4f8;
+  --mf-navy: #1c2452;
+  --mf-coral: #d95763;
+  --mf-muted: #5c647a; /* texto secundario del home */
+  --mf-line: #e4e6ee; /* borde de inputs del home */
+  --mf-blue-tint: #e9ebfb;
+  --mf-coral-tint: #fce9eb;
+  --mf-green: #1f7a4d;
+  --mf-green-tint: #e2f4ea;
+
   --ux-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --ux-font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --ux-space-1: 0.25rem;
@@ -62,6 +75,17 @@
   --color-neutral-500: var(--ux-color-neutral-500);
   --color-neutral-700: var(--ux-color-neutral-700);
   --color-neutral-900: var(--ux-color-neutral-900);
+  --color-mf-blue: var(--mf-blue);
+  --color-mf-yellow: var(--mf-yellow);
+  --color-mf-light: var(--mf-light);
+  --color-mf-navy: var(--mf-navy);
+  --color-mf-coral: var(--mf-coral);
+  --color-mf-muted: var(--mf-muted);
+  --color-mf-line: var(--mf-line);
+  --color-mf-blue-tint: var(--mf-blue-tint);
+  --color-mf-coral-tint: var(--mf-coral-tint);
+  --color-mf-green: var(--mf-green);
+  --color-mf-green-tint: var(--mf-green-tint);
   --font-sans: var(--ux-font-sans);
   --font-mono: var(--ux-font-mono);
   --spacing-1: var(--ux-space-1);
@@ -96,6 +120,39 @@
 
 body {
   margin: 0;
+}
+
+/* ── MeetFlow: animación de entrada escalonada (solo CSS) ─────────────────── */
+@keyframes mf-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mf-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.mf-enter {
+  animation: mf-fade-up 0.35s ease-out both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+.mf-skeleton {
+  animation: mf-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-enter,
+  .mf-skeleton {
+    animation: none;
+  }
 }
 
 /* ── GetStream: forzar texto blanco en etiquetas de participante ─────────── */
