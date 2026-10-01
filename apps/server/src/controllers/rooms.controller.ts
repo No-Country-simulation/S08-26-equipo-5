@@ -51,6 +51,29 @@ const waitingRoomDeps: WaitingRoomDeps = {
 // ─── Helpers ──────────────────────────────────────────────
 
 /**
+ * Autorización y visibilidad de las consultas de participantes (PR #104).
+ *
+ * El solicitante debe ser HOST o un participante NO INVITADO vinculado a su
+ * cuenta; si no, 403 NOT_A_PARTICIPANT. Solo el HOST ve las filas INVITADO y
+ * los emails: para el resto se omiten los INVITADO y el email va en null.
+ */
+function resolverVistaParticipantes<
+  T extends { usuarioId: string | null; rol: string; estado: string },
+>(filas: T[], userId: string): { esHost: boolean; visibles: T[] } {
+  const propia = filas.find(
+    (p) => p.usuarioId === userId && p.estado !== "INVITADO",
+  );
+  if (!propia) {
+    throw new AppError(403, "NOT_A_PARTICIPANT", "No sos participante de esta sala");
+  }
+  const esHost = propia.rol === "HOST";
+  return {
+    esHost,
+    visibles: esHost ? filas : filas.filter((p) => p.estado !== "INVITADO"),
+  };
+}
+
+/**
  * Genera un código corto y URL-friendly (8 caracteres).
  * Formato: 4 letras + 4 números (ej: "ABCD1234")
  */
@@ -282,6 +305,7 @@ export async function getSalaDetalle(
   }
 
   // Encontrar el HOST (creador)
+  const { esHost, visibles } = resolverVistaParticipantes(sala.participantes, userId);
   const hostParticipante = sala.participantes.find((p) => p.rol === "HOST");
   const creador = hostParticipante?.usuario;
 
@@ -298,12 +322,12 @@ export async function getSalaDetalle(
     streamRoomId: sala.streamRoomId,
     stream: getStreamCallRef(sala),
     enlace,
-    totalParticipantes: sala.participantes.length,
-    participantes: sala.participantes.map((p) => ({
+    totalParticipantes: visibles.length,
+    participantes: visibles.map((p) => ({
       id: p.id,
       nombre: p.nombre,
       apellido: p.apellido,
-      email: p.email,
+      email: esHost ? p.email : null,
       rol: p.rol,
       estado: p.estado,
       fechaIngreso: p.fechaIngreso?.toISOString() || null,
@@ -313,9 +337,9 @@ export async function getSalaDetalle(
           id: creador.id,
           nombre: creador.nombre,
           apellido: creador.apellido,
-          email: creador.email,
+          email: esHost ? creador.email : null,
         }
-      : { id: "", nombre: "Desconocido", apellido: "", email: "" },
+      : { id: "", nombre: "Desconocido", apellido: "", email: null },
   };
 
   res.status(200).json(response);
@@ -510,7 +534,8 @@ export async function finalizarSala(
  * Transfiere el rol de HOST a otro participante de la sala.
  * Solo el HOST actual puede transferir. El caller queda PARTICIPANTE
  * y el target pasa a HOST, preservando el `estado` de ambos.
- * Cualquier participante existente califica (PENDIENTE o APROBADO).
+ * Cualquier participante existente califica (PENDIENTE o APROBADO), salvo
+ * los INVITADO que todavía no aceptaron su invitación.
  * Requiere: Authorization: Bearer <jwt>
  */
 export async function transferHost(
@@ -556,6 +581,14 @@ export async function transferHost(
   // de usuario; comparar usuarioId detecta correctamente una auto-transferencia.
   if (target.usuarioId === userId) {
     throw new ValidationError("No puedes transferir el rol a ti mismo");
+  }
+
+  // Un INVITADO todavía no aceptó la invitación (ni pasó por la sala de
+  // espera): no puede ser HOST. Promoverlo lo dejaría APROBADO sin aval.
+  if (target.estado === "INVITADO") {
+    throw new ValidationError(
+      "El participante aún no aceptó la invitación y no puede ser HOST"
+    );
   }
 
   // Demover caller y promover target en una sola transacción.
@@ -637,20 +670,21 @@ export async function getParticipantes(
   }
 
   // Obtener participantes
-  const participantes = await prisma.participante.findMany({
+  const filas = await prisma.participante.findMany({
     where: { salaId: id },
     orderBy: { createdAt: "asc" },
   });
+  const { esHost, visibles } = resolverVistaParticipantes(filas, userId);
 
   const response: ParticipantesResponse = {
     salaId: sala.id,
     salaNombre: sala.nombre,
-    total: participantes.length,
-    participantes: participantes.map((p) => ({
+    total: visibles.length,
+    participantes: visibles.map((p) => ({
       id: p.id,
       nombre: p.nombre,
       apellido: p.apellido,
-      email: p.email,
+      email: esHost ? p.email : null,
       rol: p.rol,
       estado: p.estado,
       fechaIngreso: p.fechaIngreso?.toISOString() || null,

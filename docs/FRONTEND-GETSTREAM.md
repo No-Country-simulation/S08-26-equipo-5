@@ -57,7 +57,7 @@ sequenceDiagram
     I->>API: POST /salas/:code/join { nombre, apellido, email }
     API-->>I: { participanteId, estado: PENDIENTE, salaId, accessToken }
     API->>WS: join:pending → host
-    WS-->>H: join:pending { participanteId, nombre, apellido, email }
+    WS-->>H: join:pending { participanteId, nombre|null, apellido|null, email }
     I->>WS: connect({ auth: { token: accessToken } })
     Note over I,WS: el server ya lo suscribe solo a sus rooms
 

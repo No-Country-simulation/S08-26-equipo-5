@@ -72,7 +72,7 @@ jobs:
         working-directory: apps/server
         run: npm run test
 
-      # La suite .http (api_auth.http, api_salas_agenda.http, api_waiting.http)
+      # La suite .http (api_auth.http, api_salas_agenda.http, api_waiting.http, api_invitaciones.http)
       # llama a GetStream de verdad (no está mockeado como en Vitest), por eso
       # necesita GETSTREAM_API_KEY/SECRET como secrets del repo. Si no están
       # configurados, este paso falla al crear una sala — ver docs/API.md.

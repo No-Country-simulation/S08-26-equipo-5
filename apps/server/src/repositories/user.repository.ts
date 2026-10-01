@@ -11,6 +11,12 @@ export interface CreateUserData {
 
 export interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
+  /**
+   * Búsqueda case-insensitive: el registro no normaliza el email, así que una
+   * cuenta puede estar guardada como "Ana@Test.com" y la invitación llegar en
+   * minúsculas. `findByEmail` (exacto) no la encontraría.
+   */
+  findByEmailInsensitive(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   create(data: CreateUserData): Promise<User>;
 }
@@ -18,6 +24,13 @@ export interface IUserRepository {
 export class PrismaUserRepository implements IUserRepository {
   async findByEmail(email: string): Promise<User | null> {
     const usuario = await prisma.usuario.findUnique({ where: { email } });
+    return usuario ? toUser(usuario) : null;
+  }
+
+  async findByEmailInsensitive(email: string): Promise<User | null> {
+    const usuario = await prisma.usuario.findFirst({
+      where: { email: { equals: email.trim(), mode: "insensitive" } },
+    });
     return usuario ? toUser(usuario) : null;
   }
 

@@ -21,7 +21,35 @@ function parseBool(name: string, value: string | undefined): boolean | null {
   );
 }
 
+// Entero positivo con default. Vacío/undefined → default; cualquier otra cosa
+// que no sea entero > 0 revienta al boot (fail-closed, como parseBool).
+function parsePositiveInt(name: string, value: string | undefined, fallback: number): number {
+  if (value === undefined || value === "") return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`Valor inválido para ${name}: "${value}". Debe ser un entero positivo`);
+  }
+  return n;
+}
+
+const MAIL_PROVIDERS = ["console", "resend", "brevo"] as const;
+export type MailProvider = (typeof MAIL_PROVIDERS)[number];
+
+function parseMailProvider(value: string | undefined): MailProvider {
+  if (value === undefined || value === "") return "console";
+  if ((MAIL_PROVIDERS as readonly string[]).includes(value)) return value as MailProvider;
+  throw new Error(
+    `Valor inválido para MAIL_PROVIDER: "${value}". Valores permitidos: ${MAIL_PROVIDERS.join(" | ")}`
+  );
+}
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
+const mailProvider = parseMailProvider(process.env.MAIL_PROVIDER);
+// Cada key solo es obligatoria si el provider correspondiente está activo (fail-closed al boot).
+const resendApiKey =
+  mailProvider === "resend" ? requireEnv("RESEND_API_KEY") : undefined;
+const brevoApiKey =
+  mailProvider === "brevo" ? requireEnv("BREVO_API_KEY") : undefined;
 
 export const env = {
   port: Number(process.env.PORT ?? 4000),
@@ -33,6 +61,18 @@ export const env = {
   refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 7),
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS ?? 12),
   frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:3000",
+
+  // ── Invitaciones por correo ──────────────────────────────
+  // Vigencia del enlace de invitación (horas).
+  invitacionTtlHoras: parsePositiveInt("INVITACION_TTL_HORAS", process.env.INVITACION_TTL_HORAS, 72),
+  // "console" (default, sin red: loguea el enlace) | "resend" | "brevo" (HTTPS al proveedor).
+  mailProvider,
+  resendApiKey,
+  brevoApiKey,
+  mailFrom: process.env.MAIL_FROM || "onboarding@resend.dev",
+  // Límites por ventana de 15 min (configurables para evitar 429 en tests).
+  rateLimitInviteMax: parsePositiveInt("RATE_LIMIT_INVITE_MAX", process.env.RATE_LIMIT_INVITE_MAX, 30),
+  rateLimitTokenMax: parsePositiveInt("RATE_LIMIT_TOKEN_MAX", process.env.RATE_LIMIT_TOKEN_MAX, 30),
 
   // ── GetStream ────────────────────────────────────────────
   // La API key viaja al cliente en la respuesta de /stream-token; el secret
