@@ -254,7 +254,12 @@ export const openApiSpec = {
                   nombre: { type: "string" },
                 },
               },
-              email: { type: "string", format: "email" },
+              email: {
+                type: "string",
+                description:
+                  "Email enmascarado (endpoint público): primera letra + `***` + dominio completo. Ej.: `a***@example.com`. Nunca el email completo.",
+                example: "a***@example.com",
+              },
               requiereDatos: { type: "boolean", description: "true si el invitado no tiene cuenta (deberá completar nombre y apellido)" },
               requiereLogin: { type: "boolean", description: "true si el invitado tiene cuenta (deberá iniciar sesión)" },
             },

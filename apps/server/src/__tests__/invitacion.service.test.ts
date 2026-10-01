@@ -336,10 +336,21 @@ describe("previewInvitacion", () => {
     expect(m.invitaciones.findByTokenHash).toHaveBeenCalledWith(hashInvitationToken("tok-en"));
     expect(res).toEqual({
       sala: { id: SALA_ID, nombre: "Sala Q4" },
-      email: "a@x.com",
+      email: "a***@x.com",
       requiereDatos: true,
       requiereLogin: false,
     });
+  });
+
+  it("enmascara el email: primera letra + *** + dominio completo (nunca el email entero)", async () => {
+    m.invitaciones.findByTokenHash.mockResolvedValue(
+      invitacion({}, { email: "ana.perez@empresa.com" }),
+    );
+
+    const res = await previewInvitacion(m.deps, "t");
+
+    expect(res.email).toBe("a***@empresa.com");
+    expect(JSON.stringify(res)).not.toContain("ana.perez");
   });
 
   it("registrado -> requiereDatos false, requiereLogin true", async () => {

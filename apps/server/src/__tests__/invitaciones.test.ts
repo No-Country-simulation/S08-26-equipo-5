@@ -233,7 +233,7 @@ describe("GET /api/v1/invitaciones/:token", () => {
     expect(r2.status).toBe(200);
     expect(r1.body.data).toEqual({
       sala: { id: SALA_ID, nombre: "Reunión Q4" },
-      email: "a@x.com",
+      email: "a***@x.com",
       requiereDatos: true,
       requiereLogin: false,
     });

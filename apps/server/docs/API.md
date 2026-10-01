@@ -355,12 +355,14 @@ Público. No consume el token (se puede consultar varias veces). Sirve a la UI p
 {
   "data": {
     "sala": { "id": "uuid", "nombre": "Reunión Q4" },
-    "email": "ana@example.com",
+    "email": "a***@example.com",
     "requiereDatos": true,
     "requiereLogin": false
   }
 }
 ```
+
+`email` viene **enmascarado** (endpoint público): primera letra de la parte local + `***` + dominio completo (`ana@example.com` → `a***@example.com`). Nunca se devuelve el email completo; sirve solo para que la UI confirme "estás aceptando como a***@example.com".
 
 `requiereDatos` es `true` si el invitado no tiene cuenta; `requiereLogin` es `true` si la tiene.
 

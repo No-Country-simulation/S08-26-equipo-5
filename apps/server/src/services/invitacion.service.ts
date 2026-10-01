@@ -8,6 +8,7 @@ import type { ISalaRepository } from "../repositories/sala.repository.js";
 import type { IUserRepository } from "../repositories/user.repository.js";
 import type { RoomRole } from "../types/stream.js";
 import { AppError } from "../utils/AppError.js";
+import { maskEmail } from "../utils/maskEmail.js";
 import { signParticipantToken } from "../utils/participantToken.js";
 import { emitJoinPending } from "./waitingRoom.service.js";
 import {
@@ -230,7 +231,8 @@ export async function previewInvitacion(
 
   return {
     sala: { id: participante.sala.id, nombre: participante.sala.nombre },
-    email: participante.email,
+    // Endpoint público: el email completo nunca sale (a***@dominio.com).
+    email: maskEmail(participante.email),
     requiereDatos: participante.usuarioId === null,
     requiereLogin: participante.usuarioId !== null,
   };
