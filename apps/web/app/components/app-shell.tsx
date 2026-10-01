@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./auth-modal";
+import { HomeHeader } from "./home-header";
 
 const navigation = [
   { href: "/home", label: "Inicio" },
@@ -18,12 +19,31 @@ const navigation = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const isWaitingRoom = pathname === "/waiting-room";
   const { isAuthenticated, logout } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
 
+  if (pathname === "/room") {
+    return (
+      <div className="min-h-dvh bg-[#080b19] text-white">
+        <main className="min-h-dvh">{children}</main>
+        <AuthModal
+          open={loginOpen}
+          initialMode={authMode}
+          onClose={() => setLoginOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
+    <div className={`min-h-screen text-slate-950 ${isWaitingRoom ? "flex flex-col bg-[#3d4fdb]" : "bg-slate-50"}`}>
+      {isWaitingRoom ? (
+        <div className="bg-[#3d4fdb]">
+          <HomeHeader />
+        </div>
+      ) : (
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <Link href="/home" className="text-xl font-bold tracking-tight text-slate-950">
@@ -77,7 +97,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-6 py-10">{children}</main>
+      )}
+      {isWaitingRoom ? (
+        <main className="mx-3.5 flex-1 rounded-t-[28px] bg-[#f3f4f8] px-5 py-8 sm:px-8">
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        </main>
+      ) : (
+        <main className="mx-auto w-full max-w-7xl px-6 py-10">{children}</main>
+      )}
       <AuthModal
         open={loginOpen}
         initialMode={authMode}
