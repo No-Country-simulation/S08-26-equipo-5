@@ -6,6 +6,7 @@ import {
   formatFullDate,
   formatTime,
   getDurationMinutes,
+  getRealEnd,
   type Meeting,
 } from "../../lib/agenda";
 import { getSalaDetalle, type SalaDetalle } from "../../lib/salas-api";
@@ -47,8 +48,9 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
   }, [meeting.id, attempt]);
 
   const minutes = getDurationMinutes(meeting);
-  const timeRange = meeting.endAt
-    ? `${formatTime(meeting.startAt)} - ${formatTime(meeting.endAt)}`
+  const realEnd = getRealEnd(meeting);
+  const timeRange = realEnd
+    ? `${formatTime(meeting.startAt)} - ${formatTime(realEnd)}`
     : formatTime(meeting.startAt);
 
   return (
@@ -65,7 +67,11 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
         </div>
         <div>
           <dt className="text-sm text-mf-muted">Duración</dt>
-          <dd className="font-bold">{minutes === null ? "No disponible" : formatDuration(minutes)}</dd>
+          <dd className="font-bold">{minutes !== null
+              ? formatDuration(minutes)
+              : meeting.status === "CANCELADA"
+                ? "Cancelada"
+                : "No disponible"}</dd>
         </div>
         <div className="sm:col-span-2">
           <dt className="text-sm text-mf-muted">Descripción</dt>

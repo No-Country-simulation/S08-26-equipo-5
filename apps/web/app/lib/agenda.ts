@@ -123,10 +123,20 @@ export function formatFullDate(iso: string) {
   return capitalize(fullDateFormatter.format(new Date(iso)));
 }
 
-/** Duración en minutos (mínimo 1) o null si la reunión no tiene fecha de fin. */
-export function getDurationMinutes(meeting: Pick<Meeting, "startAt" | "endAt">) {
-  if (!meeting.endAt) return null;
-  const diff = new Date(meeting.endAt).getTime() - new Date(meeting.startAt).getTime();
+/**
+ * Fecha de fin real o null. Al cancelar, el backend pone fechaFin = ahora, así que en
+ * CANCELADA no es un fin de reunión; tampoco se usa si no es posterior al inicio.
+ */
+export function getRealEnd(meeting: Pick<Meeting, "startAt" | "endAt" | "status">) {
+  if (!meeting.endAt || meeting.status === "CANCELADA") return null;
+  return new Date(meeting.endAt).getTime() > new Date(meeting.startAt).getTime() ? meeting.endAt : null;
+}
+
+/** Duración en minutos (mínimo 1) o null si no hay un fin real. */
+export function getDurationMinutes(meeting: Pick<Meeting, "startAt" | "endAt" | "status">) {
+  const end = getRealEnd(meeting);
+  if (!end) return null;
+  const diff = new Date(end).getTime() - new Date(meeting.startAt).getTime();
   return Math.max(1, Math.round(diff / 60000));
 }
 
