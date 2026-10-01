@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
-import { LoginModal } from "./login-modal";
+import { AuthModal } from "./auth-modal";
 
 const LOGO_URL =
   "https://res.cloudinary.com/dsiizolgq/image/upload/v1790777798/Imagen_de_ChatGPT_26_sept_2026_20_06_45_1_byfv9h.png";
@@ -118,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <LoginModal
+      <AuthModal
         open={loginOpen}
         initialMode={authMode}
         onClose={() => setLoginOpen(false)}

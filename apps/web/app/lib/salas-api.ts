@@ -169,7 +169,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function createSala(input: {
   nombre: string;
   resumen?: string;
-  fechaInicio: string;
+  fechaInicio?: string;
 }): Promise<Sala> {
   return request<CreateRoomResponse>("/salas", {
     method: "POST",
@@ -182,8 +182,8 @@ export function createSala(input: {
     id: room.salaId,
     codigo: room.codigo,
     nombre: room.nombre,
-    fechaInicio: input.fechaInicio,
-    estado: "PROGRAMADA",
+    fechaInicio: input.fechaInicio ?? "",
+    estado: input.fechaInicio ? "PROGRAMADA" : "ACTIVA",
     streamRoomId: room.streamRoomId,
   }));
 }
