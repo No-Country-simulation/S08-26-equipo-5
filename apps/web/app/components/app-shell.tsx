@@ -1,27 +1,12 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./auth-modal";
-
-const LOGO_URL =
-  "https://res.cloudinary.com/dsiizolgq/image/upload/v1790777798/Imagen_de_ChatGPT_26_sept_2026_20_06_45_1_byfv9h.png";
-
-// Solo las dos secciones del producto. Las rutas de desarrollo
-// (/room, /waiting-room, /demo-sala, /historial) siguen existiendo pero no se enlazan.
-const navigation = [
-  { href: "/home", label: "Inicio" },
-  { href: "/agenda", label: "Mis reuniones" },
-];
-
-const onBlueFocus =
-  "focus-visible:outline-mf-yellow focus-visible:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2";
+import { BrandLogo, onBlueFocus } from "./brand-logo";
+import { MainNav } from "./main-nav";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const { isAuthenticated, logout, user } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -34,46 +19,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-mf-blue text-mf-navy">
       <header className="mx-auto grid w-full max-w-[1440px] grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-7 md:min-h-[72px] md:grid-cols-[1fr_auto_1fr] md:py-0">
-        <Link
-          href="/home"
-          aria-label="MeetFlow, ir al inicio"
-          className={`justify-self-start rounded-lg ${onBlueFocus}`}
-        >
-          <Image
-            src={LOGO_URL}
-            alt="MeetFlow"
-            width={180}
-            height={60}
-            priority
-            className="h-10 w-auto sm:h-12"
-          />
-        </Link>
-
-        <nav
-          aria-label="Navegación principal"
-          className="order-last col-span-2 flex justify-center md:order-none md:col-span-1"
-        >
-          <ul className="flex items-center gap-2 rounded-2xl bg-mf-nav px-3 py-2 sm:gap-6 sm:px-6">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`block rounded-lg px-3 py-2 text-sm font-bold transition-colors sm:text-base ${onBlueFocus} ${
-                      isActive
-                        ? "text-mf-yellow underline underline-offset-4"
-                        : "text-white hover:text-mf-yellow"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+        <BrandLogo />
+        <MainNav className="order-last col-span-2 md:order-none md:col-span-1" />
 
         <div className="flex items-center gap-3 justify-self-end text-sm font-bold">
           {isAuthenticated ? (
