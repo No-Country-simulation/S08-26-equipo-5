@@ -317,6 +317,19 @@ Limitaciones: el plan gratis permite 300 correos/día. Sin un dominio autenticad
 
 - **Rate limiting en memoria, por proceso.** `express-rate-limit` usa su store en memoria (por defecto): los contadores viven en cada proceso, se pierden al reiniciar y **no se comparten entre instancias**. Con N instancias detrás de un balanceador el límite efectivo es hasta N veces mayor. Para un despliegue multi-instancia hace falta un store compartido (p. ej. Redis con `rate-limit-redis`). Hoy el backend corre en una sola instancia, por lo que el comportamiento es el esperado.
 
+### Variables de entorno de invitaciones
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `FRONTEND_URL` | `http://localhost:3000` | Base de los enlaces que arma el backend: `FRONTEND_URL/invitacion/<token>` (correo) y `FRONTEND_URL/sala/<codigo>` (`enlace` de la sala). **Debe apuntar al front de cada entorno**: si queda en el default, los correos de producción llevarían a `localhost`. |
+| `MAIL_PROVIDER` | `console` | `console` (loguea el correo, sin red), `resend` o `brevo`. Un valor desconocido falla al arrancar. |
+| `MAIL_FROM` | `onboarding@resend.dev` | Remitente. Con Brevo debe ser un sender verificado. **Caveat Resend sandbox:** `onboarding@resend.dev` solo entrega al email dueño de la cuenta de Resend; para invitar a terceros hace falta un dominio verificado (o usar Brevo). |
+| `RESEND_API_KEY` | — | Obligatoria solo con `MAIL_PROVIDER=resend`. |
+| `BREVO_API_KEY` | — | Obligatoria solo con `MAIL_PROVIDER=brevo`. |
+| `INVITACION_TTL_HORAS` | `72` | Vigencia del enlace de invitación (entero positivo). |
+| `RATE_LIMIT_INVITE_MAX` | `30` | Máx. de `POST /salas/:id/invitaciones` por host cada 15 min. |
+| `RATE_LIMIT_TOKEN_MAX` | `30` | Máx. de `GET /invitaciones/:token` + `POST /invitaciones/:token/aceptar` por IP cada 15 min. |
+
 Estado nuevo de participante: `INVITADO` (invitado que todavía no aceptó; `nombre`/`apellido` pueden ser `null`). Nunca es aprobable directamente ni aparece entre los aprobados.
 
 ### POST /salas/:id/invitaciones — Invitar por correo
