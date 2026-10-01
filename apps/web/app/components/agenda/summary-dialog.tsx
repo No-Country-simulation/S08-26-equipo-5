@@ -114,10 +114,17 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
               {state.detail.participantes.map((person) => (
                 <li key={person.id} className="flex items-center justify-between gap-4 px-4 py-2.5">
                   <span className="min-w-0 truncate font-bold">
-                    {person.nombre} {person.apellido}
+                    {[person.nombre, person.apellido].filter(Boolean).join(" ") ||
+                      person.email ||
+                      "Invitado"}
                     {person.rol === "HOST" && (
                       <span className="ml-2 rounded-md bg-mf-blue-tint px-2 py-0.5 text-xs font-bold text-mf-blue">
                         Host
+                      </span>
+                    )}
+                    {person.estado === "INVITADO" && (
+                      <span className="ml-2 rounded-md bg-mf-yellow/60 px-2 py-0.5 text-xs font-bold text-mf-navy">
+                        Invitado
                       </span>
                     )}
                   </span>
