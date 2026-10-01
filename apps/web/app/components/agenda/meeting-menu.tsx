@@ -106,7 +106,9 @@ export function MeetingMenu({ title, actions }: { title: string; actions: MenuAc
               role="menuitem"
               tabIndex={-1}
               onClick={() => {
-                close(false);
+                // El ítem se desmonta al cerrar: el foco vuelve al botón "…" antes de
+                // ejecutar la acción, así los diálogos restauran el foco a un nodo vivo.
+                close(true);
                 action.onSelect();
               }}
               className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors focus-visible:shadow-none focus-visible:outline-none ${
