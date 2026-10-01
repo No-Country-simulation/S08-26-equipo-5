@@ -51,7 +51,14 @@ async function ensureChatUser(
     await client.disconnectUser();
   }
   if (client.userID !== user.id) {
-    await client.connectUser({ id: user.id, name: user.name }, token);
+    try {
+      await client.connectUser({ id: user.id, name: user.name }, token);
+    } catch (error) {
+      // Un connectUser fallido puede dejar userID seteado sin conexión: se
+      // limpia para que el próximo intento con el mismo usuario reconecte.
+      await client.disconnectUser().catch(() => {});
+      throw error;
+    }
   }
 }
 

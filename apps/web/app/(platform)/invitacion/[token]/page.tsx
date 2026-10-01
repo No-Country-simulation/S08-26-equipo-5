@@ -101,7 +101,9 @@ export default function InvitacionPage() {
         participanteId: result.participanteId,
         salaId: result.salaId,
       });
-      router.push(`/waiting-room?code=${encodeURIComponent(result.salaCodigo)}`);
+      // replace: el token ya quedó consumido; "atrás" no debe volver a esta
+      // página (mostraría "ya no es válida") y además sale del historial.
+      router.replace(`/waiting-room?code=${encodeURIComponent(result.salaCodigo)}`);
     } catch (error) {
       setSubmitting(false);
       if (error instanceof ApiRequestError) {

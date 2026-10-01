@@ -94,9 +94,14 @@ export const InviteEmailsField = forwardRef<InviteEmailsFieldHandle, InviteEmail
     }));
 
     function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+      // Con IME (composición en curso) Enter confirma el carácter, no el chip.
+      if (event.nativeEvent.isComposing) return;
+      // Con el borrador vacío, Enter se comporta como en cualquier otro campo y
+      // envía el formulario (por ejemplo "Enviar invitaciones").
+      if (event.key === "Enter" && draft.trim() === "") return;
       if (event.key === "Enter" || event.key === "," || event.key === ";") {
-        // Enter nunca envía el formulario desde este campo: evita crear la reunión
-        // por error mientras se cargan correos. La coma vacía tampoco se escribe.
+        // Con texto escrito, Enter lo convierte en chip y no envía: evita crear
+        // la reunión por error a mitad de un correo. La coma tampoco se escribe.
         event.preventDefault();
         commit(draft);
       } else if (event.key === "Backspace" && draft.length === 0 && emails.length > 0) {
