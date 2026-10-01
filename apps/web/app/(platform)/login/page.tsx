@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { useAuth } from "../../lib/auth";
+import { rutaDestinoSegura } from "../../lib/safe-redirect";
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/home";
+  const next = rutaDestinoSegura(searchParams.get("next"));
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +23,7 @@ function LoginContent() {
     setLoading(true);
     try {
       await login(email, password);
-      router.replace(next.startsWith("/") ? next : "/home");
+      router.replace(next);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "No se pudo iniciar sesión.");
     } finally {
