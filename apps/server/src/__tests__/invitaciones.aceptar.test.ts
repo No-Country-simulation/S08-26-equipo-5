@@ -25,6 +25,8 @@ vi.mock("../config/env.js", () => ({
 }));
 
 const m = vi.hoisted(() => ({
+  usuarioFindUnique: vi.fn(),
+  participanteFindUnique: vi.fn(),
   invitacionFindUnique: vi.fn(),
   txInvitacionUpdateMany: vi.fn(),
   txParticipanteUpdateMany: vi.fn(),
@@ -33,6 +35,8 @@ const m = vi.hoisted(() => ({
 vi.mock("@prisma/client", () => ({
   PrismaClient: vi.fn().mockImplementation(() => ({
     invitacion: { findUnique: m.invitacionFindUnique },
+    usuario: { findUnique: m.usuarioFindUnique },
+    participante: { findUnique: m.participanteFindUnique },
     $transaction: async (fn: (tx: unknown) => unknown) =>
       fn({
         invitacion: { updateMany: m.txInvitacionUpdateMany },
@@ -102,6 +106,7 @@ describe("POST /api/v1/invitaciones/:token/aceptar", () => {
     m.invitacionFindUnique.mockResolvedValue(invitacion());
     m.txInvitacionUpdateMany.mockResolvedValue({ count: 1 });
     m.txParticipanteUpdateMany.mockResolvedValue({ count: 1 });
+    m.participanteFindUnique.mockResolvedValue(null);
   });
 
   it("200 — no registrado: PENDIENTE, accessToken guest, join:pending al host; el email del body se ignora", async () => {
@@ -134,6 +139,48 @@ describe("POST /api/v1/invitaciones/:token/aceptar", () => {
       "join:pending",
       expect.objectContaining({ participanteId: "p-1", email: "a@x.com", nombre: "Ana" }),
     );
+  });
+
+  describe("invitado sin cuenta + sesion (vinculacion por email)", () => {
+    const cuentaDb = (email: string) => ({
+      id: "u-9",
+      nombre: "Ana",
+      apellido: "Paz",
+      email,
+      passwordHash: "x",
+      createdAt: new Date(),
+    });
+
+    it("200 — email de la cuenta coincide: vincula usuarioId y toma nombre/apellido de la cuenta", async () => {
+      m.usuarioFindUnique.mockResolvedValue(cuentaDb("A@x.com"));
+
+      const res = await request(app)
+        .post(URL)
+        .set("Authorization", `Bearer ${userToken("u-9")}`)
+        .send({});
+
+      expect(res.status).toBe(200);
+      expect(m.usuarioFindUnique).toHaveBeenCalledWith({ where: { id: "u-9" } });
+      expect(m.txParticipanteUpdateMany).toHaveBeenCalledWith({
+        where: { id: "p-1", estado: "INVITADO", usuarioId: null },
+        data: { estado: "PENDIENTE", usuarioId: "u-9", nombre: "Ana", apellido: "Paz" },
+      });
+    });
+
+    it("403 INVITATION_ACCOUNT_MISMATCH — otra cuenta logueada y el token NO se consume", async () => {
+      m.usuarioFindUnique.mockResolvedValue(cuentaDb("otra@x.com"));
+
+      const res = await request(app)
+        .post(URL)
+        .set("Authorization", `Bearer ${userToken("u-9")}`)
+        .send({ nombre: "Ana", apellido: "Pérez" });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("INVITATION_ACCOUNT_MISMATCH");
+      expect(m.txInvitacionUpdateMany).not.toHaveBeenCalled();
+      expect(m.txParticipanteUpdateMany).not.toHaveBeenCalled();
+      expect(emit).not.toHaveBeenCalled();
+    });
   });
 
   it("400 — falta nombre/apellido y NO se consume el token", async () => {

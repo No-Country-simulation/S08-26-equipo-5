@@ -268,6 +268,9 @@ function textoNoVacio(valor: unknown): string | null {
  *
  * - Sin cuenta: nombre/apellido obligatorios; el email sale de la fila.
  * - Con cuenta: exige sesión de ESA cuenta; el body se ignora por completo.
+ * - Sin cuenta pero con sesión: solo si el email de la cuenta coincide con el
+ *   invitado (si no, 403 INVITATION_ACCOUNT_MISMATCH sin consumir); se vincula
+ *   la fila a la cuenta y nombre/apellido salen de ella.
  * - Consumo atómico (repositorio): solo una aceptación concurrente triunfa.
  * Toda causa de invalidez responde 410 INVITATION_INVALID.
  */
@@ -291,6 +294,7 @@ export async function aceptarInvitacion(
 
   let nombre: string | undefined;
   let apellido: string | undefined;
+  let usuarioVinculado: string | undefined;
 
   if (participante.usuarioId) {
     if (!input.usuarioId) {
@@ -307,6 +311,31 @@ export async function aceptarInvitacion(
         "La invitación pertenece a otra cuenta",
       );
     }
+  } else if (input.usuarioId) {
+    // Invitado sin cuenta que acepta con sesión: solo vale si el email de esa
+    // cuenta es el invitado (case-insensitive). Todo se valida ANTES de
+    // consumir, así un rechazo no quema el token.
+    const cuenta = await deps.usuarios.findById(input.usuarioId);
+    if (
+      !cuenta ||
+      cuenta.email.trim().toLowerCase() !== participante.email.trim().toLowerCase()
+    ) {
+      throw new AppError(
+        403,
+        "INVITATION_ACCOUNT_MISMATCH",
+        "La invitación pertenece a otra cuenta",
+      );
+    }
+    if (await deps.participantes.findByUsuario(sala.id, cuenta.id)) {
+      throw new AppError(
+        409,
+        "ALREADY_PARTICIPANT",
+        "La cuenta ya es participante de la sala",
+      );
+    }
+    usuarioVinculado = cuenta.id;
+    nombre = participante.nombre ?? cuenta.nombre;
+    apellido = participante.apellido ?? cuenta.apellido;
   } else {
     const n = textoNoVacio(input.nombre);
     const a = textoNoVacio(input.apellido);
@@ -320,6 +349,7 @@ export async function aceptarInvitacion(
   const resultado = await deps.invitaciones.consumirYActivar({
     invitacionId: invitacion.id,
     participanteId: participante.id,
+    ...(usuarioVinculado !== undefined ? { usuarioId: usuarioVinculado } : {}),
     ...(nombre !== undefined ? { nombre, apellido } : {}),
   });
   if (!resultado.invitacionConsumida || !resultado.participanteActivado) {
@@ -328,6 +358,7 @@ export async function aceptarInvitacion(
 
   emitJoinPending(sala.id, {
     ...participante,
+    usuarioId: usuarioVinculado ?? participante.usuarioId,
     estado: EstadoParticipante.PENDIENTE,
     nombre: nombre ?? participante.nombre,
     apellido: apellido ?? participante.apellido,

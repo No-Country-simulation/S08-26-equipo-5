@@ -383,6 +383,8 @@ Sesión **opcional** (`Authorization: Bearer <access token>`). Pasa al invitado 
 
 **Invitado con cuenta** — exige el JWT de **esa** cuenta; el body se ignora por completo (nombre/apellido salen de la cuenta).
 
+**Invitado sin cuenta que acepta logueado** — si vino JWT pero la invitación no estaba ligada a ninguna cuenta, se compara el email de la cuenta del JWT (leído de la DB por `sub`, sin distinguir mayúsculas) con el email invitado. Si coincide: se **vincula** la fila a esa cuenta (`usuarioId`), `nombre`/`apellido` salen de la cuenta y el body se ignora. Si no coincide: `403 INVITATION_ACCOUNT_MISMATCH` y el token **no** se consume (todo se valida antes de consumir; el vínculo y el consumo van en la misma transacción atómica). Si esa cuenta ya es otro participante de la sala: `409 ALREADY_PARTICIPANT`.
+
 **Response 200:**
 ```json
 {
@@ -397,7 +399,8 @@ Sesión **opcional** (`Authorization: Bearer <access token>`). Pasa al invitado 
 **Errores:**
 - 400 — `VALIDATION_ERROR`: falta `nombre`/`apellido` (invitado sin cuenta). El token **no** se consume.
 - 401 — `LOGIN_REQUIRED`: la invitación es de una cuenta registrada y no vino JWT.
-- 403 — `INVITATION_ACCOUNT_MISMATCH`: el JWT es de otra cuenta.
+- 403 — `INVITATION_ACCOUNT_MISMATCH`: el JWT es de otra cuenta (invitación de una cuenta registrada, o invitación por email cuyo destinatario no coincide con el email de la cuenta logueada). El token **no** se consume.
+- 409 — `ALREADY_PARTICIPANT`: la cuenta logueada ya es otro participante de la sala. El token **no** se consume.
 - 410 — `INVITATION_INVALID`: token desconocido, vencido, ya usado, carrera perdida o sala cerrada (un único código, sin oráculo). Se evalúa antes que 400/401/403.
 - 429 — `RATE_LIMITED` (`RATE_LIMIT_TOKEN_MAX` por IP cada 15 min)
 

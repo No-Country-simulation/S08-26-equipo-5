@@ -732,6 +732,9 @@ export const openApiSpec = {
         summary: "Aceptar una invitación (INVITADO → PENDIENTE)",
         description:
           "Sesión opcional (Bearer): obligatoria solo si la invitación es de una cuenta registrada. " +
+          "Si la invitación es de un email sin cuenta pero vino sesión, el email de la cuenta debe coincidir " +
+          "(case-insensitive) con el invitado: se vincula la fila a la cuenta; si no, 403 `INVITATION_ACCOUNT_MISMATCH` " +
+          "sin consumir el token. " +
           "Consumo atómico de un solo uso; avisa al host por `join:pending`. " +
           "Todo token inválido/vencido/usado/carrera responde 410 `INVITATION_INVALID`. " +
           "Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` cada 15 min.",
@@ -750,7 +753,8 @@ export const openApiSpec = {
           },
           400: { description: "Falta nombre/apellido (VALIDATION_ERROR); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           401: { description: "Invitación de cuenta registrada sin sesión (LOGIN_REQUIRED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          403: { description: "La sesión es de otra cuenta (INVITATION_ACCOUNT_MISMATCH)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "La sesión es de otra cuenta, o el email de la cuenta no coincide con el invitado (INVITATION_ACCOUNT_MISMATCH); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "La cuenta logueada ya es otro participante de la sala (ALREADY_PARTICIPANT); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           410: { description: "Invitación inválida (INVITATION_INVALID)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           429: { description: "Rate limit excedido (RATE_LIMITED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },

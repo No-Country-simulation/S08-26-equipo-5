@@ -37,6 +37,12 @@ export interface ConsumirYActivarData {
     /** Solo para invitados no registrados: se guardan al aceptar. */
     nombre?: string;
     apellido?: string;
+    /**
+     * Vinculación por email: el invitado sin cuenta aceptó con la sesión de una
+     * cuenta cuyo email coincide. Se guarda en la fila y el update exige que
+     * siga sin cuenta (usuarioId null).
+     */
+    usuarioId?: string;
 }
 
 export interface ConsumirYActivarResult {
@@ -137,9 +143,14 @@ export class PrismaInvitacionRepository implements IInvitacionRepository {
                 }
 
                 const participante = await tx.participante.updateMany({
-                    where: { id: data.participanteId, estado: EstadoParticipante.INVITADO },
+                    where: {
+                        id: data.participanteId,
+                        estado: EstadoParticipante.INVITADO,
+                        ...(data.usuarioId !== undefined ? { usuarioId: null } : {}),
+                    },
                     data: {
                         estado: EstadoParticipante.PENDIENTE,
+                        ...(data.usuarioId !== undefined ? { usuarioId: data.usuarioId } : {}),
                         ...(data.nombre !== undefined ? { nombre: data.nombre } : {}),
                         ...(data.apellido !== undefined ? { apellido: data.apellido } : {}),
                     },
@@ -155,6 +166,21 @@ export class PrismaInvitacionRepository implements IInvitacionRepository {
         } catch (error) {
             if (error instanceof ActivacionPerdidaError) {
                 return { invitacionConsumida: false, participanteActivado: false };
+            }
+            // Vinculación: la cuenta ya es otro participante de la sala
+            // (unique salaId+usuarioId). La transacción ya se revirtió.
+            if (
+                data.usuarioId !== undefined &&
+                error &&
+                typeof error === "object" &&
+                "code" in error &&
+                (error as { code?: unknown }).code === "P2002"
+            ) {
+                throw new AppError(
+                    409,
+                    "ALREADY_PARTICIPANT",
+                    "La cuenta ya es participante de la sala",
+                );
             }
             throw error;
         }

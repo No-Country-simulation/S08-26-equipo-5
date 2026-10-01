@@ -6,9 +6,11 @@
 @missingId = 00000000-0000-4000-8000-000000000099
 
 # Invitaciones por correo: invitar (host) y vista previa de token.
-# Aceptar la invitacion NO se cubre aca: hace falta el token en claro, que solo
-# viaja por correo (ConsoleMailer lo loguea en el server) y la API nunca lo
-# devuelve. Ese flujo se prueba en Vitest + supertest.
+# Aceptar la invitacion (camino feliz y 403 INVITATION_ACCOUNT_MISMATCH por email
+# distinto) NO se cubre aca: hace falta el token en claro, que solo viaja por
+# correo (ConsoleMailer lo loguea en el server) y la API nunca lo devuelve. Ese
+# flujo se prueba en Vitest + supertest. Aca solo se verifica el orden de
+# validacion con un token inexistente (paso 14).
 # Requiere MAIL_PROVIDER sin definir (ConsoleMailer: no sale nada a la red).
 
 ### 1. Register host -> 201
@@ -239,6 +241,21 @@ GET {{host}}/invitaciones/token-que-no-existe
 
 > {%
 client.test("preview token desconocido 410", function() {
+  client.assert(response.status === 410, "status " + response.status);
+  client.assert(response.body.error.code === "INVITATION_INVALID", "code " + response.body.error.code);
+});
+%}
+
+
+### 14. Aceptar con JWT pero token desconocido -> 410 (el token invalido gana sobre la cuenta)
+POST {{host}}/invitaciones/token-que-no-existe/aceptar
+Content-Type: application/json
+Authorization: Bearer {{otherToken}}
+
+{}
+
+> {%
+client.test("aceptar token desconocido con sesion 410", function() {
   client.assert(response.status === 410, "status " + response.status);
   client.assert(response.body.error.code === "INVITATION_INVALID", "code " + response.body.error.code);
 });

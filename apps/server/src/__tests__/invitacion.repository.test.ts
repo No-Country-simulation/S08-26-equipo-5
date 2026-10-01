@@ -196,6 +196,37 @@ describe("PrismaInvitacionRepository.consumirYActivar", () => {
     });
   });
 
+  it("vinculacion por email: guarda usuarioId y exige que la fila siga sin cuenta (usuarioId null)", async () => {
+    const { prisma, tx } = makePrisma();
+    tx.invitacion.updateMany.mockResolvedValue({ count: 1 });
+    tx.participante.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new PrismaInvitacionRepository(prisma);
+
+    await repo.consumirYActivar({
+      invitacionId: "i-1",
+      participanteId: "p-1",
+      usuarioId: "u-9",
+      nombre: "Ana",
+      apellido: "Paz",
+    });
+
+    expect(tx.participante.updateMany).toHaveBeenCalledWith({
+      where: { id: "p-1", estado: "INVITADO", usuarioId: null },
+      data: { estado: "PENDIENTE", usuarioId: "u-9", nombre: "Ana", apellido: "Paz" },
+    });
+  });
+
+  it("vinculacion: si el unique (salaId, usuarioId) choca (P2002) revierte y responde 409 ALREADY_PARTICIPANT", async () => {
+    const { prisma, tx } = makePrisma();
+    tx.invitacion.updateMany.mockResolvedValue({ count: 1 });
+    tx.participante.updateMany.mockRejectedValue(Object.assign(new Error("dup"), { code: "P2002" }));
+    const repo = new PrismaInvitacionRepository(prisma);
+
+    await expect(
+      repo.consumirYActivar({ invitacionId: "i-1", participanteId: "p-1", usuarioId: "u-9" }),
+    ).rejects.toMatchObject({ statusCode: 409, code: "ALREADY_PARTICIPANT" });
+  });
+
   it("si la invitación ya no es consumible (count 0) no toca al participante", async () => {
     const { prisma, tx } = makePrisma();
     tx.invitacion.updateMany.mockResolvedValue({ count: 0 });

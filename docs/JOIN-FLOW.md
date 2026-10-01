@@ -107,6 +107,12 @@ aprobable (`participant:approve/reject` solo actúan sobre `PENDIENTE`) ni puede
 recibir el rol HOST. La vía "natural" es `POST /invitaciones/:token/aceptar`
 (ver `apps/server/docs/API.md`), que devuelve la misma respuesta que este endpoint.
 
+Si el invitado **no tiene cuenta** pero acepta con sesión iniciada, el email de la
+cuenta (DB, por `sub` del JWT, sin distinguir mayúsculas) debe coincidir con el
+invitado: si coincide, la fila queda vinculada a esa cuenta (`usuarioId`) y
+`nombre`/`apellido` salen de ella; si no, `403 INVITATION_ACCOUNT_MISMATCH` y el
+token no se consume.
+
 ### `POST /salas/:salaId/stream-token` — token de GetStream
 
 Requiere `Authorization: Bearer <token>`, que puede ser **cualquiera de los dos**:

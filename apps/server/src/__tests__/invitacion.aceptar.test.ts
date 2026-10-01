@@ -36,8 +36,10 @@ function crearDeps() {
     findByTokenHash: vi.fn(),
     consumirYActivar: vi.fn(),
   };
-  const deps = { invitaciones } as unknown as InvitacionDeps;
-  return { deps, invitaciones };
+  const usuarios = { findById: vi.fn() };
+  const participantes = { findByUsuario: vi.fn() };
+  const deps = { invitaciones, usuarios, participantes } as unknown as InvitacionDeps;
+  return { deps, invitaciones, usuarios, participantes };
 }
 
 function invitacion(
@@ -172,6 +174,73 @@ describe("aceptarInvitacion", () => {
         "join:pending",
         expect.objectContaining({ nombre: "Ana", apellido: "Paz" }),
       );
+    });
+  });
+
+  describe("invitado sin cuenta que acepta con sesion (vinculacion por email)", () => {
+    const cuenta = (over: Record<string, unknown> = {}) => ({
+      id: "u-9",
+      email: "A@X.com",
+      nombre: "Ana",
+      apellido: "Paz",
+      ...over,
+    });
+
+    beforeEach(() => {
+      m.usuarios.findById.mockResolvedValue(cuenta());
+      m.participantes.findByUsuario.mockResolvedValue(null);
+    });
+
+    it("email de la cuenta == email invitado (case-insensitive) -> vincula usuarioId y completa nombre/apellido desde la cuenta", async () => {
+      const res = await aceptarInvitacion(m.deps, {
+        token: "t",
+        usuarioId: "u-9",
+        nombre: "Impostor",
+        apellido: "Falso",
+      });
+
+      expect(m.usuarios.findById).toHaveBeenCalledWith("u-9");
+      expect(m.invitaciones.consumirYActivar).toHaveBeenCalledWith({
+        invitacionId: "i-1",
+        participanteId: "p-1",
+        usuarioId: "u-9",
+        nombre: "Ana",
+        apellido: "Paz",
+      });
+      expect(res.estado).toBe("PENDIENTE");
+      expect(emit).toHaveBeenCalledWith(
+        "join:pending",
+        expect.objectContaining({ nombre: "Ana", apellido: "Paz", email: "a@x.com" }),
+      );
+    });
+
+    it("email distinto -> 403 INVITATION_ACCOUNT_MISMATCH y NO consume el token", async () => {
+      m.usuarios.findById.mockResolvedValue(cuenta({ email: "otra@x.com" }));
+
+      await expect(
+        aceptarInvitacion(m.deps, { token: "t", usuarioId: "u-9" }),
+      ).rejects.toMatchObject({ statusCode: 403, code: "INVITATION_ACCOUNT_MISMATCH" });
+      expect(m.invitaciones.consumirYActivar).not.toHaveBeenCalled();
+      expect(emit).not.toHaveBeenCalled();
+    });
+
+    it("la cuenta del JWT ya no existe -> 403 INVITATION_ACCOUNT_MISMATCH sin consumir", async () => {
+      m.usuarios.findById.mockResolvedValue(null);
+
+      await expect(
+        aceptarInvitacion(m.deps, { token: "t", usuarioId: "u-9" }),
+      ).rejects.toMatchObject({ statusCode: 403, code: "INVITATION_ACCOUNT_MISMATCH" });
+      expect(m.invitaciones.consumirYActivar).not.toHaveBeenCalled();
+    });
+
+    it("la cuenta ya es otro participante de la sala -> 409 ALREADY_PARTICIPANT sin consumir", async () => {
+      m.participantes.findByUsuario.mockResolvedValue({ id: "p-otro" });
+
+      await expect(
+        aceptarInvitacion(m.deps, { token: "t", usuarioId: "u-9" }),
+      ).rejects.toMatchObject({ statusCode: 409, code: "ALREADY_PARTICIPANT" });
+      expect(m.participantes.findByUsuario).toHaveBeenCalledWith(SALA_ID, "u-9");
+      expect(m.invitaciones.consumirYActivar).not.toHaveBeenCalled();
     });
   });
 
