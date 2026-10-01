@@ -27,6 +27,34 @@ type UseStreamChatReturn = {
   error: string;
 };
 
+/**
+ * StreamChat.getInstance devuelve un singleton por apiKey para toda la
+ * pestaña. Cada reunión usa un usuario distinto (el Participante.id), así que
+ * antes de conectar hay que soltar al usuario anterior. Las operaciones se
+ * encadenan en esta cola para que dos efectos (StrictMode, cambio de token o
+ * de sala) no llamen a connectUser en paralelo.
+ */
+let chatQueue: Promise<unknown> = Promise.resolve();
+
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const run = chatQueue.then(task, task);
+  chatQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function ensureChatUser(
+  client: StreamChat,
+  user: { id: string; name: string },
+  token: string,
+) {
+  if (client.userID && client.userID !== user.id) {
+    await client.disconnectUser();
+  }
+  if (client.userID !== user.id) {
+    await client.connectUser({ id: user.id, name: user.name }, token);
+  }
+}
+
 export function useStreamChat({
   apiKey,
   token,
@@ -43,8 +71,6 @@ export function useStreamChat({
 
     let active = true;
 
-    // Use getInstance so we share the singleton — but we must NOT call
-    // connectUser if the client is already connected to this same user.
     const client = StreamChat.getInstance(apiKey);
 
     const safeChannelId = channelId
@@ -52,13 +78,7 @@ export function useStreamChat({
       .slice(0, 64);
 
     async function setup() {
-      // If already connected as this user, skip connectUser
-      if (
-        client.userID !== user.id ||
-        client.tokenManager.token === null
-      ) {
-        await client.connectUser({ id: user.id, name: user.name }, token);
-      }
+      await enqueue(() => ensureChatUser(client, user, token));
 
       if (!active) return;
 
@@ -99,8 +119,13 @@ export function useStreamChat({
       channelRef.current = null;
       setConnected(false);
       setMessages([]);
-      // Do NOT disconnect the StreamChat client here —
-      // the StreamVideoClient depends on the same underlying WS connection.
+      // El chat y el video son clientes independientes: desconectar el chat no
+      // afecta la llamada. Se hace en la cola para no cortar un connectUser en
+      // curso; si un efecto nuevo (StrictMode) vuelve a montar con el mismo
+      // usuario, ensureChatUser reconecta después de este disconnect.
+      void enqueue(async () => {
+        if (client.userID === user.id) await client.disconnectUser();
+      }).catch(() => {});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, token, user.id, user.name, channelId]);
