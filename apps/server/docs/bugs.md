@@ -2,13 +2,14 @@
 
 Hallazgos de la ejecución S1-QA2 (US-01 a US-03) el 2026-09-24 contra `http://localhost:4000` (`npm run dev`). Evidencia: `qa/evidencia-ejecucion-us-01-us-03.md`.
 Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Render/`develop` suspendido, ver `qa/evidencia-s2-qa1.md`).
+Cierre S4-QA3 (2026-10-01, rama `QA-Sprint4`): evidencia en `qa/evidencia-s4-qa3.md`.
 
 ## BUG-01 — El enlace de la sala no abre el waiting room
 
 - Casos: QA-05
 - Severidad: media (bajó de alta: la app ya no depende de este campo para navegar)
-- Estado: **abierto**, sin cambios en el backend.
-- Dónde: `rooms.controller.ts` arma `enlace` como `{FRONTEND_URL}/sala/{codigo}`. No existe la ruta `apps/web/app/**/sala`.
+- Estado: **corregido** (S4-QA3, 2026-10-01). Retest contra `https://web-ruddy-mu-22.vercel.app/sala/QA-S4`: 307 a `/waiting-room?code=QA-S4` y esa página responde 200. La ruta es `apps/web/app/(platform)/sala/[codigo]/page.tsx`.
+- Dónde (histórico): `rooms.controller.ts` arma `enlace` como `{FRONTEND_URL}/sala/{codigo}`. No existía la ruta `apps/web/app/**/sala`.
 - Efecto: si un host copia y comparte el campo `enlace` fuera de la app (ej. por WhatsApp), ese link da 404. Dentro de la app ya no es un bloqueante porque el flujo de creación/unión (PR #82) navega directo a `/waiting-room?code=` y `/room?code=`, sin usar ese campo.
 - API relacionada: `GET /api/v1/salas/{codigo}` sí responde 200.
 - Nota (branch `feature/join-flow-stream-token`): el backend mantiene el enlace `/sala/{codigo}` (según lo acordado en la PR); el frontend es quien debe agregar esa ruta.
@@ -30,16 +31,16 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 
 - Casos: QA-08
 - Severidad: media
-- Estado: **abierto**, sin cambios.
-- Dónde: no existe estado `EXPIRED` ni respuesta 410. Un código vigente sigue resolviendo la sala. Confirmado de nuevo: una sala creada con `fechaInicio` en 2020 sigue devolviendo 201 y su código sigue resolviendo normalmente.
+- Estado: **won't fix** (S4-QA3, 2026-10-01). `fechaInicio` es el inicio programado de la sala, no un vencimiento del enlace. No hay regla de producto para un estado `EXPIRED` ni para un 410. El código sigue resolviendo mientras la sala no esté cancelada o finalizada. Los casos 26 y 27 de `api_salas_agenda.http` documentan ese comportamiento aceptado.
+- Dónde: no existe estado `EXPIRED` ni respuesta 410. Una sala creada con `fechaInicio` en el pasado se crea (201) y su código sigue resolviendo.
 - Efecto: el caso de enlace expirado de la matriz no puede pasar. Es un hueco de producto, no un fallo intermitente.
 
 ## BUG-05 — El participante aprobado se conecta a una call de GetStream distinta a la del host
 
 - Casos: QA-10 (US-03)
 - Severidad: **alta**
-- Estado: **abierto** (encontrado en S2-QA1, 2026-09-25).
-- Dónde: `apps/server/src/realtime/waitingRoom.handlers.ts:113`. Al aprobar (`participant:approve`), el evento `join:approved` manda `streamCallId: call_${sala.codigo.toLowerCase()}` — un valor fabricado en el momento, que **no** es el `streamRoomId` real de GetStream que la sala tiene desde que se creó (`POST /salas` devuelve `streamRoomId: "default:<uuid>"`, y es ese el que usa el host en `/room`).
+- Estado: **corregido**. Retest S4-QA3 (2026-10-01): `waiting-room.test.ts` → "emite el callId REAL, no uno derivado del código de sala" en verde (`streamCallId` es el de la sala, no `call_<codigo>`). El participante ya no entra a `/room` con un callId fabricado: `getStreamToken` devuelve el call persistido. No se repitió la videollamada de dos personas en Render porque crear sala sigue en 500 (BUG-09).
+- Dónde (histórico): al aprobar, `join:approved` mandaba `streamCallId: call_${sala.codigo.toLowerCase()}`, distinto del `streamRoomId` real (`default:<uuid>`). Hoy `buildJoinApprovedPayload` usa `getStreamCallRef(sala)`.
 - Pasos de reproducción:
   1. Loguearse como host y crear una sala (`POST /salas` devuelve, p. ej., `streamRoomId: "default:9501c4f1-..."`).
   2. Entrar como host a `/room?...&callId=default:9501c4f1-...`.
@@ -53,7 +54,7 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 
 - Casos: suite `.http` `api_salas_agenda.http` #29
 - Severidad: media
-- Estado: **abierto** (encontrado en S2-QA2, 2026-09-25).
+- Estado: **corregido** (S4-QA3, 2026-10-01). `assertUuid` rechaza el id antes de Prisma con 400 `VALIDATION_ERROR` en detalle, update, delete, finalizar, transfer-host, participantes, invitaciones y `authParticipante`. Retest: `uuid.test.ts` en verde. El caso 29 de `api_salas_agenda.http` ahora espera 400. Contra Render sigue el 500 viejo hasta que se despliegue este commit.
 - Dónde: `apps/server/src/controllers/rooms.controller.ts` (`getSalaDetalle`), pasa `req.params.id` directo a `prisma.sala.findUnique({ where: { id } })` sin validar que sea un UUID válido antes.
 - Pasos de reproducción:
   1. `GET /api/v1/salas/no-es-un-uuid/detalle` con un JWT válido.
@@ -75,8 +76,8 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 
 - Casos: QA-10 (US-03)
 - Severidad: media
-- Estado: **abierto** (encontrado en S2-QA1, 2026-09-25).
-- Dónde: `apps/server/src/realtime/waitingRoom.handlers.ts:56` (`host:subscribe`) solo hace `socket.join(...)`, no reenvía las solicitudes `PENDIENTE` que ya existan para esa sala.
+- Estado: **corregido** (S4-QA3, 2026-10-01). `host:subscribe` reenvía `join:pending` de cada `PENDIENTE` solo al socket que reconecta. Retest: `waitingRoom.handlers.test.ts` → "reenvía join:pending de los PENDIENTE de la sala solo a este socket". El panel del host además hidrata por `GET /salas/:id/participantes`. No se repitió la recarga en Render (BUG-09).
+- Dónde (histórico): `host:subscribe` solo hacía `socket.join(...)` y no reenviaba los `PENDIENTE` ya existentes.
 - Pasos de reproducción:
   1. Participante solicita ingreso (`join:request`) y queda `PENDIENTE`.
   2. Antes de que el host la apruebe/rechace, el host recarga la pestaña de `/room` (o pierde y recupera la conexión de Socket.IO).
@@ -99,6 +100,7 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
 - Efecto sobre esta tarea (S3-API): no se pudo completar el criterio de aceptación "`.http` actualizados y corridos contra el entorno Render" para los casos nuevos de `transfer-host` (#30-#37) — no hay forma de crear una sala en Render para probarlos. Quedan agregados al `.http` y **verificados 39/39 contra `localhost`** con la misma DB de Render; contra Render en sí solo se pudo reproducir y documentar este bug.
 - Fix sugerido: revisar en el dashboard de Render que `GETSTREAM_API_KEY`/`GETSTREAM_API_SECRET` estén seteadas y coincidan con las de GetStream Dashboard, y loguear el mensaje real de `createRoom` (hoy se pierde en el error-handler genérico) para confirmar la causa exacta antes de asumir más.
 - Re-verificado el 2026-10-01 en S4-QA1 (rama `QA-Sprint4`, `develop` @ `73d8291`) contra `https://meetflow-server-tm9i.onrender.com`. Sigue **abierto**: `POST /api/v1/salas` responde 500 `INTERNAL_SERVER_ERROR` en `api_salas_agenda.http` #5, #26 y #30, y también en `api_invitaciones.http` #5 y `api_waiting.http` #5. Auth (`api_auth.http`) quedó 14/14 en verde en la misma corrida. Evidencia: `qa/evidencia-s4-qa1.md`.
+- Decisión S4-QA3: **no se cierra**. `GETSTREAM_API_KEY` es obligatoria al boot y el health responde 200, así que el proceso tiene la variable. El cuerpo del 500 es el del error no manejado (`{ error: { code, message } }`), no el de `StreamServiceError` del código actual. Junto con BUG-10, el servicio público no está corriendo este `develop`. Hace falta redesplegar Render y repetir `POST /salas`. No hay acceso al dashboard desde esta corrida.
 
 ## BUG-10 — El Render desplegado no sirve las rutas de invitaciones
 
@@ -112,3 +114,4 @@ Re-verificados el 2026-09-25 en S2-QA1 contra el código actual de `develop` (Re
   3. `POST /api/v1/invitaciones/token-que-no-existe/aceptar` con JWT válido da el mismo 404 genérico.
 - Efecto: no se puede cerrar el flujo de invitación por correo contra el entorno deployado. El caso #8 (`POST /salas/:id/invitaciones` a un id inexistente → 404) queda en falso verde: el status coincide, pero no se pudo distinguir de "la ruta no está montada" porque crear sala falla antes (BUG-09) y no hay sala real para contrastar.
 - Fix sugerido: confirmar en el dashboard de Render que el servicio redesplegó `develop` después del merge `73d8291` (PR #104). Si el deploy está al día, revisar que el proceso en ejecución sea el build que monta `invitacionesRoutes`.
+- Decisión S4-QA3: **no se cierra**. No es un defecto del código de `develop` (las rutas están en `app.ts`). Es un deploy atrasado. Sin acceso al hook de Render no se puede redesplegar ni retestear desde esta rama.

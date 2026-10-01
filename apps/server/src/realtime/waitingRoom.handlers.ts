@@ -168,6 +168,20 @@ export function registerWaitingRoomHandlers(
 
             socket.join(rooms.salaHost(salaId));
             socket.join(rooms.sala(salaId));
+
+            // El host que recarga no vio los join:pending anteriores: se los
+            // reenviamos a este socket, sin repetirlos al resto de la sala.
+            const pendientes = await participantes.findPendientesBySala(salaId);
+            for (const pendiente of pendientes) {
+                socket.emit("join:pending", {
+                    participanteId: pendiente.id,
+                    nombre: pendiente.nombre ?? null,
+                    apellido: pendiente.apellido ?? null,
+                    email: pendiente.email,
+                    timestamp: new Date().toISOString(),
+                });
+            }
+
             ack?.({ ok: true });
         } catch (error) {
             emitError(socket, error, ack);

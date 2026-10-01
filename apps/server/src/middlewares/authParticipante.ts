@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { AppError } from "../utils/AppError.js";
+import { assertUuid } from "../utils/uuid.js";
 import { verifyParticipantToken } from "../utils/participantToken.js";
 import type { RoomRole } from "../types/stream.js";
 
@@ -53,6 +54,7 @@ export function authParticipante(
       if (!salaId || Array.isArray(salaId)) {
         throw new AppError(400, "VALIDATION_ERROR", "salaId es requerido");
       }
+      assertUuid(salaId, "salaId");
 
       const token = readBearer(req);
       const guest = verifyParticipantToken(token);

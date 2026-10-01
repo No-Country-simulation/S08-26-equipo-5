@@ -9,6 +9,7 @@ import {
   StreamServiceError,
 } from "../errors/index.js";
 import { AppError } from "../utils/AppError.js";
+import { assertUuid } from "../utils/uuid.js";
 import {
   createRoom as createRoomService,
   issueCallAccess,
@@ -280,6 +281,7 @@ export async function getSalaDetalle(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -357,6 +359,7 @@ export async function updateSala(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const { nombre, resumen, fechaInicio } = req.body;
   const userId = req.user?.sub;
 
@@ -430,6 +433,7 @@ export async function deleteSala(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -482,6 +486,7 @@ export async function finalizarSala(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -543,6 +548,7 @@ export async function transferHost(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const { nuevoHostId } = req.body;
   const userId = req.user?.sub;
 
@@ -653,6 +659,7 @@ export async function getParticipantes(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
