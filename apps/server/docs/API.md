@@ -313,6 +313,10 @@ El host invita a 1..20 emails; cada invitado recibe un enlace `FRONTEND_URL/invi
 
 Limitaciones: el plan gratis permite 300 correos/día. Sin un dominio autenticado, Brevo reescribe el From a `@brevosend.com`, lo que aumenta la chance de caer en spam. Recomendado a largo plazo: dominio propio autenticado (SPF/DKIM) en Brevo o Resend.
 
+### Limitaciones conocidas
+
+- **Rate limiting en memoria, por proceso.** `express-rate-limit` usa su store en memoria (por defecto): los contadores viven en cada proceso, se pierden al reiniciar y **no se comparten entre instancias**. Con N instancias detrás de un balanceador el límite efectivo es hasta N veces mayor. Para un despliegue multi-instancia hace falta un store compartido (p. ej. Redis con `rate-limit-redis`). Hoy el backend corre en una sola instancia, por lo que el comportamiento es el esperado.
+
 Estado nuevo de participante: `INVITADO` (invitado que todavía no aceptó; `nombre`/`apellido` pueden ser `null`). Nunca es aprobable directamente ni aparece entre los aprobados.
 
 ### POST /salas/:id/invitaciones — Invitar por correo
