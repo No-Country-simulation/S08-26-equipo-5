@@ -59,6 +59,7 @@ vi.mock("@prisma/client", () => ({
     $transaction: mockTransaction,
   })),
   EstadoParticipante: {
+    INVITADO: "INVITADO",
     PENDIENTE: "PENDIENTE",
     APROBADO: "APROBADO",
     RECHAZADO: "RECHAZADO",
@@ -484,6 +485,33 @@ describe("S2-01 — Salas API", () => {
       expect(mockTransaction).not.toHaveBeenCalled();
     });
 
+    it("400 — Target INVITADO (aún no aceptó): no se promueve y no se ejecuta transacción", async () => {
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: hostParticipantId,
+        salaId,
+        usuarioId: hostId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
+      mockParticipanteFindFirst.mockResolvedValue({
+        id: targetParticipantId,
+        salaId,
+        usuarioId: targetId,
+        rol: "PARTICIPANTE",
+        estado: "INVITADO",
+        fechaIngreso: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/transfer-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetParticipantId });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("invitación");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
     it("401 — Sin token de autenticación", async () => {
       const res = await request(app)
         .post(`/api/v1/salas/${salaId}/transfer-host`)
@@ -491,6 +519,194 @@ describe("S2-01 — Salas API", () => {
 
       expect(res.status).toBe(401);
       expect(mockTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Participantes INVITADO en consultas (WR-02) ────────
+  describe("consultas con participantes INVITADO", () => {
+    const salaId = "sala-uuid-inv";
+    const hostId = "user-host-1";
+    const hostToken = createToken(hostId, "host@test.com");
+    const filas = [
+      { id: "p-host", nombre: "Host", apellido: "Uno", email: "host@test.com", usuarioId: hostId, rol: "HOST", estado: "APROBADO", fechaIngreso: new Date("2026-01-01"), usuario: { id: hostId, nombre: "Host", apellido: "Uno", email: "host@test.com" } },
+      { id: "p-inv", nombre: null, apellido: null, email: "nuevo@test.com", usuarioId: null, rol: "PARTICIPANTE", estado: "INVITADO", fechaIngreso: null, usuario: null },
+    ];
+    const miembroId = "user-miembro-1";
+    const miembroToken = createToken(miembroId, "miembro@test.com");
+    const extranoToken = createToken("user-extrano", "extrano@test.com");
+    const filaMiembro = (estado: string) => ({
+      id: "p-miembro", nombre: "Mia", apellido: "Miembro", email: "miembro@test.com", usuarioId: miembroId,
+      rol: "PARTICIPANTE", estado, fechaIngreso: null,
+      usuario: { id: miembroId, nombre: "Mia", apellido: "Miembro", email: "miembro@test.com" },
+    });
+    const salaDetalleMock = (participantes: unknown[]) => ({
+      id: salaId, codigo: "INV12345", nombre: "Sala", resumen: null,
+      fechaInicio: new Date("2026-01-01"), fechaFin: null, estado: "ACTIVA",
+      streamRoomId: null, streamCallType: null, streamCallId: null, participantes,
+    });
+
+    describe("autorizacion y visibilidad (PR #104)", () => {
+      it("GET participantes — 403 NOT_A_PARTICIPANT si la cuenta no es participante", async () => {
+        mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+        mockParticipanteFindMany.mockResolvedValue([...filas, filaMiembro("APROBADO")]);
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/participantes`)
+          .set("Authorization", `Bearer ${extranoToken}`);
+
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe("NOT_A_PARTICIPANT");
+        expect(JSON.stringify(res.body)).not.toContain("nuevo@test.com");
+      });
+
+      it("GET participantes — 403 si la cuenta esta INVITADO (aun no acepto)", async () => {
+        mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+        mockParticipanteFindMany.mockResolvedValue([...filas, filaMiembro("INVITADO")]);
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/participantes`)
+          .set("Authorization", `Bearer ${miembroToken}`);
+
+        expect(res.status).toBe(403);
+      });
+
+      it("GET participantes — no-host: sin filas INVITADO y sin emails ajenos", async () => {
+        mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+        mockParticipanteFindMany.mockResolvedValue([...filas, filaMiembro("APROBADO")]);
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/participantes`)
+          .set("Authorization", `Bearer ${miembroToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.participantes.map((p: any) => p.id)).toEqual(["p-host", "p-miembro"]);
+        expect(res.body.total).toBe(2);
+        expect(res.body.participantes.every((p: any) => p.email === null)).toBe(true);
+        expect(JSON.stringify(res.body)).not.toContain("@test.com");
+      });
+
+      it("GET participantes — un participante PENDIENTE de la cuenta tambien accede", async () => {
+        mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+        mockParticipanteFindMany.mockResolvedValue([...filas, filaMiembro("PENDIENTE")]);
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/participantes`)
+          .set("Authorization", `Bearer ${miembroToken}`);
+
+        expect(res.status).toBe(200);
+      });
+
+      it("GET participantes — el HOST ve a los INVITADO con su email", async () => {
+        mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+        mockParticipanteFindMany.mockResolvedValue([...filas, filaMiembro("APROBADO")]);
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/participantes`)
+          .set("Authorization", `Bearer ${hostToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.total).toBe(3);
+        expect(res.body.participantes.find((p: any) => p.id === "p-inv").email).toBe("nuevo@test.com");
+      });
+
+      it("GET detalle — 403 NOT_A_PARTICIPANT si la cuenta no es participante", async () => {
+        mockSalaFindUnique.mockResolvedValue(salaDetalleMock([...filas, filaMiembro("APROBADO")]));
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/detalle`)
+          .set("Authorization", `Bearer ${extranoToken}`);
+
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe("NOT_A_PARTICIPANT");
+      });
+
+      it("GET detalle — no-host: sin INVITADO, sin emails (tampoco el del creador)", async () => {
+        mockSalaFindUnique.mockResolvedValue(salaDetalleMock([...filas, filaMiembro("APROBADO")]));
+
+        const res = await request(app)
+          .get(`/api/v1/salas/${salaId}/detalle`)
+          .set("Authorization", `Bearer ${miembroToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.participantes.map((p: any) => p.id)).toEqual(["p-host", "p-miembro"]);
+        expect(res.body.totalParticipantes).toBe(2);
+        expect(res.body.creador.email).toBeNull();
+        expect(res.body.creador.nombre).toBe("Host");
+        expect(JSON.stringify(res.body)).not.toContain("@test.com");
+      });
+    });
+
+    it("GET participantes lista al INVITADO sin nombre como INVITADO (sin 500)", async () => {
+      mockSalaFindUnique.mockResolvedValue({ id: salaId, nombre: "Sala" });
+      mockParticipanteFindMany.mockResolvedValue(filas);
+
+      const res = await request(app)
+        .get(`/api/v1/salas/${salaId}/participantes`)
+        .set("Authorization", `Bearer ${hostToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(2);
+      expect(res.body.participantes[1]).toMatchObject({
+        id: "p-inv",
+        nombre: null,
+        apellido: null,
+        email: "nuevo@test.com",
+        estado: "INVITADO",
+      });
+    });
+
+    it("GET detalle expone al INVITADO como tal con nombre/apellido null", async () => {
+      mockSalaFindUnique.mockResolvedValue({
+        id: salaId,
+        codigo: "INV12345",
+        nombre: "Sala",
+        resumen: null,
+        fechaInicio: new Date("2026-01-01"),
+        fechaFin: null,
+        estado: "ACTIVA",
+        streamRoomId: null,
+        streamCallType: null,
+        streamCallId: null,
+        participantes: filas,
+      });
+
+      const res = await request(app)
+        .get(`/api/v1/salas/${salaId}/detalle`)
+        .set("Authorization", `Bearer ${hostToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.participantes.find((p: any) => p.id === "p-inv")).toMatchObject({
+        estado: "INVITADO",
+        nombre: null,
+      });
+      expect(res.body.creador.id).toBe(hostId);
+    });
+
+    it("mis-participaciones incluye la sala donde la cuenta esta INVITADO", async () => {
+      mockParticipanteFindMany.mockResolvedValue([
+        {
+          rol: "PARTICIPANTE",
+          estado: "INVITADO",
+          sala: {
+            id: salaId,
+            codigo: "INV12345",
+            nombre: "Sala",
+            resumen: null,
+            fechaInicio: new Date("2026-01-01"),
+            fechaFin: null,
+            estado: "ACTIVA",
+            _count: { participantes: 2 },
+          },
+        },
+      ]);
+
+      const res = await request(app)
+        .get("/api/v1/salas/mis-participaciones")
+        .set("Authorization", `Bearer ${hostToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.salas).toHaveLength(1);
+      expect(res.body.salas[0]).toMatchObject({ id: salaId, rol: "PARTICIPANTE" });
     });
   });
 

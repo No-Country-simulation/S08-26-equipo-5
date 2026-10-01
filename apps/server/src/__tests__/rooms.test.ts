@@ -45,6 +45,7 @@ vi.mock("@prisma/client", () => ({
     },
   })),
   EstadoParticipante: {
+    INVITADO: "INVITADO",
     PENDIENTE: "PENDIENTE",
     APROBADO: "APROBADO",
     RECHAZADO: "RECHAZADO",

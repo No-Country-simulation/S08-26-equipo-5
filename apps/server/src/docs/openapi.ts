@@ -36,6 +36,14 @@ export const openApiSpec = {
         "Listado de reuniones del usuario. Implementada como `GET /salas/mis-participaciones` " +
         "(el issue #33 la nombraba `GET /agenda`; se consolidó bajo este path en el PR #74).",
     },
+    {
+      name: "Invitaciones",
+      description:
+        "Invitación por correo a una sala. El host invita a 1..20 emails; cada invitado recibe un " +
+        "enlace personal con un token opaco (solo viaja por correo: la API nunca lo devuelve y en " +
+        "base de datos solo se guarda su hash SHA-256). Vigencia configurable (`INVITACION_TTL_HORAS`, " +
+        "72 h por defecto).",
+    },
     { name: "Health", description: "Estado del servicio" },
     { name: "Webhooks", description: "Eventos entrantes de GetStream" },
     { name: "Legacy", description: "Endpoints antiguos mantenidos por compatibilidad" },
@@ -182,12 +190,91 @@ export const openApiSpec = {
         type: "object",
         properties: {
           id: { type: "string", format: "uuid" },
-          nombre: { type: "string" },
-          apellido: { type: "string" },
-          email: { type: "string", format: "email" },
+          nombre: { type: "string", nullable: true, description: "null mientras el participante está INVITADO sin cuenta" },
+          apellido: { type: "string", nullable: true, description: "null mientras el participante está INVITADO sin cuenta" },
+          email: { type: "string", format: "email", nullable: true, description: "null para quien no es HOST (solo el HOST ve los emails)" },
           rol: { $ref: "#/components/schemas/RolParticipante" },
           estado: { $ref: "#/components/schemas/EstadoParticipante" },
           fechaIngreso: { type: "string", format: "date-time", nullable: true },
+        },
+      },
+      InvitarBody: {
+        type: "object",
+        required: ["emails"],
+        properties: {
+          emails: {
+            type: "array",
+            minItems: 1,
+            maxItems: 20,
+            items: { type: "string", format: "email" },
+            description: "Se normalizan (trim + minúsculas) y se deduplican dentro del request.",
+            example: ["ana@example.com", "luis@example.com"],
+          },
+        },
+      },
+      ResultadoInvitacion: {
+        type: "object",
+        properties: {
+          email: { type: "string", format: "email" },
+          estado: {
+            type: "string",
+            enum: ["INVITADO", "REENVIADO", "YA_PARTICIPA"],
+            description:
+              "INVITADO: invitación nueva. REENVIADO: ya estaba invitado; se rotó el token (el enlace anterior deja de valer). " +
+              "YA_PARTICIPA: ya es participante de la sala (no se crea ni envía nada). " +
+              "Ningún campo revela si el email tiene cuenta.",
+          },
+          emailEnviado: {
+            type: "boolean",
+            description: "false si el envío falló: la invitación queda creada y se puede reinvitar.",
+          },
+        },
+      },
+      InvitarResponse: {
+        type: "object",
+        properties: {
+          resultados: { type: "array", items: { $ref: "#/components/schemas/ResultadoInvitacion" } },
+        },
+      },
+      PreviewInvitacionResponse: {
+        type: "object",
+        properties: {
+          sala: {
+            type: "object",
+            properties: {
+              id: { type: "string", format: "uuid" },
+              nombre: { type: "string" },
+            },
+          },
+          email: {
+            type: "string",
+            description:
+              "Email enmascarado (endpoint público): primera letra + `***` + dominio completo. Ej.: `a***@example.com`. Nunca el email completo.",
+            example: "a***@example.com",
+          },
+          requiereDatos: { type: "boolean", description: "true si el invitado no tiene cuenta (deberá completar nombre y apellido)" },
+          requiereLogin: { type: "boolean", description: "true si el invitado tiene cuenta (deberá iniciar sesión)" },
+        },
+      },
+      AceptarInvitacionBody: {
+        type: "object",
+        description:
+          "Solo para invitados sin cuenta. Con cuenta registrada se ignora (los datos salen de la cuenta). " +
+          "Cualquier `email` enviado se ignora: vale el de la invitación.",
+        properties: {
+          nombre: { type: "string" },
+          apellido: { type: "string" },
+        },
+      },
+      AceptarInvitacionResponse: {
+        type: "object",
+        description: "Misma forma que POST /salas/{code}/join, más salaCodigo.",
+        properties: {
+          participanteId: { type: "string", format: "uuid" },
+          estado: { type: "string", enum: ["PENDIENTE"] },
+          salaId: { type: "string", format: "uuid" },
+          salaCodigo: { type: "string" },
+          accessToken: { type: "string", description: "Guest JWT para autenticar el socket y consultar mi-estado" },
         },
       },
       SalaDetalle: {
@@ -213,7 +300,7 @@ export const openApiSpec = {
               id: { type: "string", format: "uuid" },
               nombre: { type: "string" },
               apellido: { type: "string" },
-              email: { type: "string", format: "email" },
+              email: { type: "string", format: "email", nullable: true, description: "null para quien no es HOST" },
             },
           },
         },
@@ -291,7 +378,7 @@ export const openApiSpec = {
       },
       EstadoParticipante: {
         type: "string",
-        enum: ["PENDIENTE", "APROBADO", "RECHAZADO"],
+        enum: ["INVITADO", "PENDIENTE", "APROBADO", "RECHAZADO"],
       },
       RolParticipante: {
         type: "string",
@@ -513,6 +600,8 @@ export const openApiSpec = {
       get: {
         tags: ["Salas"],
         summary: "Obtener detalle de sala (con participantes)",
+        description:
+          "Visibilidad: solo participa quien es HOST o un participante no INVITADO vinculado a su cuenta (si no, 403 `NOT_A_PARTICIPANT`). Solo el HOST ve las filas `INVITADO` y los emails; para el resto se omiten los INVITADO y `email` viene en `null`.",
         operationId: "salas_get_detalle",
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -523,6 +612,7 @@ export const openApiSpec = {
             description: "Detalle completo de la sala",
             content: { "application/json": { schema: { $ref: "#/components/schemas/SalaDetalle" } } },
           },
+          403: { description: "La cuenta no es participante de la sala (NOT_A_PARTICIPANT)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
@@ -572,10 +662,110 @@ export const openApiSpec = {
         },
       },
     },
+    "/salas/{id}/invitaciones": {
+      post: {
+        tags: ["Invitaciones"],
+        summary: "Invitar por correo a una sala (solo HOST)",
+        description:
+          "Crea (o reenvía) una invitación por email. Los correos se envían después de persistir; " +
+          "si el envío falla no se revierte nada (`emailEnviado: false`). Rate limit por host: " +
+          "`RATE_LIMIT_INVITE_MAX` cada 15 min (429 `RATE_LIMITED`).",
+        operationId: "invitaciones_invitar",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/InvitarBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Resultado por email",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/InvitarResponse" },
+                example: {
+                  resultados: [
+                    { email: "ana@example.com", estado: "INVITADO", emailEnviado: true },
+                    { email: "luis@example.com", estado: "YA_PARTICIPA", emailEnviado: false },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: "`emails` vacío, con más de 20 elementos o con formato inválido (VALIDATION_ERROR)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "Sin JWT", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "Solo el HOST puede invitar (HOST_ONLY)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada (ROOM_NOT_FOUND)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "Sala cancelada o finalizada (ROOM_CANCELLED / ROOM_FINISHED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "Rate limit excedido (RATE_LIMITED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/invitaciones/{token}": {
+      get: {
+        tags: ["Invitaciones"],
+        summary: "Vista previa de una invitación (público, no consume el token)",
+        description:
+          "Permite a la UI decidir si pedir nombre/apellido (`requiereDatos`) o inicio de sesión " +
+          "(`requiereLogin`). Token desconocido, vencido, ya usado o de una sala cerrada responden " +
+          "todos igual (410 `INVITATION_INVALID`) para no dar pistas a quien prueba tokens. " +
+          "Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` cada 15 min.",
+        operationId: "invitaciones_preview",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: {
+            description: "Invitación válida",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PreviewInvitacionResponse" } } },
+          },
+          410: { description: "Invitación inválida (INVITATION_INVALID)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "Rate limit excedido (RATE_LIMITED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/invitaciones/{token}/aceptar": {
+      post: {
+        tags: ["Invitaciones"],
+        summary: "Aceptar una invitación (INVITADO → PENDIENTE)",
+        description:
+          "Sesión opcional (Bearer): obligatoria solo si la invitación es de una cuenta registrada. " +
+          "Si la invitación es de un email sin cuenta pero vino sesión, el email de la cuenta debe coincidir " +
+          "(case-insensitive) con el invitado: se vincula la fila a la cuenta; si no, 403 `INVITATION_ACCOUNT_MISMATCH` " +
+          "sin consumir el token. " +
+          "Consumo atómico de un solo uso; avisa al host por `join:pending`. " +
+          "Todo token inválido/vencido/usado/carrera responde 410 `INVITATION_INVALID`. " +
+          "Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` cada 15 min.",
+        operationId: "invitaciones_aceptar",
+        parameters: [
+          { name: "token", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: false,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/AceptarInvitacionBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Invitación aceptada: el participante queda PENDIENTE",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/AceptarInvitacionResponse" } } },
+          },
+          400: { description: "Falta nombre/apellido (VALIDATION_ERROR); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "Invitación de cuenta registrada sin sesión (LOGIN_REQUIRED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "La sesión es de otra cuenta, o el email de la cuenta no coincide con el invitado (INVITATION_ACCOUNT_MISMATCH); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "La cuenta logueada ya es otro participante de la sala (ALREADY_PARTICIPANT); el token no se consume", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          410: { description: "Invitación inválida (INVITATION_INVALID)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "Rate limit excedido (RATE_LIMITED)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
     "/salas/{id}/participantes": {
       get: {
         tags: ["Salas"],
         summary: "Listar participantes de una sala",
+        description:
+          "Visibilidad: solo participa quien es HOST o un participante no INVITADO vinculado a su cuenta (si no, 403 `NOT_A_PARTICIPANT`). Solo el HOST ve las filas `INVITADO` y los emails; para el resto se omiten los INVITADO y `email` viene en `null`.",
         operationId: "salas_get_participantes",
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -586,6 +776,7 @@ export const openApiSpec = {
             description: "Listado de participantes",
             content: { "application/json": { schema: { $ref: "#/components/schemas/ParticipantesResponse" } } },
           },
+          403: { description: "La cuenta no es participante de la sala (NOT_A_PARTICIPANT)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
