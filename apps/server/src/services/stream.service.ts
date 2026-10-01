@@ -102,6 +102,8 @@ export async function upsertStreamUser(user: {
   name?: string | null;
   role?: string;
   isRegistered?: boolean;
+  /** URL del avatar; se muestra en la llamada y el chat. */
+  image?: string | null;
 }): Promise<void> {
   const client = initStreamClient();
 
@@ -110,6 +112,7 @@ export async function upsertStreamUser(user: {
       {
         id: user.id,
         name: user.name ?? undefined,
+        image: user.image ?? undefined,
         role: user.role ?? "user",
         custom: { registered: user.isRegistered ?? false },
       },
@@ -192,6 +195,7 @@ export async function issueCallAccess(params: {
   callType: string;
   callId: string;
   isRegistered?: boolean;
+  image?: string | null;
 }): Promise<IssuedStreamToken & { callCid: string }> {
   const streamRole = toStreamRole(params.role);
   const callCid = buildCallCid(params.callType, params.callId);
@@ -199,7 +203,8 @@ export async function issueCallAccess(params: {
   await upsertStreamUser({ 
     id: params.userId, 
     name: params.name,
-    isRegistered: params.isRegistered
+    isRegistered: params.isRegistered,
+    image: params.image,
   });
   await addCallMember(params.callType, params.callId, params.userId, streamRole);
 

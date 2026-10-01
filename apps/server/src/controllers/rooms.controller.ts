@@ -292,7 +292,7 @@ export async function getSalaDetalle(
       participantes: {
         include: {
           usuario: {
-            select: { id: true, nombre: true, apellido: true, email: true },
+            select: { id: true, nombre: true, apellido: true, email: true, fotoUrl: true },
           },
         },
         orderBy: { createdAt: "asc" },
@@ -331,6 +331,7 @@ export async function getSalaDetalle(
       rol: p.rol,
       estado: p.estado,
       fechaIngreso: p.fechaIngreso?.toISOString() || null,
+      fotoUrl: p.usuario?.fotoUrl ?? null,
     })),
     creador: creador
       ? {
@@ -672,6 +673,7 @@ export async function getParticipantes(
   // Obtener participantes
   const filas = await prisma.participante.findMany({
     where: { salaId: id },
+    include: { usuario: { select: { fotoUrl: true } } },
     orderBy: { createdAt: "asc" },
   });
   const { esHost, visibles } = resolverVistaParticipantes(filas, userId);
@@ -688,6 +690,7 @@ export async function getParticipantes(
       rol: p.rol,
       estado: p.estado,
       fechaIngreso: p.fechaIngreso?.toISOString() || null,
+      fotoUrl: p.usuario?.fotoUrl ?? null,
     })),
   };
 
@@ -799,6 +802,8 @@ export async function getStreamToken(
     callType: call.callType,
     callId: call.callId,
     isRegistered: ctx.usuarioId !== null,
+    // Avatar en la llamada y el chat (solo cuentas con foto).
+    image: ctx.fotoUrl ?? undefined,
   });
 
   res.status(200).json({

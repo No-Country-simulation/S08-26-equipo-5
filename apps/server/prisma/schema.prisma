@@ -36,6 +36,8 @@ model Usuario {
   apellido     String        @db.VarChar(100)
   email        String        @unique @db.VarChar(255)
   passwordHash String        @db.VarChar(255)
+  fotoUrl      String?       @db.VarChar(500)
+  fotoPublicId String?       @db.VarChar(255)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   participantes Participante[]

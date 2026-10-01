@@ -157,6 +157,25 @@ describe("aceptarInvitacion", () => {
       expect(m.invitaciones.consumirYActivar).not.toHaveBeenCalled();
     });
 
+    it("join:pending incluye la fotoUrl de la cuenta invitada; si la consulta falla, igual emite con null", async () => {
+      (m.usuarios as Record<string, unknown>).findFotoUrl = vi
+        .fn()
+        .mockResolvedValue("https://cdn/v1/ana.jpg");
+      await aceptarInvitacion(m.deps, { token: "t", usuarioId: "u-1" });
+      expect(emit).toHaveBeenCalledWith(
+        "join:pending",
+        expect.objectContaining({ fotoUrl: "https://cdn/v1/ana.jpg" }),
+      );
+
+      emit.mockClear();
+      m.invitaciones.findByTokenHash.mockResolvedValue(
+        invitacion({}, { usuarioId: "u-1", nombre: "Ana", apellido: "Paz" }),
+      );
+      (m.usuarios as Record<string, unknown>).findFotoUrl = vi.fn().mockRejectedValue(new Error("db"));
+      await aceptarInvitacion(m.deps, { token: "t", usuarioId: "u-1" });
+      expect(emit).toHaveBeenCalledWith("join:pending", expect.objectContaining({ fotoUrl: null }));
+    });
+
     it("sesion correcta sin body -> OK; el nombre/apellido del body se ignora", async () => {
       const res = await aceptarInvitacion(m.deps, {
         token: "t",

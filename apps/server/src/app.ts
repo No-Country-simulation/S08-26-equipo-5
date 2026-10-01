@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import roomsRoutes from "./routes/rooms.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import { buildUsuariosRouter } from "./routes/usuarios.routes.js";
 import invitacionesRoutes from "./routes/invitaciones.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
@@ -62,6 +63,7 @@ export function createApp() {
   app.use("/api/v1", healthRoutes);
   app.use("/api/v1/auth", authLimiter, authRoutes);
   app.use("/api/v1", roomsRoutes);
+  app.use("/api/v1", buildUsuariosRouter());
   app.use("/api/v1", invitacionesRoutes);
 
   // ─── Webhook Routes (sin auth, con verificación HMAC) ────

@@ -109,6 +109,7 @@ function dentroDeVentanaDeReingreso(fechaIngreso: Date | null): boolean {
 export function emitJoinPending(
   salaId: string,
   participante: Participante,
+  fotoUrl: string | null = null,
 ): void {
   getReunionesNamespace()
     ?.to(rooms.salaHost(salaId))
@@ -117,8 +118,25 @@ export function emitJoinPending(
       nombre: participante.nombre ?? null,
       apellido: participante.apellido ?? null,
       email: participante.email,
+      fotoUrl,
       timestamp: new Date().toISOString(),
     });
+}
+
+/**
+ * Foto de la cuenta vinculada, para mostrarla en join:pending. Es decorativa:
+ * si la consulta falla, el join NO se aborta (fotoUrl null).
+ */
+export async function lookupFotoUrl(
+  deps: { usuarios: Pick<IUserRepository, "findFotoUrl"> },
+  usuarioId: string | null | undefined,
+): Promise<string | null> {
+  if (!usuarioId) return null;
+  try {
+    return await deps.usuarios.findFotoUrl(usuarioId);
+  } catch {
+    return null;
+  }
 }
 
 export interface RawJoinInput {
@@ -309,7 +327,7 @@ export async function requestJoin(
         nombre: existente.nombre ?? datos.nombre ?? null,
         apellido: existente.apellido ?? datos.apellido ?? null,
       };
-      emitJoinPending(sala.id, promovido);
+      emitJoinPending(sala.id, promovido, await lookupFotoUrl(deps, promovido.usuarioId));
       return {
         participanteId: promovido.id,
         estado: EstadoParticipante.PENDIENTE,
@@ -358,7 +376,7 @@ export async function requestJoin(
         EstadoParticipante.PENDIENTE,
         null,
       );
-      emitJoinPending(sala.id, reiniciado);
+      emitJoinPending(sala.id, reiniciado, await lookupFotoUrl(deps, reiniciado.usuarioId));
       return {
         participanteId: reiniciado.id,
         estado: EstadoParticipante.PENDIENTE,
@@ -372,7 +390,7 @@ export async function requestJoin(
     }
 
     // PENDIENTE: reutilizar y volver a avisar al host (pudo recargar el panel).
-    emitJoinPending(sala.id, existente);
+    emitJoinPending(sala.id, existente, await lookupFotoUrl(deps, existente.usuarioId));
     return {
       participanteId: existente.id,
       estado: EstadoParticipante.PENDIENTE,
@@ -394,7 +412,7 @@ export async function requestJoin(
     email: input.email,
   });
 
-  emitJoinPending(sala.id, participante);
+  emitJoinPending(sala.id, participante, await lookupFotoUrl(deps, participante.usuarioId));
 
   return {
     participanteId: participante.id,

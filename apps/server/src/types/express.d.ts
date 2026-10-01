@@ -21,6 +21,8 @@ declare global {
         nombre: string | null;
         apellido: string | null;
         email: string;
+        /** Foto de la cuenta vinculada (null para invitados o sin foto). */
+        fotoUrl: string | null;
         /** true si la credencial usada fue un guest JWT. */
         esInvitado: boolean;
       };
