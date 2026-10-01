@@ -9,9 +9,9 @@ import {
   type Meeting,
 } from "../../lib/agenda";
 import { getSalaDetalle, type SalaDetalle } from "../../lib/salas-api";
-import { Dialog } from "./dialog";
+import { Button } from "../ui/button";
+import { Modal } from "../ui/modal";
 import { StatusBadge } from "./status-badge";
-import { btnPrimary, btnSecondary } from "./ui";
 
 type State =
   | { status: "loading" }
@@ -19,7 +19,7 @@ type State =
   | { status: "ready"; detail: SalaDetalle };
 
 export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose: () => void }) {
-  const titleId = useId();
+  const titleId = useId(); // solo para etiquetar la sección de participantes
   const [state, setState] = useState<State>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -52,11 +52,8 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
     : formatTime(meeting.startAt);
 
   return (
-    <Dialog titleId={titleId} onClose={onClose} className="max-w-xl">
-      <div className="flex items-start justify-between gap-4">
-        <h2 id={titleId} className="min-w-0 break-words text-2xl font-bold leading-8">
-          {meeting.title}
-        </h2>
+    <Modal title={meeting.title} onClose={onClose} size="lg">
+      <div className="mt-2">
         <StatusBadge status={meeting.status} />
       </div>
 
@@ -79,7 +76,7 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
       </dl>
 
       <section aria-labelledby={`${titleId}-people`} className="mt-6">
-        <h3 id={`${titleId}-people`} className="text-lg font-bold leading-7">
+        <h3 id={`${titleId}-people`} className="text-base font-bold leading-6">
           Participantes
           {state.status === "ready" && (
             <span className="ml-2 font-normal text-mf-muted">({state.detail.participantes.length})</span>
@@ -95,11 +92,11 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
         )}
 
         {state.status === "error" && (
-          <div role="alert" className="mt-3 rounded-xl bg-mf-coral-tint p-4 text-sm text-[#b63d4a]">
+          <div role="alert" className="mt-3 rounded-xl bg-red-50 p-4 text-sm text-red-600">
             <p>{state.message}</p>
-            <button type="button" onClick={retry} className={`${btnSecondary} mt-3 h-10 text-sm`}>
+            <Button variant="secondary" onClick={retry} className="mt-3">
               Reintentar
-            </button>
+            </Button>
           </div>
         )}
 
@@ -128,10 +125,10 @@ export function SummaryDialog({ meeting, onClose }: { meeting: Meeting; onClose:
       </section>
 
       <div className="mt-8 flex justify-end">
-        <button type="button" onClick={onClose} className={`${btnPrimary} h-12`}>
+        <Button size="md" onClick={onClose}>
           Cerrar
-        </button>
+        </Button>
       </div>
-    </Dialog>
+    </Modal>
   );
 }

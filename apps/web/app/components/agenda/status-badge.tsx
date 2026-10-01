@@ -1,23 +1,21 @@
 import type { SalaEstado } from "../../lib/salas-api";
+import { Badge, type BadgeTone } from "../ui/badge";
 
-const STATUS: Record<SalaEstado, { label: string; className: string }> = {
-  PROGRAMADA: { label: "Programada", className: "bg-mf-blue-tint text-mf-blue" },
-  ACTIVA: { label: "En curso", className: "bg-mf-green-tint text-mf-green" },
-  // Coral del token oscurecido un paso para cumplir contraste AA en texto de 14px.
-  FINALIZADA: { label: "Finalizada", className: "bg-mf-coral-tint text-[#b63d4a]" },
-  CANCELADA: { label: "Cancelada", className: "bg-[#ecedf2] text-mf-muted" },
+const STATUS: Record<SalaEstado, { label: string; tone: BadgeTone }> = {
+  PROGRAMADA: { label: "Programada", tone: "info" },
+  ACTIVA: { label: "En curso", tone: "success" },
+  FINALIZADA: { label: "Finalizada", tone: "danger" },
+  CANCELADA: { label: "Cancelada", tone: "neutral" },
 };
 
 export function StatusBadge({ status }: { status: SalaEstado }) {
-  const { label, className } = STATUS[status];
+  const { label, tone } = STATUS[status];
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-sm ${className}`}
-    >
+    <Badge tone={tone}>
       {status === "ACTIVA" && (
         <span aria-hidden="true" className="mf-skeleton size-2 rounded-full bg-mf-green" />
       )}
       {label}
-    </span>
+    </Badge>
   );
 }

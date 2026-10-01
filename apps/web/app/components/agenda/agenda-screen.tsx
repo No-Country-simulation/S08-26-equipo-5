@@ -23,7 +23,7 @@ import { CancelDialog } from "./cancel-dialog";
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { MeetingCard } from "./meeting-card";
 import { SummaryDialog } from "./summary-dialog";
-import { btnPrimary, btnSecondary, iconButton } from "./ui";
+import { Button, IconButton } from "../ui/button";
 
 const TABS: AgendaTab[] = ["proximas", "finalizadas"];
 
@@ -182,13 +182,9 @@ export function AgendaScreen() {
         <h1 id="agenda-title" className="text-[32px] font-bold leading-10 text-mf-navy">
           Mis reuniones
         </h1>
-        <button
-          type="button"
-          onClick={() => openForm({ type: "create" })}
-          className={`${btnPrimary} h-12 w-full text-base sm:w-auto sm:px-8`}
-        >
+        <Button size="lg" onClick={() => openForm({ type: "create" })} className="w-full sm:w-auto">
           + Programar reunión
-        </button>
+        </Button>
       </div>
 
       <div
@@ -212,7 +208,7 @@ export function AgendaScreen() {
               tabIndex={selected ? 0 : -1}
               onClick={() => setTab(key)}
               onKeyDown={onTabKeyDown}
-              className={`-mb-px border-b-2 px-2.5 pb-3 pt-2 text-base transition-colors focus-visible:rounded-t-md focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-mf-blue focus-visible:shadow-none ${
+              className={`-mb-px border-b-2 px-2.5 pb-3 pt-2 text-base transition-colors focus-visible:rounded-t-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mf-blue focus-visible:shadow-none ${
                 selected
                   ? "border-mf-blue font-bold text-mf-blue"
                   : "border-transparent text-mf-muted hover:text-mf-navy"
@@ -236,22 +232,12 @@ export function AgendaScreen() {
             {formatDayLabel(day, today)}
           </h2>
           <div className="flex gap-2">
-            <button
-              type="button"
-              aria-label="Día anterior"
-              onClick={() => setDay((value) => addDays(value, -1))}
-              className={iconButton}
-            >
+            <IconButton aria-label="Día anterior" onClick={() => setDay((value) => addDays(value, -1))}>
               <ChevronLeftIcon className="size-5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Día siguiente"
-              onClick={() => setDay((value) => addDays(value, 1))}
-              className={iconButton}
-            >
+            </IconButton>
+            <IconButton aria-label="Día siguiente" onClick={() => setDay((value) => addDays(value, 1))}>
               <ChevronRightIcon className="size-5" />
-            </button>
+            </IconButton>
           </div>
         </div>
 
@@ -261,17 +247,13 @@ export function AgendaScreen() {
           {status === "error" && (
             <div
               role="alert"
-              className="mx-auto mt-6 max-w-md rounded-2xl border border-mf-coral/40 bg-mf-coral-tint p-6 text-center"
+              className="mx-auto mt-6 max-w-md rounded-2xl border border-red-200 bg-red-50 p-6 text-center"
             >
-              <p className="font-bold text-[#b63d4a]">No pudimos cargar tus reuniones</p>
+              <p className="font-bold text-red-600">No pudimos cargar tus reuniones</p>
               <p className="mt-1 text-sm text-mf-navy">{errorMessage}</p>
-              <button
-                type="button"
-                onClick={() => void load()}
-                className={`${btnPrimary} mt-4 h-11 px-6 text-sm`}
-              >
+              <Button size="md" onClick={() => void load()} className="mt-4">
                 Reintentar
-              </button>
+              </Button>
             </div>
           )}
 
@@ -304,21 +286,13 @@ export function AgendaScreen() {
               <p className="mt-2 text-sm text-mf-muted">
                 Cuando programes una reunión, aparecerá aquí
               </p>
-              <button
-                type="button"
-                onClick={() => openForm({ type: "create" })}
-                className={`${btnPrimary} mt-6 h-12 px-8 text-sm`}
-              >
+              <Button size="lg" onClick={() => openForm({ type: "create" })} className="mt-6">
                 Programar reunión
-              </button>
+              </Button>
               {jumpDay && (
-                <button
-                  type="button"
-                  onClick={() => setDay(jumpDay)}
-                  className={`${btnSecondary} mt-3 h-10 border-transparent bg-transparent text-sm text-mf-blue hover:underline`}
-                >
+                <Button variant="ghost" size="md" onClick={() => setDay(jumpDay)} className="mt-3">
                   {tab === "proximas" ? "Ir a la próxima reunión" : "Ir a la última reunión"}
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -370,8 +344,8 @@ export function AgendaScreen() {
         {toast && (
           <p
             key={toast.id}
-            className={`mf-enter pointer-events-auto rounded-xl px-5 py-3 text-sm font-bold shadow-xl ${
-              toast.tone === "error" ? "bg-mf-coral text-white" : "bg-mf-navy text-white"
+            className={`mf-enter pointer-events-auto rounded-[14px] px-5 py-3 text-sm font-bold shadow-[0_8px_30px_rgba(28,36,82,0.2)] ${
+              toast.tone === "error" ? "bg-red-600 text-white" : "bg-mf-navy text-white"
             }`}
           >
             {toast.message}
@@ -388,7 +362,7 @@ function AgendaSkeleton() {
       {[0, 1].map((key) => (
         <li
           key={key}
-          className="mf-skeleton grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-4 rounded-[20px] border-[1.5px] border-mf-yellow/60 bg-white px-[18px] py-4 md:grid-cols-[6rem_minmax(0,1fr)_auto] lg:grid-cols-[22rem_minmax(0,1fr)_auto]"
+          className="mf-skeleton grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-4 rounded-[22px] border-2 border-mf-yellow/60 bg-white px-4 py-4 md:grid-cols-[6rem_minmax(0,1fr)_auto] lg:grid-cols-[22rem_minmax(0,1fr)_auto]"
         >
           <span className="h-5 w-14 rounded bg-mf-line" />
           <span className="hidden space-y-2 md:block">

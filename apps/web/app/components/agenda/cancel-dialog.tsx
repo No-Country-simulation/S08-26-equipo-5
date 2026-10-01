@@ -1,10 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { Meeting } from "../../lib/agenda";
 import { cancelSala } from "../../lib/salas-api";
-import { Dialog } from "./dialog";
-import { btnDanger, btnSecondary } from "./ui";
+import { Button } from "../ui/button";
+import { Modal } from "../ui/modal";
 
 export function CancelDialog({
   meeting,
@@ -15,7 +15,6 @@ export function CancelDialog({
   onClose: () => void;
   onCancelled: () => void;
 }) {
-  const titleId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,30 +33,27 @@ export function CancelDialog({
   }
 
   return (
-    <Dialog titleId={titleId} onClose={onClose} dismissible={!busy} className="max-w-md">
-      <h2 id={titleId} className="text-2xl font-bold leading-8">
-        ¿Cancelar esta reunión?
-      </h2>
-      <p className="mt-3 text-base text-mf-muted">
+    <Modal title="¿Cancelar esta reunión?" onClose={onClose} dismissible={!busy}>
+      <p className="mt-3 text-sm text-mf-muted">
         <strong className="font-bold text-mf-navy">{meeting.title}</strong> pasará a
         &quot;Cancelada&quot; y nadie podrá unirse. Esta acción no se puede deshacer.
       </p>
       {error && (
         <p
           role="alert"
-          className="mt-4 rounded-xl border border-mf-coral/40 bg-mf-coral-tint px-4 py-3 text-sm text-[#b63d4a]"
+          className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
         >
           {error}
         </p>
       )}
       <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <button type="button" onClick={onClose} disabled={busy} className={`${btnSecondary} h-12`}>
+        <Button variant="secondary" size="md" onClick={onClose} disabled={busy}>
           Volver
-        </button>
-        <button type="button" onClick={confirm} disabled={busy} className={`${btnDanger} h-12`}>
+        </Button>
+        <Button variant="danger" size="md" onClick={confirm} disabled={busy}>
           {busy ? "Cancelando…" : "Cancelar reunión"}
-        </button>
+        </Button>
       </div>
-    </Dialog>
+    </Modal>
   );
 }

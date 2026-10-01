@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { DotsIcon } from "./icons";
-import { iconButton } from "./ui";
+import { IconButton } from "../ui/button";
 
 export type MenuAction = {
   label: string;
@@ -75,9 +75,8 @@ export function MeetingMenu({ title, actions }: { title: string; actions: MenuAc
 
   return (
     <div ref={rootRef} className="relative">
-      <button
+      <IconButton
         ref={triggerRef}
-        type="button"
         aria-label={`Más acciones de ${title}`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -89,17 +88,16 @@ export function MeetingMenu({ title, actions }: { title: string; actions: MenuAc
             setOpen(true);
           }
         }}
-        className={iconButton}
       >
         <DotsIcon className="size-5" />
-      </button>
+      </IconButton>
       {open && (
         <div
           id={menuId}
           role="menu"
           aria-label={`Acciones de ${title}`}
           onKeyDown={onMenuKeyDown}
-          className="mf-enter absolute right-0 top-full z-30 mt-2 w-52 rounded-xl border border-mf-line bg-white p-1.5 shadow-xl"
+          className="mf-enter absolute right-0 top-full z-30 mt-2 w-52 rounded-[14px] border border-mf-line bg-white p-1.5 shadow-[0_8px_30px_rgba(28,36,82,0.12)]"
         >
           {actions.map((action) => (
             <button
@@ -113,7 +111,7 @@ export function MeetingMenu({ title, actions }: { title: string; actions: MenuAc
               }}
               className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors focus-visible:shadow-none focus-visible:outline-none ${
                 action.danger
-                  ? "text-[#b63d4a] hover:bg-mf-coral-tint focus-visible:bg-mf-coral-tint"
+                  ? "text-red-600 hover:bg-mf-coral-tint focus-visible:bg-mf-coral-tint"
                   : "text-mf-navy hover:bg-mf-blue-tint focus-visible:bg-mf-blue-tint"
               }`}
             >

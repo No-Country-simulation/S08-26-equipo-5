@@ -1,18 +1,9 @@
 "use client";
 
-import { Arimo } from "next/font/google";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./auth-modal";
 import { HomeHeader } from "./home-header";
-
-// Arimo (token de marca) solo rige el área de plataforma (/agenda, salas);
-// el home de develop conserva su tipografía original.
-const arimo = Arimo({
-  subsets: ["latin"],
-  display: "swap",
-  fallback: ["Arial", "sans-serif"],
-});
 
 const headerButton =
   "rounded-lg px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-white/10 focus-visible:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
@@ -29,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Mismo marco que HomeHero: fondo azul, cabecera de develop y superficie clara redondeada.
   return (
-    <div className={`${arimo.className} flex min-h-screen flex-col bg-[#3d4fdb] text-mf-navy`}>
+    <div className="flex min-h-screen flex-col bg-mf-blue text-mf-navy">
       <HomeHeader
         trailing={
           isAuthenticated ? (

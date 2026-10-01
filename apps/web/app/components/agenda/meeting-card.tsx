@@ -10,7 +10,8 @@ import {
 } from "../../lib/agenda";
 import { MeetingMenu, type MenuAction } from "./meeting-menu";
 import { StatusBadge } from "./status-badge";
-import { btnPrimary } from "./ui";
+import { Button, buttonClass } from "../ui/button";
+import { Card } from "../ui/card";
 
 type MeetingCardProps = {
   meeting: Meeting;
@@ -49,12 +50,13 @@ export function MeetingCard({
     actions.push({ label: "Cancelar reunión", onSelect: () => onCancel(meeting), danger: true });
   }
 
-  const actionClass = `${btnPrimary} h-10 flex-1 px-4 text-sm md:flex-none`;
+  const actionClass = "flex-1 md:flex-none";
 
   return (
-    <li
+    <Card
+      as="li"
       style={{ "--i": index } as CSSProperties}
-      className="mf-enter relative grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 rounded-[20px] border-[1.5px] border-mf-yellow bg-white px-4 py-4 shadow-[0_4px_18px_rgba(243,228,119,0.45)] transition-[transform,box-shadow] duration-200 has-[[aria-expanded=true]]:z-20 hover:-translate-y-0.5 hover:shadow-[0_8px_26px_rgba(243,228,119,0.7)] md:min-h-[88px] md:grid-cols-[6rem_minmax(0,1fr)_auto_auto] md:gap-y-0 md:px-[18px] lg:grid-cols-[22rem_minmax(0,1fr)_auto_auto] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      className="mf-enter relative grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 px-4 py-4 transition-[transform,box-shadow] duration-200 has-[[aria-expanded=true]]:z-20 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(28,36,82,0.14)] md:min-h-[88px] md:grid-cols-[6rem_minmax(0,1fr)_auto_auto] md:gap-y-0 md:px-[18px] lg:grid-cols-[22rem_minmax(0,1fr)_auto_auto] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     >
       <p className="text-base font-bold tabular-nums text-mf-navy md:text-lg">
         {formatTime(meeting.startAt)}
@@ -72,31 +74,29 @@ export function MeetingCard({
       <div className="order-4 col-span-2 flex items-center gap-3 md:order-none md:col-span-1">
         {upcoming ? (
           canJoin(meeting, now) ? (
-            <Link href={getJoinHref(meeting)} className={actionClass}>
+            <Link href={getJoinHref(meeting)} className={buttonClass({ className: actionClass })}>
               {primaryLabel(meeting)}
             </Link>
           ) : (
-            <button
-              type="button"
+            <Button
               disabled
               title="Podrás unirte 10 minutos antes del inicio"
               className={actionClass}
             >
               {primaryLabel(meeting)}
-            </button>
+            </Button>
           )
         ) : (
-          <button
-            type="button"
+          <Button
             onClick={() => onSummary(meeting)}
             className={actionClass}
             aria-label={`Ver resumen de ${meeting.title}`}
           >
             Ver resumen
-          </button>
+          </Button>
         )}
         <MeetingMenu title={meeting.title} actions={actions} />
       </div>
-    </li>
+    </Card>
   );
 }
