@@ -22,6 +22,15 @@ export interface IUserRepository {
   /** Solo la foto: evita traer el usuario completo (passwordHash) para un dato decorativo. */
   findFotoUrl(id: string): Promise<string | null>;
   updateFoto(id: string, foto: { fotoUrl: string | null; fotoPublicId: string | null }): Promise<User>;
+  /**
+   * Persiste la foto solo si fotoPublicId no cambió desde que se leyó.
+   * false: otro PUT ganó la carrera; no se pisa la fila.
+   */
+  updateFotoIfUnchanged(
+    id: string,
+    expectedPublicId: string | null,
+    foto: { fotoUrl: string; fotoPublicId: string },
+  ): Promise<boolean>;
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -61,5 +70,17 @@ export class PrismaUserRepository implements IUserRepository {
   ): Promise<User> {
     const usuario = await prisma.usuario.update({ where: { id }, data: foto });
     return toUser(usuario);
+  }
+
+  async updateFotoIfUnchanged(
+    id: string,
+    expectedPublicId: string | null,
+    foto: { fotoUrl: string; fotoPublicId: string },
+  ): Promise<boolean> {
+    const result = await prisma.usuario.updateMany({
+      where: { id, fotoPublicId: expectedPublicId },
+      data: foto,
+    });
+    return result.count > 0;
   }
 }

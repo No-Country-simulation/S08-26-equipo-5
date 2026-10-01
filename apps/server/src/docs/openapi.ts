@@ -491,6 +491,7 @@ export const openApiSpec = {
           },
           400: { description: "`VALIDATION_ERROR`: falta la imagen (campo `foto`) o el multipart está mal formado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "`PHOTO_UPDATE_CONFLICT`: otro PUT del mismo usuario cambió la foto en paralelo; el asset recién subido se descarta. Reintentar", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           413: { description: "`FILE_TOO_LARGE`: supera `AVATAR_MAX_BYTES`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           415: { description: "`UNSUPPORTED_MEDIA_TYPE`: no es JPEG/PNG/WebP", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },

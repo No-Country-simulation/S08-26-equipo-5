@@ -31,6 +31,7 @@ function build(opts: { storage?: ImageStorage | null; rateLimit?: number; stored
   const users = {
     findById: vi.fn().mockResolvedValue(stored),
     updateFoto: vi.fn().mockResolvedValue(stored),
+    updateFotoIfUnchanged: vi.fn().mockResolvedValue(true),
   };
   const storage =
     opts.storage === undefined
@@ -129,10 +130,20 @@ describe("PUT /usuarios/me/foto", () => {
     const res = await request(app).put("/api/v1/usuarios/me/foto").set(auth).attach("foto", JPEG, "a.jpg");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ fotoUrl: "https://cdn/v3/a/u1.jpg" });
-    expect(users.updateFoto).toHaveBeenCalledWith("u1", {
+    expect(users.updateFotoIfUnchanged).toHaveBeenCalledWith("u1", null, {
       fotoUrl: "https://cdn/v3/a/u1.jpg",
       fotoPublicId: "a/u1",
     });
+  });
+
+  it("409 PHOTO_UPDATE_CONFLICT si la foto cambió en paralelo", async () => {
+    const { app, users, storage } = build({ stored: { fotoPublicId: "viejo/x" } });
+    users.updateFotoIfUnchanged.mockResolvedValue(false);
+    const res = await request(app).put("/api/v1/usuarios/me/foto").set(auth).attach("foto", JPEG, "a.jpg");
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("PHOTO_UPDATE_CONFLICT");
+    expect(storage.delete).toHaveBeenCalledWith("a/u1");
+    expect(storage.delete).not.toHaveBeenCalledWith("viejo/x");
   });
 
   it("502 UPLOAD_FAILED si el proveedor falla", async () => {

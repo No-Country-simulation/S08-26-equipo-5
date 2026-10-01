@@ -78,8 +78,9 @@ export class UsuarioFotoService {
       throw new AppError(502, "UPLOAD_FAILED", "No se pudo subir la imagen, intentá de nuevo");
     }
 
+    let saved: boolean;
     try {
-      await this.users.updateFoto(userId, {
+      saved = await this.users.updateFotoIfUnchanged(userId, user.fotoPublicId ?? null, {
         fotoUrl: uploaded.url,
         fotoPublicId: uploaded.publicId,
       });
@@ -87,6 +88,15 @@ export class UsuarioFotoService {
       // No dejar el asset recién subido huérfano (best-effort).
       await this.deleteQuietly(uploaded.publicId);
       throw error;
+    }
+    if (!saved) {
+      // Otro PUT ya cambió la fila: este asset quedó sin referenciar.
+      await this.deleteQuietly(uploaded.publicId);
+      throw new AppError(
+        409,
+        "PHOTO_UPDATE_CONFLICT",
+        "La foto se actualizó en paralelo, intentá de nuevo",
+      );
     }
 
     // Recién con el nuevo persistido se borra el anterior (best-effort).

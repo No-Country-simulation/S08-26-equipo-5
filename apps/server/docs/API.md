@@ -534,12 +534,13 @@ curl -X PUT http://localhost:4000/api/v1/usuarios/me/foto \
   -H "Authorization: Bearer <jwt>" -F "foto=@avatar.jpg"
 ```
 
-**Response 200:** `{ "fotoUrl": "https://res.cloudinary.com/<cloud>/image/upload/v<version>/meetflow/avatars/<usuarioId>.jpg" }` — la URL lleva la versión, así que cambia al reemplazar la foto (cache busting).
+**Response 200:** `{ "fotoUrl": "https://res.cloudinary.com/<cloud>/image/upload/v<version>/meetflow/avatars/<uuid>.jpg" }` — la URL lleva la versión, así que cambia al reemplazar la foto (cache busting).
 
 | Status | `error.code` | Cuándo |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | No se envió archivo, el campo no se llama `foto` ("Se requiere una imagen") o el cuerpo multipart está mal formado (truncado, sin boundary) |
 | 401 | `UNAUTHORIZED` | Token ausente, inválido o expirado |
+| 409 | `PHOTO_UPDATE_CONFLICT` | Otro PUT del mismo usuario cambió la foto en paralelo; el asset recién subido se descarta. Reintentar |
 | 413 | `FILE_TOO_LARGE` | Supera `AVATAR_MAX_BYTES` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | El contenido no es JPEG/PNG/WebP |
 | 429 | `RATE_LIMITED` | Más de `RATE_LIMIT_AVATAR_MAX` (10) operaciones de foto por usuario cada 15 min |

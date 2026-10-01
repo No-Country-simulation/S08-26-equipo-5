@@ -24,6 +24,7 @@ function setup(u: ReturnType<typeof user> | null = user(), withStorage = true) {
   const users = {
     findById: vi.fn().mockResolvedValue(u),
     updateFoto: vi.fn().mockImplementation(async (_id, foto) => ({ ...u, ...foto })),
+    updateFotoIfUnchanged: vi.fn().mockResolvedValue(true),
   };
   const storage = {
     uploadAvatar: vi
@@ -116,7 +117,7 @@ describe("UsuarioFotoService.setFoto", () => {
     expect(opts.publicId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(opts.publicId).not.toContain("usuario-secreto-123");
     expect(out.fotoUrl).toBe("https://cdn/v2/a/" + opts.publicId + ".jpg");
-    expect(users.updateFoto).toHaveBeenCalledWith("usuario-secreto-123", {
+    expect(users.updateFotoIfUnchanged).toHaveBeenCalledWith("usuario-secreto-123", null, {
       fotoUrl: out.fotoUrl,
       fotoPublicId: "a/" + opts.publicId,
     });
@@ -132,7 +133,7 @@ describe("UsuarioFotoService.setFoto", () => {
 
   it("si falla el update de DB, borra el asset recién subido (sin huérfanos) y propaga el error", async () => {
     const { service, storage, users } = setup(user({ fotoPublicId: "viejo/x" }));
-    users.updateFoto.mockRejectedValue(new Error("db down"));
+    users.updateFotoIfUnchanged.mockRejectedValue(new Error("db down"));
     await expect(service.setFoto("u1", { buffer: JPEG, size: JPEG.length })).rejects.toThrow("db down");
     const nuevo = "a/" + storage.uploadAvatar.mock.calls[0][1].publicId;
     expect(storage.delete).toHaveBeenCalledWith(nuevo);
@@ -141,7 +142,7 @@ describe("UsuarioFotoService.setFoto", () => {
 
   it("el borrado del asset nuevo tras fallo de DB también es best-effort", async () => {
     const { service, storage, users } = setup();
-    users.updateFoto.mockRejectedValue(new Error("db down"));
+    users.updateFotoIfUnchanged.mockRejectedValue(new Error("db down"));
     storage.delete.mockRejectedValue(new Error("cloud down"));
     await expect(service.setFoto("u1", { buffer: JPEG, size: JPEG.length })).rejects.toThrow("db down");
   });
@@ -155,7 +156,7 @@ describe("UsuarioFotoService.setFoto", () => {
       status: 502,
       code: "UPLOAD_FAILED",
     });
-    expect(users.updateFoto).not.toHaveBeenCalled();
+    expect(users.updateFotoIfUnchanged).not.toHaveBeenCalled();
     const logged = JSON.stringify((console.error as any).mock.calls);
     // solo línea genérica + http_code/name: nunca el mensaje crudo (puede traer la api_key)
     expect(logged).toContain("401");
@@ -174,11 +175,84 @@ describe("UsuarioFotoService.setFoto", () => {
   it("borra el anterior DESPUÉS de persistir el nuevo", async () => {
     const { service, storage, users } = setup(user({ fotoUrl: "old", fotoPublicId: "a/anterior" }));
     const orden: string[] = [];
-    users.updateFoto.mockImplementation(async () => void orden.push("db"));
+    users.updateFotoIfUnchanged.mockImplementation(async () => {
+      orden.push("db");
+      return true;
+    });
     storage.delete.mockImplementation(async () => void orden.push("delete"));
     await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
     expect(orden).toEqual(["db", "delete"]);
     expect(storage.delete).toHaveBeenCalledWith("a/anterior");
+  });
+
+  it("pasa el fotoPublicId leído como valor esperado", async () => {
+    const { service, users, storage } = setup(user({ fotoPublicId: "viejo/abc" }));
+    await service.setFoto("u1", { buffer: JPEG, size: JPEG.length });
+    const publicId = "a/" + storage.uploadAvatar.mock.calls[0][1].publicId;
+    expect(users.updateFotoIfUnchanged).toHaveBeenCalledWith("u1", "viejo/abc", {
+      fotoUrl: "https://cdn/v2/a/" + storage.uploadAvatar.mock.calls[0][1].publicId + ".jpg",
+      fotoPublicId: publicId,
+    });
+  });
+
+  it("si updateFotoIfUnchanged devuelve false, responde 409 y borra solo el asset nuevo", async () => {
+    const { service, storage, users } = setup(user({ fotoUrl: "old", fotoPublicId: "viejo/x" }));
+    users.updateFotoIfUnchanged.mockResolvedValue(false);
+    expect(await codeOf(service.setFoto("u1", { buffer: JPEG, size: JPEG.length }))).toEqual({
+      status: 409,
+      code: "PHOTO_UPDATE_CONFLICT",
+    });
+    const nuevo = "a/" + storage.uploadAvatar.mock.calls[0][1].publicId;
+    expect(storage.delete).toHaveBeenCalledWith(nuevo);
+    expect(storage.delete).not.toHaveBeenCalledWith("viejo/x");
+  });
+
+  it("dos setFoto concurrentes: uno persiste y el asset no referenciado se borra", async () => {
+    const inicial = "viejo/x";
+    let actual: string | null = inicial;
+    const users = {
+      findById: vi.fn().mockResolvedValue(user({ fotoUrl: "old", fotoPublicId: inicial })),
+      updateFoto: vi.fn(),
+      updateFotoIfUnchanged: vi.fn().mockImplementation(
+        async (_id: string, expected: string | null, foto: { fotoPublicId: string }) => {
+          if (expected !== actual) return false;
+          actual = foto.fotoPublicId;
+          return true;
+        },
+      ),
+    };
+    const storage = {
+      uploadAvatar: vi.fn().mockImplementation(async (_b: Buffer, o: { publicId: string }) => ({
+        url: "https://cdn/v2/a/" + o.publicId + ".jpg",
+        publicId: "a/" + o.publicId,
+      })),
+      delete: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = new UsuarioFotoService(users as unknown as IUserRepository, storage as ImageStorage, {
+      maxBytes: MAX,
+    });
+
+    const results = await Promise.allSettled([
+      service.setFoto("u1", { buffer: JPEG, size: JPEG.length }),
+      service.setFoto("u1", { buffer: JPEG, size: JPEG.length }),
+    ]);
+
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const bad = results.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(bad).toHaveLength(1);
+    const err = (bad[0] as PromiseRejectedResult).reason as AppError;
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.statusCode).toBe(409);
+    expect(err.code).toBe("PHOTO_UPDATE_CONFLICT");
+
+    const subidos = storage.uploadAvatar.mock.calls.map((c) => "a/" + c[1].publicId);
+    const borrados = storage.delete.mock.calls.map((c) => c[0] as string);
+    expect(borrados).not.toContain(actual);
+    expect(borrados).toContain(inicial);
+    for (const id of subidos) {
+      if (id !== actual) expect(borrados).toContain(id);
+    }
   });
 });
 

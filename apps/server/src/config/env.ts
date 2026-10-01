@@ -99,6 +99,6 @@ export const env = {
   cloudinaryUrl: process.env.CLOUDINARY_URL || undefined,
   cloudinaryFolder: process.env.CLOUDINARY_FOLDER || "meetflow/avatars",
   avatarMaxBytes: parsePositiveInt("AVATAR_MAX_BYTES", process.env.AVATAR_MAX_BYTES, 2 * 1024 * 1024),
-  // Tope de subidas/borrados de foto por IP cada 15 min.
+  // Tope de subidas/borrados de foto por usuario cada 15 min.
   rateLimitAvatarMax: parsePositiveInt("RATE_LIMIT_AVATAR_MAX", process.env.RATE_LIMIT_AVATAR_MAX, 10),
 };
