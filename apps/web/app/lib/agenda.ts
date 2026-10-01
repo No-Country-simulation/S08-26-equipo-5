@@ -145,12 +145,6 @@ export function formatMeta(meeting: Meeting) {
   return minutes === null ? count : `${count} - ${formatDuration(minutes)}`;
 }
 
-/** Valor para <input type="datetime-local"> en hora local. */
-export function toDateTimeLocalValue(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 // ── Filtrado ─────────────────────────────────────────────────────────────────
 
 export function meetingsForDay(meetings: Meeting[], tab: AgendaTab, day: Date) {

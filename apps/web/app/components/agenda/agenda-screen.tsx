@@ -13,11 +13,15 @@ import {
   type AgendaTab,
   type Meeting,
 } from "../../lib/agenda";
-import { getMisParticipaciones } from "../../lib/salas-api";
+import { createSala, getMisParticipaciones, updateSala } from "../../lib/salas-api";
+import {
+  ScheduleMeetingModal,
+  type ImmediateMeetingInput,
+  type ScheduleMeetingInput,
+} from "../schedule-meeting-modal";
 import { CancelDialog } from "./cancel-dialog";
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { MeetingCard } from "./meeting-card";
-import { MeetingFormDialog } from "./meeting-form-dialog";
 import { SummaryDialog } from "./summary-dialog";
 import { btnPrimary, btnSecondary, iconButton } from "./ui";
 
@@ -47,6 +51,9 @@ export function AgendaScreen() {
     finalizadas: null,
   });
   const requestId = useRef(0);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const showToast = useCallback((message: string, tone: "success" | "error" = "success") => {
     setToast({ id: Date.now(), message, tone });
@@ -123,6 +130,47 @@ export function AgendaScreen() {
     setDialog(null);
   }
 
+  /** Abre un modal de formulario recordando el disparador para devolverle el foco. */
+  function openForm(next: DialogState) {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setFormError(null);
+    setDialog(next);
+  }
+
+  async function handleCreate(input: ScheduleMeetingInput | ImmediateMeetingInput) {
+    if (formSubmitting || !("fechaInicio" in input)) return;
+    setFormSubmitting(true);
+    setFormError(null);
+    try {
+      await createSala(input);
+      closeDialog();
+      setTab("proximas");
+      setDay(startOfDay(new Date(input.fechaInicio)));
+      showToast("Reunión programada");
+      void load(true);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "No se pudo programar la reunión.");
+    } finally {
+      setFormSubmitting(false);
+    }
+  }
+
+  async function handleEdit(meeting: Meeting, input: ScheduleMeetingInput | ImmediateMeetingInput) {
+    if (formSubmitting) return;
+    setFormSubmitting(true);
+    setFormError(null);
+    try {
+      await updateSala(meeting.id, { nombre: input.nombre, resumen: input.resumen ?? null });
+      closeDialog();
+      showToast("Reunión actualizada");
+      void load(true);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "No se pudo actualizar la reunión.");
+    } finally {
+      setFormSubmitting(false);
+    }
+  }
+
   const emptyTitle =
     tab === "proximas"
       ? "Aún no tienes reuniones programadas"
@@ -136,7 +184,7 @@ export function AgendaScreen() {
         </h1>
         <button
           type="button"
-          onClick={() => setDialog({ type: "create" })}
+          onClick={() => openForm({ type: "create" })}
           className={`${btnPrimary} h-12 w-full text-base sm:w-auto sm:px-8`}
         >
           + Programar reunión
@@ -237,7 +285,7 @@ export function AgendaScreen() {
                   now={now}
                   onSummary={(m) => setDialog({ type: "summary", meeting: m })}
                   onCopy={copyLink}
-                  onEdit={(m) => setDialog({ type: "edit", meeting: m })}
+                  onEdit={(m) => openForm({ type: "edit", meeting: m })}
                   onCancel={(m) => setDialog({ type: "cancel", meeting: m })}
                 />
               ))}
@@ -258,7 +306,7 @@ export function AgendaScreen() {
               </p>
               <button
                 type="button"
-                onClick={() => setDialog({ type: "create" })}
+                onClick={() => openForm({ type: "create" })}
                 className={`${btnPrimary} mt-6 h-12 px-8 text-sm`}
               >
                 Programar reunión
@@ -278,29 +326,27 @@ export function AgendaScreen() {
       </div>
 
       {dialog?.type === "create" && (
-        <MeetingFormDialog
-          mode="create"
-          initialDay={day}
+        <ScheduleMeetingModal
+          mode="schedule"
+          open
+          submitting={formSubmitting}
+          error={formError}
+          returnFocusRef={openerRef}
           onClose={closeDialog}
-          onCreated={(startAt) => {
-            closeDialog();
-            setTab("proximas");
-            setDay(startOfDay(startAt));
-            showToast("Reunión programada");
-            void load(true);
-          }}
+          onSubmit={(input) => void handleCreate(input)}
         />
       )}
       {dialog?.type === "edit" && (
-        <MeetingFormDialog
+        <ScheduleMeetingModal
+          key={dialog.meeting.id}
           mode="edit"
-          meeting={dialog.meeting}
+          open
+          submitting={formSubmitting}
+          error={formError}
+          returnFocusRef={openerRef}
+          initialValues={{ nombre: dialog.meeting.title, resumen: dialog.meeting.description }}
           onClose={closeDialog}
-          onSaved={() => {
-            closeDialog();
-            showToast("Reunión actualizada");
-            void load(true);
-          }}
+          onSubmit={(input) => void handleEdit(dialog.meeting, input)}
         />
       )}
       {dialog?.type === "cancel" && (
