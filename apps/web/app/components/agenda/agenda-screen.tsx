@@ -283,12 +283,18 @@ export function AgendaScreen() {
                 <CalendarIcon className="size-8" />
               </span>
               <h3 className="mt-6 text-xl font-bold leading-7 text-mf-navy">{emptyTitle}</h3>
-              <p className="mt-2 text-sm text-mf-muted">
-                Cuando programes una reunión, aparecerá aquí
-              </p>
-              <Button size="lg" onClick={() => openForm({ type: "create" })} className="mt-6">
-                Programar reunión
-              </Button>
+              {/* Invitar a programar solo tiene sentido en Próximas: en Finalizadas
+                  una reunión nueva nunca aparecería en esta vista. */}
+              {tab === "proximas" && (
+                <>
+                  <p className="mt-2 text-sm text-mf-muted">
+                    Cuando programes una reunión, aparecerá aquí
+                  </p>
+                  <Button size="lg" onClick={() => openForm({ type: "create" })} className="mt-6">
+                    Programar reunión
+                  </Button>
+                </>
+              )}
               {jumpDay && (
                 <Button variant="ghost" size="md" onClick={() => setDay(jumpDay)} className="mt-3">
                   {tab === "proximas" ? "Ir a la próxima reunión" : "Ir a la última reunión"}
