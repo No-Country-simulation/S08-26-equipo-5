@@ -74,9 +74,11 @@ export type StreamTokenResponse = {
 
 export type ParticipanteSala = {
   id: string;
-  nombre: string;
-  apellido: string;
-  email: string;
+  // null en invitados por correo sin cuenta que no aceptaron (estado INVITADO).
+  nombre: string | null;
+  apellido: string | null;
+  // null para quien no es HOST.
+  email: string | null;
   rol: "HOST" | "PARTICIPANTE";
   estado: string;
   fechaIngreso: string | null;

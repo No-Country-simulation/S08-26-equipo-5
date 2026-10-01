@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { JoinRequest } from "../lib/host-socket";
+import { displayName, initials } from "../lib/participant-name";
 
 type HostRequestPanelProps = {
   requests: JoinRequest[];
@@ -54,7 +55,7 @@ function RequestCard({
     <li
       ref={cardRef}
       role="article"
-      aria-label={`Solicitud de ${request.nombre} ${request.apellido}`}
+      aria-label={`Solicitud de ${displayName(request)}`}
       className={[
         "relative overflow-hidden rounded-xl border p-4 transition-all duration-300",
         request.status === "pending"
@@ -85,15 +86,16 @@ function RequestCard({
           aria-hidden="true"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700"
         >
-          {request.nombre.charAt(0).toUpperCase()}
-          {request.apellido.charAt(0).toUpperCase()}
+          {initials(request)}
         </div>
 
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-slate-950">
-            {request.nombre} {request.apellido}
+            {displayName(request)}
           </p>
-          <p className="truncate text-sm text-slate-500">{request.email}</p>
+          {request.email && displayName(request) !== request.email && (
+            <p className="truncate text-sm text-slate-500">{request.email}</p>
+          )}
           <p className="mt-0.5 text-xs text-slate-400">
             {formatTime(request.timestamp)}
           </p>
@@ -116,7 +118,7 @@ function RequestCard({
             type="button"
             disabled={isDeciding || !connected}
             onClick={onApprove}
-            aria-label={`Aprobar a ${request.nombre} ${request.apellido}`}
+            aria-label={`Aprobar a ${displayName(request)}`}
             className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-wait disabled:opacity-60"
           >
             {request.status === "approving" ? (
@@ -133,7 +135,7 @@ function RequestCard({
             type="button"
             disabled={isDeciding || !connected}
             onClick={onReject}
-            aria-label={`Rechazar a ${request.nombre} ${request.apellido}`}
+            aria-label={`Rechazar a ${displayName(request)}`}
             className="flex-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
           >
             {request.status === "rejecting" ? (
@@ -256,7 +258,7 @@ export function HostRequestPanel({
                   className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
                 >
                   <span className="truncate text-sm text-slate-600">
-                    {r.nombre} {r.apellido}
+                    {displayName(r)}
                   </span>
                   <span
                     className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
