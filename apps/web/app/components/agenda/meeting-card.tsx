@@ -20,6 +20,7 @@ type MeetingCardProps = {
   onSummary: (meeting: Meeting) => void;
   onCopy: (meeting: Meeting) => void;
   onEdit: (meeting: Meeting) => void;
+  onInvite: (meeting: Meeting) => void;
   onCancel: (meeting: Meeting) => void;
 };
 
@@ -35,12 +36,17 @@ export function MeetingCard({
   onSummary,
   onCopy,
   onEdit,
+  onInvite,
   onCancel,
 }: MeetingCardProps) {
   const upcoming = isUpcoming(meeting);
   const isHost = meeting.role === "HOST";
 
   const actions: MenuAction[] = [{ label: "Copiar enlace", onSelect: () => onCopy(meeting) }];
+  // Invitar por correo: HOST en reuniones próximas (PROGRAMADA o ACTIVA).
+  if (isHost && upcoming) {
+    actions.push({ label: "Invitar por correo", onSelect: () => onInvite(meeting) });
+  }
   // Editar: HOST en cualquier reunión no cancelada (la tabla anterior ya permitía editar finalizadas).
   if (isHost && meeting.status !== "CANCELADA") {
     actions.push({ label: "Editar", onSelect: () => onEdit(meeting) });

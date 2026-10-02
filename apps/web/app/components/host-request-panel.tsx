@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { JoinRequest } from "../lib/host-socket";
+import { displayName, initials } from "../lib/participant-name";
 
 type HostRequestPanelProps = {
   requests: JoinRequest[];
@@ -57,7 +58,7 @@ function RequestCard({
     <li
       ref={cardRef}
       role="article"
-      aria-label={`Solicitud de ${request.nombre} ${request.apellido}`}
+      aria-label={`Solicitud de ${displayName(request)}`}
       className={[
         "relative overflow-hidden rounded-xl border p-4 transition-all duration-300",
         request.status === "pending"
@@ -84,15 +85,31 @@ function RequestCard({
         </span>
       )}
 
-      <div className="flex min-w-0 items-start">
+      <div className={`flex min-w-0 items-start ${embedded ? "" : "gap-3"}`}>
+        {!embedded && (
+          <div
+            aria-hidden="true"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700"
+          >
+            {initials(request)}
+          </div>
+        )}
+
         <div className="min-w-0 flex-1">
           <p className={`truncate font-semibold ${embedded ? "text-white" : "text-slate-950"}`}>
-            {request.nombre} {request.apellido}
+            {displayName(request)}
           </p>
-          <p className={`truncate text-sm ${embedded ? "text-[#bfc4d9]" : "text-slate-500"}`}>
-            {embedded ? "Solicita ingresar" : request.email}
-          </p>
-          {!embedded && <p className="mt-0.5 text-xs text-slate-400">{formatTime(request.timestamp)}</p>}
+          {embedded ? (
+            <p className="truncate text-sm text-[#bfc4d9]">Solicita ingresar</p>
+          ) : (
+            request.email &&
+            displayName(request) !== request.email && (
+              <p className="truncate text-sm text-slate-500">{request.email}</p>
+            )
+          )}
+          {!embedded && (
+            <p className="mt-0.5 text-xs text-slate-400">{formatTime(request.timestamp)}</p>
+          )}
         </div>
       </div>
 
@@ -112,7 +129,7 @@ function RequestCard({
             type="button"
             disabled={isDeciding || !connected}
             onClick={onApprove}
-            aria-label={`${embedded ? "Admitir" : "Aprobar"} a ${request.nombre} ${request.apellido}`}
+            aria-label={`${embedded ? "Admitir" : "Aprobar"} a ${displayName(request)}`}
             className={`flex-1 ${embedded ? "rounded-full bg-[#4053df] px-3 py-3 hover:bg-[#3547cd]" : "rounded-lg bg-green-600 px-3 py-2 hover:bg-green-700"} text-sm font-semibold text-white transition-colors disabled:cursor-wait disabled:opacity-60`}
           >
             {request.status === "approving" ? (
@@ -129,7 +146,7 @@ function RequestCard({
             type="button"
             disabled={isDeciding || !connected}
             onClick={onReject}
-            aria-label={`Rechazar a ${request.nombre} ${request.apellido}`}
+            aria-label={`Rechazar a ${displayName(request)}`}
             className={`flex-1 ${embedded ? "rounded-full bg-[#d94f62] px-3 py-3 text-white hover:bg-[#c94457]" : "rounded-lg border border-red-200 bg-white px-3 py-2 text-red-600 hover:bg-red-50"} text-sm font-semibold transition-colors disabled:cursor-wait disabled:opacity-60`}
           >
             {request.status === "rejecting" ? (
@@ -259,7 +276,7 @@ export function HostRequestPanel({
                   className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
                 >
                   <span className="truncate text-sm text-slate-600">
-                    {r.nombre} {r.apellido}
+                    {displayName(r)}
                   </span>
                   <span
                     className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${

@@ -23,11 +23,13 @@ import {
   type Meeting,
 } from "../../lib/agenda";
 import { createSala, getMisParticipaciones, updateSala } from "../../lib/salas-api";
+import { inviteAfterCreate, type InviteOutcome } from "../../lib/invite-emails";
 import {
   ScheduleMeetingModal,
   type ImmediateMeetingInput,
   type ScheduleMeetingInput,
 } from "../schedule-meeting-modal";
+import { InviteDialog, InviteOutcomeDialog } from "../invite-dialogs";
 import { CancelDialog } from "./cancel-dialog";
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { MeetingCard } from "./meeting-card";
@@ -40,6 +42,8 @@ const TABS: AgendaTab[] = ["proximas", "finalizadas"];
 type DialogState =
   | { type: "create" }
   | { type: "edit"; meeting: Meeting }
+  | { type: "invite"; meeting: Meeting }
+  | { type: "inviteOutcome"; salaId: string; outcome: InviteOutcome }
   | { type: "cancel"; meeting: Meeting }
   | { type: "summary"; meeting: Meeting }
   | null;
@@ -183,11 +187,19 @@ export function AgendaScreen() {
     setFormSubmitting(true);
     setFormError(null);
     try {
-      await createSala(input);
-      closeDialog();
+      const sala = await createSala(input);
+      // La reunión ya existe: si las invitaciones fallan no se pierde, se reintentan en un paso aparte.
+      const outcome = input.emails?.length
+        ? await inviteAfterCreate(sala.id, input.emails)
+        : null;
       setTab("proximas");
       setDay(startOfDay(new Date(input.fechaInicio)));
-      showToast("Reunión programada");
+      if (outcome && !outcome.allSent) {
+        setDialog({ type: "inviteOutcome", salaId: sala.id, outcome });
+      } else {
+        closeDialog();
+        showToast(outcome ? "Reunión programada e invitaciones enviadas" : "Reunión programada");
+      }
       void load(true);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "No se pudo programar la reunión.");
@@ -327,6 +339,7 @@ export function AgendaScreen() {
                   onSummary={(m) => setDialog({ type: "summary", meeting: m })}
                   onCopy={copyLink}
                   onEdit={(m) => openForm({ type: "edit", meeting: m })}
+                  onInvite={(m) => setDialog({ type: "invite", meeting: m })}
                   onCancel={(m) => setDialog({ type: "cancel", meeting: m })}
                 />
               ))}
@@ -351,6 +364,7 @@ export function AgendaScreen() {
                           onSummary={(m) => setDialog({ type: "summary", meeting: m })}
                           onCopy={copyLink}
                           onEdit={(m) => openForm({ type: "edit", meeting: m })}
+                          onInvite={(m) => setDialog({ type: "invite", meeting: m })}
                           onCancel={(m) => setDialog({ type: "cancel", meeting: m })}
                         />
                       ))}
@@ -402,6 +416,7 @@ export function AgendaScreen() {
         <ScheduleMeetingModal
           mode="schedule"
           open
+          allowInvites
           submitting={formSubmitting}
           error={formError}
           returnFocusRef={openerRef}
@@ -420,6 +435,22 @@ export function AgendaScreen() {
           initialValues={{ nombre: dialog.meeting.title, resumen: dialog.meeting.description }}
           onClose={closeDialog}
           onSubmit={(input) => void handleEdit(dialog.meeting, input)}
+        />
+      )}
+      {dialog?.type === "invite" && (
+        <InviteDialog
+          salaId={dialog.meeting.id}
+          salaTitle={dialog.meeting.title}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.type === "inviteOutcome" && (
+        <InviteOutcomeDialog
+          salaId={dialog.salaId}
+          title="Reunión programada"
+          initial={dialog.outcome}
+          primaryLabel="Listo"
+          onPrimary={closeDialog}
         />
       )}
       {dialog?.type === "cancel" && (
