@@ -1,7 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { AuthRequestError, useAuth } from "../lib/auth";
+import {
+  EMAIL_MAX_LENGTH,
+  EMAIL_TOO_LONG_MESSAGE,
+  PASSWORD_TOO_LONG_MESSAGE,
+  passwordTooLong,
+  saveRecoveryContext,
+} from "../lib/password-recovery";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN_LENGTH = 8;
@@ -183,10 +191,14 @@ export function AuthModal({
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
       nextErrors.email = EMAIL_INVALID_MESSAGE;
+    } else if (trimmedEmail.length > EMAIL_MAX_LENGTH) {
+      nextErrors.email = EMAIL_TOO_LONG_MESSAGE;
     }
 
     if (mode === "register" && password.length < PASSWORD_MIN_LENGTH) {
       nextErrors.password = PASSWORD_SHORT_MESSAGE;
+    } else if (mode === "register" && passwordTooLong(password)) {
+      nextErrors.password = PASSWORD_TOO_LONG_MESSAGE;
     } else if (mode === "login" && password.length === 0) {
       nextErrors.password = "Ingresa tu contraseña.";
     }
@@ -403,14 +415,21 @@ export function AuthModal({
 
             {mode === "login" && (
               <div className="flex justify-end">
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="cursor-not-allowed text-[12px] font-medium text-[#3d4fdb]/70"
+                <Link
+                  href="/recuperar-contrasena"
+                  onClick={() => {
+                    // Lleva el email tipeado y la ruta actual (ej. una invitación) a la
+                    // recuperación sin ponerlos en la URL; el modal se cierra al navegar.
+                    saveRecoveryContext({
+                      email,
+                      next: `${window.location.pathname}${window.location.search}`,
+                    });
+                    dismiss();
+                  }}
+                  className="text-[12px] font-medium text-[#3d4fdb] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3d4fdb]"
                 >
                   ¿Olvidaste tu contraseña?
-                </button>
+                </Link>
               </div>
             )}
 

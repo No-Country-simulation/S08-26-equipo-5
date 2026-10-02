@@ -61,6 +61,12 @@ export class AuthRequestError extends Error {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+async function toRequestError(response: Response): Promise<AuthRequestError> {
+  const responseBody = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+  const message = responseBody?.error?.message ?? "No se pudo completar la solicitud.";
+  return new AuthRequestError(message, response.status, responseBody?.error?.code ?? null);
+}
+
 async function authRequest<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
@@ -68,13 +74,41 @@ async function authRequest<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    const responseBody = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-    const message = responseBody?.error?.message ?? "No se pudo completar la solicitud.";
-    throw new AuthRequestError(message, response.status, responseBody?.error?.code ?? null);
-  }
+  if (!response.ok) throw await toRequestError(response);
 
   return response.json() as Promise<T>;
+}
+
+// ─── Recuperación de contraseña (públicas, sin sesión) ───────────────────
+// Los errores llegan como AuthRequestError: `status` (400 | 410 | 429) y
+// `code` (VALIDATION_ERROR | RESET_TOKEN_INVALID | RATE_LIMITED).
+
+/** Código que devuelve el backend (410) para token desconocido, vencido o usado. */
+export const RESET_TOKEN_INVALID = "RESET_TOKEN_INVALID";
+
+export type ForgotPasswordResponse = { message: string };
+export type ResetTokenValidation = { valido: true; emailEnmascarado: string };
+export type ResetPasswordResponse = { message: string };
+
+/** POST /auth/forgot-password: responde 200 igual exista o no la cuenta. */
+export function requestPasswordReset(email: string) {
+  return authRequest<ForgotPasswordResponse>("/auth/forgot-password", { email });
+}
+
+/** GET /auth/reset-password/:token: valida sin consumir. 410 si no sirve. */
+export async function validateResetToken(token: string, signal?: AbortSignal) {
+  const response = await fetch(`${API_URL}/auth/reset-password/${encodeURIComponent(token)}`, {
+    signal,
+  });
+  if (!response.ok) throw await toRequestError(response);
+  return response.json() as Promise<ResetTokenValidation>;
+}
+
+/** POST /auth/reset-password/:token: cambia la contraseña. No inicia sesión. */
+export function resetPassword(token: string, password: string) {
+  return authRequest<ResetPasswordResponse>(`/auth/reset-password/${encodeURIComponent(token)}`, {
+    password,
+  });
 }
 
 async function getCurrentUser(token: string) {

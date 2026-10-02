@@ -58,6 +58,26 @@ describe("createLimiter", () => {
   });
 });
 
+describe("createLimiter con keyGenerator propio", () => {
+  it("cuenta por la clave provista: mismo email comparte contador aunque cambie la IP", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(
+      createLimiter({
+        max: 1,
+        skip: false,
+        keyGenerator: (req) => `email:${String(req.body?.email ?? "").toLowerCase()}`,
+      }),
+    );
+    app.post("/x", (_req, res) => res.json({ ok: true }));
+    app.use(errorMiddleware);
+
+    await request(app).post("/x").send({ email: "A@x.com" }).expect(200);
+    await request(app).post("/x").send({ email: "a@x.com" }).expect(429);
+    await request(app).post("/x").send({ email: "b@x.com" }).expect(200);
+  });
+});
+
 describe("limiters configurados por env", () => {
   it("inviteLimiter y tokenLimiter se saltan bajo NODE_ENV=test", async () => {
     const { inviteLimiter, tokenLimiter } = await import("../middlewares/rateLimit.js");
