@@ -388,17 +388,19 @@ export function StreamConference({
       await nextClient.connectUser({ id: user.id, name: user.name }, token);
       if (!active) return;
 
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error(
-          "El navegador no permite acceder a la cámara desde este contexto.",
-        );
+      // Best-effort camera probe: a missing camera/mic must NEVER block
+      // joining. The user joins first and publishes later if devices exist.
+      if (navigator.mediaDevices?.getUserMedia) {
+        try {
+          const permissionStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+          permissionStream.getTracks().forEach((track) => track.stop());
+        } catch {
+          // No camera available — the user still joins as viewer/listener.
+        }
       }
-
-      const permissionStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
-      permissionStream.getTracks().forEach((track) => track.stop());
       if (!active) return;
 
       await nextCall.join({ create: false });
@@ -409,13 +411,23 @@ export function StreamConference({
         return;
       }
 
-      await nextCall.camera.enable();
+      // Publishing is best-effort too: without devices the user stays
+      // connected and can still see/hear the meeting.
+      try {
+        await nextCall.camera.enable();
+      } catch {
+        await nextCall.camera.disable().catch(() => {});
+      }
       if (!active) {
         await nextCall.leave();
         joined = false;
         return;
       }
-      await nextCall.microphone.enable();
+      try {
+        await nextCall.microphone.enable();
+      } catch {
+        await nextCall.microphone.disable().catch(() => {});
+      }
       if (!active) {
         await nextCall.leave();
         joined = false;
