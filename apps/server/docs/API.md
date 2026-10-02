@@ -332,6 +332,7 @@ Limitaciones: el plan gratis permite 300 correos/día. Sin un dominio autenticad
 | `INVITACION_TTL_HORAS` | `72` | Vigencia del enlace de invitación (entero positivo). |
 | `RATE_LIMIT_INVITE_MAX` | `30` | Máx. de `POST /salas/:id/invitaciones` por host cada 15 min. |
 | `RATE_LIMIT_TOKEN_MAX` | `30` | Máx. de `GET /invitaciones/:token` + `POST /invitaciones/:token/aceptar` por IP cada 15 min. |
+| `TRUST_PROXY` | `1` en producción, `false` en el resto | Express `trust proxy`: saltos de proxy (`1`), `true`/`false` o lista de IPs/subredes separada por comas. **Imprescindible detrás de nginx** (`apps/combined`): sin esto `req.ip` es siempre el del proxy y todos los límites por IP (`forgot-password`, tokens de invitación/restablecimiento) pasan a ser un único contador global. Preferí el número de saltos: `true` confía en cualquier `X-Forwarded-For` (spoofeable) y `express-rate-limit` lo advierte (`ERR_ERL_PERMISSIVE_TRUST_PROXY`). Un número inválido (`0`, `-1`, `1.5`) falla al arrancar. |
 
 Estado nuevo de participante: `INVITADO` (invitado que todavía no aceptó; `nombre`/`apellido` pueden ser `null`). Nunca es aprobable directamente ni aparece entre los aprobados.
 

@@ -17,6 +17,10 @@ import { openApiSpec } from "./docs/openapi.js";
 export function createApp() {
   const app = express();
 
+  // Detrás de nginx (X-Forwarded-For) req.ip sería siempre el del proxy y los
+  // limiters por IP se volverían globales. Va antes de cualquier middleware.
+  app.set("trust proxy", env.trustProxy);
+
   // CSP se desactiva porque el bundle de swagger-ui-express usa estilos/scripts
   // inline que Helmet bloquearía por defecto.
   app.use(helmet({ contentSecurityPolicy: false }));

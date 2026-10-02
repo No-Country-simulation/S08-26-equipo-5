@@ -32,6 +32,27 @@ function parsePositiveInt(name: string, value: string | undefined, fallback: num
   return n;
 }
 
+// TRUST_PROXY (Express "trust proxy"): saltos de proxy ("1"), "true"/"false" o lista
+// de IPs/subredes/alias separada por comas. Vacío → 1 salto en producción (detrás de
+// nginx) y false en el resto. Se prefiere el número de saltos: "true" confía en
+// cualquier X-Forwarded-For y express-rate-limit lo rechaza (ERR_ERL_PERMISSIVE_TRUST_PROXY).
+function parseTrustProxy(value: string | undefined, nodeEnv: string): boolean | number | string {
+  const v = value?.trim();
+  if (v === undefined || v === "") return nodeEnv === "production" ? 1 : false;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(v)) {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error(
+        `Valor inválido para TRUST_PROXY: "${v}". Un número debe ser un entero positivo (saltos de proxy)`,
+      );
+    }
+    return n;
+  }
+  return v.split(",").map((part) => part.trim()).filter(Boolean).join(",");
+}
+
 const MAIL_PROVIDERS = ["console", "resend", "brevo"] as const;
 export type MailProvider = (typeof MAIL_PROVIDERS)[number];
 
@@ -61,6 +82,7 @@ export const env = {
   refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 7),
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS ?? 12),
   frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:3000",
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY, nodeEnv),
 
   // ── Invitaciones por correo ──────────────────────────────
   // Vigencia del enlace de invitación (horas).
