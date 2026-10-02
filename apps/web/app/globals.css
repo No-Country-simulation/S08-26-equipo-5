@@ -367,6 +367,39 @@ body {
   width: 3.25rem;
   height: 3.25rem;
 }
+.stream-conference-layout__controls .str-video__call-controls > .str-video__menu-container {
+  z-index: 30;
+  flex: none;
+  width: auto;
+  height: auto;
+  overflow: visible !important;
+}
+.stream-conference-layout__controls .str-video__reactions-menu {
+  width: max-content;
+  max-width: min(100vw - 1.5rem, 28rem);
+  height: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem;
+  border-radius: 1rem;
+  padding: 0.55rem;
+  background: #20294f;
+  box-shadow: 0 12px 32px rgb(8 11 25 / 45%);
+}
+.stream-conference-layout__controls .str-video__reactions-menu__button {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0.85rem;
+  background: #303f99;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+.stream-conference-layout__controls .str-video__reactions-menu__button:hover {
+  background: #3d4fbd;
+}
 .stream-conference-layout__controls .str-video__call-controls .str-video__composite-button {
   box-sizing: border-box;
   width: 3.25rem;
@@ -519,6 +552,26 @@ body {
 .stream-conference-sidebar__avatar { display: flex; width: 2rem; height: 2rem; flex: none; align-items: center; justify-content: center; border-radius: 50%; background: #d9dce8; color: #252d54; font-weight: 700; }
 .stream-conference-sidebar__participant-name { overflow: hidden; color: white; font-size: 0.85rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .stream-conference-sidebar__role { flex: none; color: #bfc4d9; font-size: 0.72rem; }
+.stream-conference-sidebar__audio {
+  flex: none;
+  margin-left: auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: #3d4fdb;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.stream-conference-sidebar__audio:disabled { cursor: wait; opacity: 0.6; }
+.stream-conference-layout__muted-note {
+  margin: 0.45rem 0 0;
+  color: #ffe45e;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
 .stream-conference-sidebar__muted { color: #c4c8da; font-size: 0.8rem; }
 .stream-conference-sidebar [data-embedded="true"] { border: 0; }
 .stream-conference-sidebar [data-embedded="true"] > div:first-child { border-color: rgb(255 255 255 / 12%); padding: 0.5rem 0; }
