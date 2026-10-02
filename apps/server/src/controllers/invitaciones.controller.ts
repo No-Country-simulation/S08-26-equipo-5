@@ -12,6 +12,7 @@ import {
   type InvitacionDeps,
 } from "../services/invitacion.service.js";
 import { AppError } from "../utils/AppError.js";
+import { assertUuid } from "../utils/uuid.js";
 
 const deps: InvitacionDeps = {
   participantes: new PrismaParticipanteRepository(prisma),
@@ -37,6 +38,7 @@ export async function invitarASala(
   if (!userId) {
     throw new AppError(401, "UNAUTHORIZED", "Token ausente, inválido o expirado");
   }
+  assertUuid(req.params.id);
 
   const data = await invitar(deps, {
     salaId: req.params.id,

@@ -102,7 +102,7 @@ describe("Rooms API — Integración", () => {
     // NOTA: un intento previo de este cambio eliminaba este endpoint
     // (esperaba 404). Se decidió mantenerlo como alias porque apps/web
     // todavía le pega a /rooms/:id/token; ver JOIN-FLOW.md.
-    const salaId = "sala-uuid-123";
+    const salaId = "11111111-1111-4111-8111-111111111111";
     const mockSala = {
       id: salaId,
       codigo: "ABCD1234",
@@ -247,7 +247,7 @@ describe("Rooms API — Integración", () => {
       mockParticipanteFindFirst.mockResolvedValue(null);
 
       const res = await request(app)
-        .post("/api/v1/rooms/no-existe/token")
+        .post("/api/v1/rooms/22222222-2222-4222-8222-222222222222/token")
         .set({ Authorization: `Bearer ${createToken(userId)}` })
         .send({ userId, role: "HOST" });
 

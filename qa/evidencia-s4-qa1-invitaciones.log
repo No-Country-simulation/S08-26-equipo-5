@@ -1,0 +1,292 @@
+
+---------------------
+
+=== 1. Register host -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/register
+=> 201 (2243 ms, 878 B)
+✓ register host 201
+
+---------------------
+
+=== 2. Login host -> 200 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/login
+=> 200 (1972 ms, 1.14 kB)
+✓ login host 200
+
+---------------------
+
+=== 3. Register otro usuario (no host) -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/register
+=> 201 (1988 ms, 878 B)
+✓ register otro 201
+
+---------------------
+
+=== 4. Login otro usuario -> 200 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/auth/login
+=> 200 (1988 ms, 1.14 kB)
+✓ login otro 200
+
+---------------------
+
+=== 5. Crear sala -> 201 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas
+accept-encoding: gzip, deflate, br
+accept: */*
+authorization: Bearer [redacted]
+content-length: 33
+content-type: application/json
+user-agent: httpyac
+
+{
+  "nombre": "Invitaciones QA"
+}
+HTTP/1.1 500  - Internal Server Error
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2e0aad9283fc-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 78
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:32:59 GMT
+etag: W/"50-zMrWSYNKbEgjlkX8KfAMYl0njSQ"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: cfe55d83-3f2e-4730
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "Ocurrió un error interno"
+  }
+}
+✖ crear sala 201 (AssertionError [ERR_ASSERTION]: status 500 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 6. Invitar sin JWT -> 401 ===
+
+POST {{host}}/salas/{{salaId}}/invitaciones
+Content-Type: application/json
+
+{
+  "emails": ["{{newEmail}}"]
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:101:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:101:20)
+expression salaId throws error
+
+---------------------
+
+=== 7. Invitar como no-host -> 403 ===
+
+POST {{host}}/salas/{{salaId}}/invitaciones
+Authorization: Bearer {{otherToken}}
+Content-Type: application/json
+
+{
+  "emails": ["{{newEmail}}"]
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:115:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:115:20)
+expression salaId throws error
+
+---------------------
+
+=== 7b. GET participantes como cuenta ajena a la sala -> 403 NOT_A_PARTICIPANT ===
+
+GET {{host}}/salas/{{salaId}}/participantes
+Authorization: Bearer {{otherToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:131:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:131:20)
+expression salaId throws error
+
+---------------------
+
+=== 7c. GET detalle como cuenta ajena a la sala -> 403 NOT_A_PARTICIPANT ===
+
+GET {{host}}/salas/{{salaId}}/detalle
+Authorization: Bearer {{otherToken}}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:142:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:142:20)
+expression salaId throws error
+
+---------------------
+
+=== 8. Invitar a sala inexistente -> 404 ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/salas/00000000-0000-4000-8000-000000000099/invitaciones
+=> 404 (221 ms, 781 B)
+✓ invitar sala inexistente 404
+
+---------------------
+
+=== 9. Invitar con emails vacio -> 400 ===
+
+POST {{host}}/salas/{{salaId}}/invitaciones
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "emails": []
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:168:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:168:20)
+expression salaId throws error
+
+---------------------
+
+=== 10. Invitar con email invalido -> 400 ===
+
+POST {{host}}/salas/{{salaId}}/invitaciones
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "emails": ["esto-no-es-un-mail"]
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:184:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:184:20)
+expression salaId throws error
+
+---------------------
+
+=== 11. Invitar (un email nuevo y uno con cuenta) -> 200 sin token ni datos de cuenta ===
+
+POST {{host}}/salas/{{salaId}}/invitaciones
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "emails": ["{{newEmail}}", "{{otherEmail}}"]
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:200:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:200:20)
+expression salaId throws error
+
+---------------------
+
+=== 12. Reinvitar al mismo email -> 200 REENVIADO ===
+
+POST {{host}}/salas/{{salaId}}/invitaciones
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "emails": ["{{newEmail}}"]
+}
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:225:20)
+✖ salaId is not defined (ReferenceError: salaId is not defined - Object.userJS (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/.s4-qa1-run/api_invitaciones.http:225:20)
+expression salaId throws error
+
+---------------------
+
+=== 13. Preview con token desconocido -> 410 INVITATION_INVALID ===
+
+GET https://meetflow-server-tm9i.onrender.com/api/v1/invitaciones/token-que-no-existe
+accept-encoding: gzip, deflate, br
+accept: */*
+user-agent: httpyac
+HTTP/1.1 404  - Not Found
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2e0fd94583fc-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 61
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:33:00 GMT
+etag: W/"40-5DDlkPw/AVs3YOcCfVO7rV+kFqw"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: 2389f438-8500-4ead
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Recurso no encontrado"
+  }
+}
+✖ preview token desconocido 410 (AssertionError [ERR_ASSERTION]: status 404 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+---------------------
+
+=== 14. Aceptar con JWT pero token desconocido -> 410 (el token invalido gana sobre la cuenta) ===
+
+POST https://meetflow-server-tm9i.onrender.com/api/v1/invitaciones/token-que-no-existe/aceptar
+accept-encoding: gzip, deflate, br
+accept: */*
+authorization: Bearer [redacted]
+content-length: 2
+content-type: application/json
+user-agent: httpyac
+
+{}
+HTTP/1.1 404  - Not Found
+access-control-allow-credentials: true
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+cf-ray: a43c2e112c3283fc-EZE
+connection: keep-alive
+content-encoding: br
+content-length: 61
+content-type: application/json; charset=utf-8
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+date: Thu, 01 Oct 2026 14:33:00 GMT
+etag: W/"40-5DDlkPw/AVs3YOcCfVO7rV+kFqw"
+origin-agent-cluster: ?1
+referrer-policy: no-referrer
+rndr-id: e1c12c73-3c10-4cfd
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+vary: Origin, Accept-Encoding
+x-content-type-options: nosniff
+x-dns-prefetch-control: off
+x-download-options: noopen
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+x-render-origin-server: Render
+x-xss-protection: 0
+
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Recurso no encontrado"
+  }
+}
+✖ aceptar token desconocido con sesion 410 (AssertionError [ERR_ASSERTION]: status 404 - vo.assert (/home/mauro/Documentos/CODE/S08-26-equipo-5/apps/server/node_modules/httpyac/dist/index.js:3:54449)
+
+16 requests processed (5 succeeded, 3 failed, 8 errored)
