@@ -74,6 +74,16 @@ export const env = {
   rateLimitInviteMax: parsePositiveInt("RATE_LIMIT_INVITE_MAX", process.env.RATE_LIMIT_INVITE_MAX, 30),
   rateLimitTokenMax: parsePositiveInt("RATE_LIMIT_TOKEN_MAX", process.env.RATE_LIMIT_TOKEN_MAX, 30),
 
+  // ── Recuperación de contraseña ───────────────────────────
+  // Vigencia del enlace de restablecimiento (minutos).
+  passwordResetTtlMinutes: parsePositiveInt(
+    "PASSWORD_RESET_TTL_MINUTES",
+    process.env.PASSWORD_RESET_TTL_MINUTES,
+    30,
+  ),
+  // POST /auth/forgot-password por IP y por email, cada 15 min.
+  rateLimitForgotMax: parsePositiveInt("RATE_LIMIT_FORGOT_MAX", process.env.RATE_LIMIT_FORGOT_MAX, 5),
+
   // ── GetStream ────────────────────────────────────────────
   // La API key viaja al cliente en la respuesta de /stream-token; el secret
   // nunca sale del servidor.

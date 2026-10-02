@@ -22,6 +22,8 @@ describe("config/env — invitaciones y mail", () => {
     vi.stubEnv("INVITACION_TTL_HORAS", "");
     vi.stubEnv("RATE_LIMIT_INVITE_MAX", "");
     vi.stubEnv("RATE_LIMIT_TOKEN_MAX", "");
+    vi.stubEnv("PASSWORD_RESET_TTL_MINUTES", "");
+    vi.stubEnv("RATE_LIMIT_FORGOT_MAX", "");
   });
 
   afterEach(() => {
@@ -99,4 +101,36 @@ describe("config/env — invitaciones y mail", () => {
       await expect(cargarEnv()).rejects.toThrow(/INVITACION_TTL_HORAS/);
     },
   );
+
+  it("recuperación de contraseña: TTL 30 min y límite 5 por defecto", async () => {
+    const env = await cargarEnv();
+
+    expect(env.passwordResetTtlMinutes).toBe(30);
+    expect(env.rateLimitForgotMax).toBe(5);
+  });
+
+  it("recuperación de contraseña: respeta los valores configurados", async () => {
+    vi.stubEnv("PASSWORD_RESET_TTL_MINUTES", "10");
+    vi.stubEnv("RATE_LIMIT_FORGOT_MAX", "3");
+
+    const env = await cargarEnv();
+
+    expect(env.passwordResetTtlMinutes).toBe(10);
+    expect(env.rateLimitForgotMax).toBe(3);
+  });
+
+  it.each(["0", "-1", "abc"])(
+    "PASSWORD_RESET_TTL_MINUTES inválido (%s) falla al arrancar",
+    async (valor) => {
+      vi.stubEnv("PASSWORD_RESET_TTL_MINUTES", valor);
+
+      await expect(cargarEnv()).rejects.toThrow(/PASSWORD_RESET_TTL_MINUTES/);
+    },
+  );
+
+  it("RATE_LIMIT_FORGOT_MAX inválido falla al arrancar", async () => {
+    vi.stubEnv("RATE_LIMIT_FORGOT_MAX", "0");
+
+    await expect(cargarEnv()).rejects.toThrow(/RATE_LIMIT_FORGOT_MAX/);
+  });
 });
