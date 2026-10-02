@@ -2,15 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Yellowtail } from "next/font/google";
 import { useAuth } from "../lib/auth";
 import { HeaderAccount } from "./header-account";
-
-const yellowtail = Yellowtail({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 const authenticatedLinks = [
   { href: "/home", label: "Inicio" },
@@ -24,9 +17,7 @@ export function HomeHeader() {
 
   return (
     <header className="flex min-h-[60px] shrink-0 flex-wrap items-center justify-between gap-2 px-5 py-3 sm:relative sm:flex-nowrap sm:px-8 sm:py-0">
-      <span className={`${yellowtail.className} text-[28px] leading-none text-white`}>
-        Meetflow
-      </span>
+      <img src="/meetflow-logo.png" alt="Meetflow" className="h-11 w-auto" />
 
       {showAuthenticatedNav && (
         <nav

@@ -5,7 +5,6 @@ import {
   OwnCapability,
   DefaultParticipantViewUI,
   ReactionsButton,
-  RecordCallButton,
   Restricted,
   ParticipantView,
   ParticipantsAudio,
@@ -26,7 +25,8 @@ import { displayName } from "../lib/participant-name";
 import { StreamChatPanel } from "./stream-chat-panel";
 import { HostRequestPanel } from "./host-request-panel";
 import type { JoinRequest } from "../lib/host-socket";
-import { transferHost, finalizarSala } from "../lib/salas-api";
+import { transferHost, promoteHost, finalizarSala, getParticipantes } from "../lib/salas-api";
+import { downloadRecording, LocalCallRecorder } from "../lib/local-call-recorder";
 
 const callTranslations = {
   en: {},
@@ -100,6 +100,7 @@ type StreamConferenceProps = {
   onApproveRequest?: (participanteId: string) => void;
   onRejectRequest?: (participanteId: string) => void;
   onLeave?: (error?: Error) => void;
+  onBecameHost?: () => void;
 };
 
 // ── Participant type used in the transfer-host modal ──
@@ -153,7 +154,7 @@ function CallStage() {
   const sharing = participants.filter((participant) => hasScreenShare(participant));
   const remote = participants.filter((participant) => !participant.isLocalParticipant);
 
-  if (sharing.length < 2) {
+  if (sharing.length === 0) {
     return (
       <SpeakerLayout
         participantsBarPosition="bottom"
@@ -164,7 +165,7 @@ function CallStage() {
   }
 
   return (
-    <div className="stream-conference-shares">
+    <div className={`stream-conference-shares${sharing.length === 1 ? " stream-conference-shares--single" : ""}`}>
       <ParticipantsAudio participants={remote} />
       <div className="stream-conference-shares__grid">
         {sharing.map((participant) => (
@@ -178,19 +179,20 @@ function CallStage() {
           </div>
         ))}
       </div>
-      <div className="stream-conference-shares__cameras">
-        {participants.map((participant) => (
-          <ParticipantView
-            key={participant.sessionId}
-            participant={participant}
-            trackType="videoTrack"
-            muteAudio
-            ParticipantViewUI={SharingParticipantBarUI}
-          />
-        ))}
-      </div>
     </div>
   );
+}
+
+function ShareSidebarSync({ onShareCount }: { onShareCount: (count: number) => void }) {
+  const { useParticipants } = useCallStateHooks();
+  const participants = useParticipants();
+  const count = participants.filter((participant) => hasScreenShare(participant)).length;
+
+  useEffect(() => {
+    onShareCount(count);
+  }, [count, onShareCount]);
+
+  return null;
 }
 
 async function enableMicrophoneFromHost(call: Call) {
@@ -215,12 +217,14 @@ function HostLeaveModal({
   onEndForEveryone,
   onTransfer,
   onCancel,
+  listError = "",
 }: {
   participants: CallParticipant[];
   transferring: boolean;
   onEndForEveryone: () => void;
   onTransfer: (userId: string) => void;
   onCancel: () => void;
+  listError?: string;
 }) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
@@ -294,9 +298,15 @@ function HostLeaveModal({
           </div>
         )}
 
-        {participants.length === 0 && (
+        {listError && (
+          <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {listError}
+          </p>
+        )}
+
+        {participants.length === 0 && !listError && (
           <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-            No hay otros participantes en la llamada a quienes transferir el rol.
+            No hay otra cuenta en la llamada para dejarle el rol. Quien entró como invitado no puede ser anfitrión.
           </p>
         )}
 
@@ -329,6 +339,7 @@ export function StreamConference({
   onApproveRequest,
   onRejectRequest,
   onLeave,
+  onBecameHost,
 }: StreamConferenceProps) {
   const [client, setClient] = useState<StreamVideoClient | null>(null);
   const [call, setCall] = useState<Call | null>(null);
@@ -347,10 +358,23 @@ export function StreamConference({
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [otherParticipants, setOtherParticipants] = useState<CallParticipant[]>([]);
+  const [leaveListError, setLeaveListError] = useState("");
+  const [promotableIds, setPromotableIds] = useState<Set<string>>(new Set());
+  const [hostBusyId, setHostBusyId] = useState<string | null>(null);
   const [isStreamHost, setIsStreamHost] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState("");
+  const stageRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<LocalCallRecorder | null>(null);
+  const shareCountRef = useRef(0);
   const connectionGenerationRef = useRef(0);
 
   const effectiveIsHost = Boolean(isHost || isStreamHost);
+
+  useEffect(() => {
+    if (!isStreamHost || isHost) return;
+    onBecameHost?.();
+  }, [isHost, isStreamHost, onBecameHost]);
   const pendingRequestsCount = requests.filter(
     (request) => request.status === "pending" || request.status === "approving" || request.status === "rejecting",
   ).length;
@@ -618,45 +642,121 @@ export function StreamConference({
 
   // ── Collect other participants when the modal opens ──
   useEffect(() => {
+    if (!salaId || !effectiveIsHost) return;
+    let active = true;
+    void getParticipantes(salaId)
+      .then((roster) => {
+        if (!active) return;
+        setPromotableIds(new Set(
+          roster.participantes
+            .filter((person) => person.puedeSerHost && person.rol !== "HOST")
+            .map((person) => person.id),
+        ));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [salaId, effectiveIsHost, participants.length]);
+
+  useEffect(() => {
     if (!showLeaveModal || !call || !salaId) return;
 
     let active = true;
     setOtherParticipants([]);
+    setLeaveListError("");
 
-    // Stream asigna IDs de participante tanto a cuentas como a invitados.
-    // Usamos el indicador de cuenta registrada que el servidor guarda en el
-    // perfil de Stream. Refrescamos miembros para no depender de metadatos
-    // que pudieron quedar en caché antes de que la cuenta ingresara.
-    void call
-      .get()
-      .then(() => {
+    void Promise.all([call.get().catch(() => undefined), getParticipantes(salaId)])
+      .then(([, roster]) => {
         if (!active) return;
-        const members = call.state.members ?? [];
-        const registeredIds = new Set(
-          members
-            .filter((member) => member.user?.custom?.registered === true)
-            .map((member) => member.user_id),
+        const eligible = new Set(
+          roster.participantes
+            .filter((person) => person.puedeSerHost)
+            .map((person) => person.id),
         );
-        const participants = call.state.participants ?? [];
-        const others: CallParticipant[] = participants
-          .filter((participant) => !participant.isLocalParticipant)
-          .filter((participant) => participant.userId !== user.id)
-          .filter((participant) => registeredIds.has(participant.userId))
-          .map((participant) => ({
-            userId: participant.userId,
-            name: participant.name || participant.userId,
-          }));
-
-        setOtherParticipants(others);
+        const inCall = call.state.participants ?? [];
+        setOtherParticipants(
+          inCall
+            .filter((participant) => !participant.isLocalParticipant)
+            .filter((participant) => participant.userId !== user.id)
+            .filter((participant) => eligible.has(participant.userId))
+            .map((participant) => ({
+              userId: participant.userId,
+              name: participant.name || participant.userId,
+            })),
+        );
       })
       .catch((err) => {
-        console.error("No se pudo actualizar la lista de participantes de GetStream", err);
+        if (!active) return;
+        setLeaveListError(err instanceof Error ? err.message : "No se pudo cargar a quién dejar el rol.");
       });
 
     return () => {
       active = false;
     };
   }, [showLeaveModal, call, salaId, user.id]);
+
+  const handleShareCount = useCallback((count: number) => {
+    if (shareCountRef.current === 0 && count > 0) {
+      setActiveSidebar((current) => current ?? "chat");
+    }
+    shareCountRef.current = count;
+  }, []);
+
+  const toggleRecording = useCallback(async () => {
+    if (!call || !stageRef.current) return;
+    setRecordingError("");
+    if (recorderRef.current) {
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      setRecording(false);
+      try {
+        downloadRecording(await recorder.stop());
+      } catch (cause) {
+        setRecordingError(cause instanceof Error ? cause.message : "No se pudo guardar la grabación.");
+      }
+      return;
+    }
+
+    const audioStreams = call.state.participants.flatMap((participant) => (
+      [participant.audioStream, participant.screenShareAudioStream].filter((stream): stream is MediaStream => Boolean(stream))
+    ));
+    const recorder = new LocalCallRecorder();
+    try {
+      await recorder.start(stageRef.current, audioStreams);
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch (cause) {
+      setRecordingError(cause instanceof Error ? cause.message : "No se pudo empezar a grabar.");
+    }
+  }, [call]);
+
+  useEffect(() => () => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    if (recorder) {
+      void recorder.stop().then(downloadRecording).catch(() => undefined);
+    }
+  }, []);
+
+  const assignCoHost = useCallback(async (userId: string) => {
+    if (!call || !salaId) return;
+    setHostBusyId(userId);
+    setAudioActionError("");
+    try {
+      await promoteHost(salaId, userId);
+      setPromotableIds((current) => {
+        const next = new Set(current);
+        next.delete(userId);
+        return next;
+      });
+      await call.get().catch(() => undefined);
+    } catch (cause) {
+      setAudioActionError(cause instanceof Error ? cause.message : "No se pudo asignar el anfitrión.");
+    } finally {
+      setHostBusyId(null);
+    }
+  }, [call, salaId]);
 
   const setRemoteAudio = useCallback(async (userId: string, enabled: boolean) => {
     if (!call) return;
@@ -787,10 +887,11 @@ export function StreamConference({
       )}
       <StreamVideo client={client} language="es" fallbackLanguage="en" translationsOverrides={callTranslations}>
         <StreamCall call={call}>
+          <ShareSidebarSync onShareCount={handleShareCount} />
           <div className="stream-conference-layout">
             {/* ── Video area ── */}
             <div className="stream-conference-layout__video">
-              <div className="stream-conference-layout__video-inner">
+              <div ref={stageRef} className="stream-conference-layout__video-inner">
                 <CallStage />
               </div>
               <div className="stream-conference-layout__controls">
@@ -809,19 +910,25 @@ export function StreamConference({
                   <Restricted requiredGrants={[OwnCapability.SCREENSHARE]}>
                     <ScreenShareButton />
                   </Restricted>
-                  <Restricted
-                    requiredGrants={[
-                      OwnCapability.START_RECORD_CALL,
-                      OwnCapability.STOP_RECORD_CALL,
-                    ]}
-                  >
-                    <RecordCallButton />
-                  </Restricted>
+                  {effectiveIsHost && (
+                    <button
+                      type="button"
+                      className={`stream-conference-record${recording ? " stream-conference-record--live" : ""}`}
+                      aria-pressed={recording}
+                      aria-label={recording ? "Detener y descargar" : "Grabar llamada"}
+                      title={recording ? "Detener y descargar" : "Grabar llamada"}
+                      onClick={() => void toggleRecording()}
+                    >
+                      <span className="stream-conference-record__dot" aria-hidden="true" />
+                    </button>
+                  )}
                   <CancelCallButton onClick={handleLeave} />
                 </div>
                 {!localCanSendAudio && !effectiveIsHost && (
                   <p className="stream-conference-layout__muted-note" role="status">El anfitrión silenció tu micrófono.</p>
                 )}
+                {recording && <p className="stream-conference-layout__muted-note" role="status">Grabando. Al detener, se descarga el archivo.</p>}
+                {recordingError && <p className="stream-conference-layout__muted-note" role="alert">{recordingError}</p>}
 
               </div>
             </div>
@@ -830,14 +937,31 @@ export function StreamConference({
             {activeSidebar && (
               <aside className="stream-conference-layout__chat stream-conference-sidebar" aria-label={activeSidebar === "chat" ? "Chat de la reunión" : "Participantes de la reunión"}>
                 <div className="stream-conference-sidebar__header">
-                  <h2>{activeSidebar === "chat" ? "Chat" : `Participantes (${participants.length})`}</h2>
-                  <button type="button" onClick={() => setActiveSidebar(null)} aria-label="Cerrar panel">×</button>
+                  <div className="stream-conference-sidebar__switch" role="tablist" aria-label="Panel de la reunión">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSidebar === "chat"}
+                      onClick={() => setActiveSidebar("chat")}
+                    >
+                      Chat
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSidebar === "participants"}
+                      onClick={() => setActiveSidebar("participants")}
+                    >
+                      Participantes
+                    </button>
+                  </div>
+                  <button type="button" className="stream-conference-sidebar__close" onClick={() => setActiveSidebar(null)} aria-label="Cerrar panel">×</button>
                 </div>
                 {activeSidebar === "chat" ? (
                   <StreamChatPanel apiKey={apiKey} token={token} user={user} channelId={callId} />
                 ) : (
                   <div className="stream-conference-sidebar__content">
-                    {isHost && (
+                    {effectiveIsHost && (
                       <section className="stream-conference-sidebar__section">
                         <h3>Solicitudes de ingreso</h3>
                         {onApproveRequest && onRejectRequest ? (
@@ -860,14 +984,26 @@ export function StreamConference({
                             )}
                             <span className={`stream-conference-sidebar__role${showAsHost ? " stream-conference-sidebar__role--host" : ""}`}>{showAsHost ? "Anfitrión" : "Participante"}</span>
                             {effectiveIsHost && !participant.isLocal && (
-                              <button
-                                type="button"
-                                className="stream-conference-sidebar__audio"
-                                disabled={audioBusyId === participant.userId}
-                                onClick={() => void setRemoteAudio(participant.userId, !participant.publishingAudio)}
-                              >
-                                {participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
-                              </button>
+                              <div className="stream-conference-sidebar__actions">
+                                {promotableIds.has(participant.userId) && !showAsHost && (
+                                  <button
+                                    type="button"
+                                    className="stream-conference-sidebar__host"
+                                    disabled={hostBusyId === participant.userId}
+                                    onClick={() => void assignCoHost(participant.userId)}
+                                  >
+                                    {hostBusyId === participant.userId ? "Asignando…" : "Hacer anfitrión"}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="stream-conference-sidebar__audio"
+                                  disabled={audioBusyId === participant.userId}
+                                  onClick={() => void setRemoteAudio(participant.userId, !participant.publishingAudio)}
+                                >
+                                  {participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
+                                </button>
+                              </div>
                             )}
                           </li>
                           );
@@ -931,6 +1067,7 @@ export function StreamConference({
               onEndForEveryone={endCallForEveryone}
               onTransfer={transferHostAndLeave}
               onCancel={() => setShowLeaveModal(false)}
+              listError={leaveListError}
             />
           )}
         </StreamCall>
