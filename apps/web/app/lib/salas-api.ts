@@ -63,7 +63,8 @@ export type StreamTokenResponse = {
   apiKey: string;
   token: string;
   userId: string;
-  user: { id: string; name: string };
+  /** image: foto de la cuenta; null para invitados o sin foto. */
+  user: { id: string; name: string; image?: string | null };
   rol: "HOST" | "PARTICIPANTE";
   callType: string;
   callId: string;
