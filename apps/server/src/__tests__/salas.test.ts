@@ -276,7 +276,7 @@ describe("S2-01 — Salas API", () => {
 
   // ─── POST /api/v1/salas/:id/transfer-host ───────────────
   describe("POST /api/v1/salas/:id/transfer-host", () => {
-    const salaId = "sala-uuid-777";
+    const salaId = "33333333-3333-4333-8333-333333333333";
     const hostId = "user-host-1";
     const hostParticipantId = "participant-host-1";
     const targetId = "user-target-2";
@@ -524,7 +524,7 @@ describe("S2-01 — Salas API", () => {
 
   // ─── Participantes INVITADO en consultas (WR-02) ────────
   describe("consultas con participantes INVITADO", () => {
-    const salaId = "sala-uuid-inv";
+    const salaId = "44444444-4444-4444-8444-444444444444";
     const hostId = "user-host-1";
     const hostToken = createToken(hostId, "host@test.com");
     const filas = [
