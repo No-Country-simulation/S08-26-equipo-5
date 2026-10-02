@@ -500,7 +500,7 @@ export const openApiSpec = {
         tags: ["Auth"],
         summary: "Pedir enlace para restablecer la contraseña",
         description:
-          "Responde **siempre** 200 con el mismo mensaje, exista o no la cuenta (sin enumeración de usuarios). " +
+          "Responde **siempre** 200 con el mismo mensaje, exista o no la cuenta (sin enumeración de usuarios). Responde antes de buscar al usuario (el resto corre en segundo plano), así el tiempo no delata la cuenta. " +
           "Si la cuenta existe, invalida los pedidos previos pendientes y envía por correo un enlace " +
           "`FRONTEND_URL/restablecer-contrasena/<token>` de un solo uso que vence en " +
           "`PASSWORD_RESET_TTL_MINUTES` (30). Un fallo del proveedor de correo no cambia la respuesta. " +

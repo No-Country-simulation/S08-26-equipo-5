@@ -62,6 +62,7 @@ const MENSAJE_FORGOT =
 
 beforeEach(() => {
   vi.clearAllMocks();
+  m.findByEmailInsensitive.mockReset();
   m.crearReemplazando.mockResolvedValue(undefined);
   m.mailSend.mockResolvedValue(undefined);
 });
@@ -93,8 +94,20 @@ describe("POST /api/v1/auth/forgot-password", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ message: MENSAJE_FORGOT });
+    // El trabajo corre en segundo plano, después de responder.
+    await vi.waitFor(() => expect(m.mailSend).toHaveBeenCalledTimes(1));
     expect(m.crearReemplazando).toHaveBeenCalledTimes(1);
-    expect(m.mailSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("responde sin esperar a la base: el tiempo no depende de si la cuenta existe", async () => {
+    m.findByEmailInsensitive.mockReturnValue(new Promise(() => undefined));
+
+    const res = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: "lento@x.com" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: MENSAJE_FORGOT });
   });
 
   it("email inexistente: exactamente la misma respuesta 200 y sin correo", async () => {
@@ -106,6 +119,7 @@ describe("POST /api/v1/auth/forgot-password", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ message: MENSAJE_FORGOT });
+    await vi.waitFor(() => expect(m.findByEmailInsensitive).toHaveBeenCalled());
     expect(m.crearReemplazando).not.toHaveBeenCalled();
     expect(m.mailSend).not.toHaveBeenCalled();
   });
@@ -121,6 +135,7 @@ describe("POST /api/v1/auth/forgot-password", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ message: MENSAJE_FORGOT });
+    await vi.waitFor(() => expect(m.mailSend).toHaveBeenCalled());
   });
 });
 

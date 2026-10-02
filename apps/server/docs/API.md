@@ -530,7 +530,7 @@ Flujo: `forgot-password` (correo con enlace) → `GET reset-password/:token` (va
 
 **Response 200 (siempre igual, exista o no la cuenta):** `{ "message": "Si el email está registrado, te enviamos un enlace para restablecer la contraseña." }`
 
-- Sin enumeración de cuentas: misma respuesta y el correo se envía en segundo plano (no se espera al proveedor), así el tiempo de respuesta no delata si el email existe. Un fallo al enviar no cambia la respuesta (se loguea destinatario y motivo, nunca el token ni el enlace).
+- Sin enumeración de cuentas: misma respuesta, y se responde **antes** de hacer nada: la búsqueda del usuario, la transacción y el envío del correo corren en segundo plano, así el tiempo de respuesta no depende de si el email existe. Un fallo al enviar no cambia la respuesta (se loguea destinatario y motivo, nunca el token ni el enlace).
 - Si la cuenta existe: se invalidan los pedidos previos pendientes y se crea uno nuevo; el correo lleva `FRONTEND_URL/restablecer-contrasena/<token>`.
 - El token es opaco (32 bytes, base64url), de un solo uso, y solo se guarda su hash SHA-256 (`PasswordReset.tokenHash`).
 - Rate limit: `RATE_LIMIT_FORGOT_MAX` (5) cada 15 min, **por IP y por email** (`429 RATE_LIMITED`).

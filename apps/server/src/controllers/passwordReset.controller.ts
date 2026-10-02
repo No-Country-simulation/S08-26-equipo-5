@@ -7,14 +7,30 @@ import {
   type PasswordResetDeps,
 } from "../services/passwordReset.service.js";
 
+/** Ejecuta la tarea fuera del ciclo del request. Inyectable para que los tests la esperen. */
+export type Scheduler = (task: () => Promise<void>) => void;
+
+/** Detached: nunca rechaza; solo el nombre del error se loguea (sin email ni mensajes de la base). */
+const detached: Scheduler = (task) => {
+  void task().catch((error: unknown) => {
+    const nombre = error instanceof Error ? error.name : "desconocido";
+    console.error(`[password-reset] falló el procesamiento del pedido: ${nombre}`);
+  });
+};
+
 export class PasswordResetController {
-  constructor(private readonly deps: PasswordResetDeps) {}
+  constructor(
+    private readonly deps: PasswordResetDeps,
+    private readonly schedule: Scheduler = detached,
+  ) {}
 
   async forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      await solicitarReset(this.deps, req.body.email);
-      // Siempre lo mismo, exista o no la cuenta.
+      // Se captura antes de responder; la búsqueda, la transacción y el correo
+      // corren después, así el tiempo de respuesta no depende de si la cuenta existe.
+      const email: string = req.body.email;
       res.status(200).json(RESPUESTA_FORGOT);
+      this.schedule(() => solicitarReset(this.deps, email));
     } catch (err) {
       next(err);
     }
