@@ -1,0 +1,202 @@
+@host = http://localhost:4000/api/v1
+@email = qa-auth-{{$timestamp}}@test.com
+@password = password123
+
+# Contrato v1.0.1. Orden: register -> login -> me -> refresh -> login2 -> logout.
+# El email lleva timestamp para que la suite sea repetible (register siempre 201).
+# Auth no tiene rol que devuelva 403; el permiso denegado de este dominio es 401.
+
+### 1. Health -> 200
+GET {{host}}/health
+
+> {%
+client.test("health 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 2. Register -> 201
+# @name register
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.assert(!!response.body.userId, "falta userId");
+});
+%}
+
+### 3. Register email repetido -> 409
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register duplicado 409", function() {
+  client.assert(response.status === 409, "status " + response.status);
+});
+%}
+
+### 4. Login -> 200
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.accessToken, "falta accessToken");
+  client.assert(!!response.body.refreshToken, "falta refreshToken");
+  client.global.set("accessToken", response.body.accessToken);
+  client.global.set("refreshToken", response.body.refreshToken);
+});
+%}
+
+### 5. Login password incorrecta -> 401
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "password-incorrecta"
+}
+
+> {%
+client.test("login 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 6. Me -> 200
+GET {{host}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("me 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.email, "falta email");
+});
+%}
+
+### 7. Me sin token -> 401
+GET {{host}}/auth/me
+
+> {%
+client.test("me sin token 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+  client.assert(response.body.error.code === "UNAUTHORIZED", JSON.stringify(response.body));
+});
+%}
+
+### 8. Me token inválido -> 401
+GET {{host}}/auth/me
+Authorization: Bearer token-de-mentira
+
+> {%
+client.test("me token inválido 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 9. Refresh -> 200
+# @name refresh
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+> {%
+client.test("refresh 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.accessToken, "falta accessToken");
+});
+%}
+
+### 10. Refresh con token viejo -> 401
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+> {%
+client.test("refresh reuso 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 11. Login 2 -> 200
+# @name login2
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login2 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("refreshToken2", response.body.refreshToken);
+});
+%}
+
+### 12. Logout -> 200
+POST {{host}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken2}}"
+}
+
+> {%
+client.test("logout 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 13. Refresh tras logout -> 401
+POST {{host}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken2}}"
+}
+
+> {%
+client.test("refresh revocado 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 14. Ruta inexistente -> 404
+GET {{host}}/no-existe
+
+> {%
+client.test("404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}

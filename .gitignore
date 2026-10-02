@@ -12,6 +12,8 @@ logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+# Excepcion: logs de evidencia QA, se versionan a proposito (ver qa/*.md)
+!qa/*.log
 
 # Variables de entorno
 .env
@@ -34,3 +36,7 @@ Thumbs.db
 # Misceláneos
 .cache/
 .tmp/
+
+# Pruebas locales de API (REST Client de VS Code)
+api.http
+apps/server/test-sockets.html

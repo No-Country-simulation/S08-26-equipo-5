@@ -1,0 +1,546 @@
+@host = http://localhost:4000/api/v1
+@email = qa-salas-{{$timestamp}}@test.com
+@guestEmail = qa-guest-{{$timestamp}}@test.com
+@password = password123
+@missingId = 00000000-0000-4000-8000-000000000099
+
+# Contrato v1.0.1. Host crea la sala; el invitado cubre 403 en PUT y DELETE.
+# GET /salas/:code es público: no aplica 401 ni 403; se afirma 200 y 404.
+
+### 1. Register host -> 201
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "apellido": "Gómez",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register host 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 2. Login host -> 200
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login host 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("accessToken", response.body.accessToken);
+});
+%}
+
+### 3. Register invitado -> 201
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Luis",
+  "apellido": "Díaz",
+  "email": "{{guestEmail}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register guest 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 4. Login invitado -> 200
+# @name guest
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{guestEmail}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login guest 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("guestToken", response.body.accessToken);
+});
+%}
+
+### 5. POST /salas -> 201
+# @name crearSala
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Daily Backend",
+  "resumen": "Revisión del sprint",
+  "fechaInicio": "2026-10-15T18:00:00.000Z"
+}
+
+> {%
+client.test("crear sala 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.assert(!!response.body.salaId, "falta salaId");
+  client.assert(!!response.body.codigo, "falta codigo");
+  client.global.set("salaId", response.body.salaId);
+  client.global.set("salaCodigo", response.body.codigo);
+  client.global.set("salaCodigoLower", String(response.body.codigo).toLowerCase());
+});
+%}
+
+### 6. POST /salas sin nombre -> 400
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "resumen": "Sin nombre"
+}
+
+> {%
+client.test("crear sala 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 7. POST /salas sin token -> 401
+POST {{host}}/salas
+Content-Type: application/json
+
+{
+  "nombre": "Sala sin auth"
+}
+
+> {%
+client.test("crear sala 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+  client.assert(response.body.error.code === "UNAUTHORIZED", JSON.stringify(response.body));
+});
+%}
+
+### 8. GET /salas/:code -> 200
+GET {{host}}/salas/{{salaCodigo}}
+
+> {%
+client.test("sala pública 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.codigo, "falta codigo");
+});
+%}
+
+### 8b. GET /salas/:code en minúsculas -> 200
+GET {{host}}/salas/{{salaCodigoLower}}
+
+> {%
+client.test("código normalizado", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 8c. POST /salas nombre de 151 -> 400
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+}
+
+> {%
+client.test("nombre 151 es 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 9. GET /salas/:code inexistente -> 404
+GET {{host}}/salas/ZZZZ0000
+
+> {%
+client.test("sala pública 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 10. GET /salas/mis-participaciones -> 200
+GET {{host}}/salas/mis-participaciones
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("agenda 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(Array.isArray(response.body.salas), "falta salas");
+});
+%}
+
+### 11. GET /salas/mis-participaciones sin token -> 401
+GET {{host}}/salas/mis-participaciones
+
+> {%
+client.test("agenda 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 12. GET /salas/:id/detalle -> 200
+GET {{host}}/salas/{{salaId}}/detalle
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("detalle 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 13. GET /salas/:id/detalle sin token -> 401
+GET {{host}}/salas/{{salaId}}/detalle
+
+> {%
+client.test("detalle 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 14. GET /salas/:id/detalle inexistente -> 404
+GET {{host}}/salas/{{missingId}}/detalle
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("detalle 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 15. PUT /salas/:id host -> 200
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Daily Backend + Demo"
+}
+
+> {%
+client.test("update 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 16. PUT /salas/:id invitado -> 403
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+Authorization: Bearer {{guestToken}}
+
+{
+  "nombre": "No debería"
+}
+
+> {%
+client.test("update 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+});
+%}
+
+### 17. PUT /salas/:id sin token -> 401
+PUT {{host}}/salas/{{salaId}}
+Content-Type: application/json
+
+{
+  "nombre": "Sin token"
+}
+
+> {%
+client.test("update 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 18. PUT /salas/:id inexistente -> 404
+PUT {{host}}/salas/{{missingId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "No existe"
+}
+
+> {%
+client.test("update 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 19. GET participantes -> 200
+GET {{host}}/salas/{{salaId}}/participantes
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("participantes 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 20. GET participantes sin token -> 401
+GET {{host}}/salas/{{salaId}}/participantes
+
+> {%
+client.test("participantes 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 21. GET participantes inexistente -> 404
+GET {{host}}/salas/{{missingId}}/participantes
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("participantes 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 22. DELETE sin token -> 401
+DELETE {{host}}/salas/{{salaId}}
+
+> {%
+client.test("delete 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 23. DELETE invitado -> 403
+DELETE {{host}}/salas/{{salaId}}
+Authorization: Bearer {{guestToken}}
+
+> {%
+client.test("delete 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+});
+%}
+
+### 24. DELETE inexistente -> 404
+DELETE {{host}}/salas/{{missingId}}
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("delete 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 25. DELETE host -> 200
+DELETE {{host}}/salas/{{salaId}}
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("delete 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 26. POST /salas con fechaInicio en el pasado -> S2-QA2 (sala "expirada")
+# BUG-04 (docs/bugs.md): no existe estado EXPIRED ni respuesta 410.
+# Este caso documenta el comportamiento actual: la sala se crea igual (201)
+# y su código sigue resolviendo por GET normalmente. Si algún día se agrega
+# la validación de expiración, este test hay que cambiarlo a 400/410 y
+# cerrar BUG-04 en docs/bugs.md.
+# @name crearSalaVencida
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Sala vencida QA",
+  "fechaInicio": "2020-01-01T00:00:00.000Z"
+}
+
+> {%
+client.test("crear sala con fecha pasada sigue devolviendo 201 (BUG-04)", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.global.set("salaVencidaCodigo", response.body.codigo);
+});
+%}
+
+### 27. GET /salas/:code de la sala "vencida" -> sigue resolviendo (BUG-04)
+GET {{host}}/salas/{{salaVencidaCodigo}}
+
+> {%
+client.test("sala vencida sigue resolviendo 200 (BUG-04, no hay expiración real)", function() {
+  client.assert(response.status === 200, "status " + response.status);
+});
+%}
+
+### 28. GET /salas/:code con código con formato inválido -> 404 (no 400)
+# Documenta que la validación de formato de código no distingue "mal formado"
+# de "no encontrado": ambos devuelven 404.
+GET {{host}}/salas/@@@---123
+
+> {%
+client.test("codigo con formato invalido da 404, no 400", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 29. GET /salas/:id/detalle con id que no es UUID -> BUG-07: revienta con 500
+# Se esperaría 400 (id mal formado) o 404 (no encontrado), pero el controller
+# pasa el id directo a Prisma sin validar formato UUID antes. Prisma tira una
+# excepción no controlada que el error handler devuelve como 500 genérico.
+# Si se agrega la validación, este test hay que cambiarlo a 400 y cerrar
+# BUG-07 en docs/bugs.md.
+GET {{host}}/salas/no-es-un-uuid/detalle
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("detalle con id no-UUID devuelve 500 en vez de 400/404 (BUG-07)", function() {
+  client.assert(response.status === 500, "status " + response.status);
+});
+%}
+
+### 30. POST /salas -> 201 (sala para probar transfer-host, S3-08 / S3-API)
+# @name crearSalaTransfer
+POST {{host}}/salas
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nombre": "Sala transfer-host QA"
+}
+
+> {%
+client.test("crear sala para transfer-host 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+  client.global.set("salaTransferId", response.body.salaId);
+  client.global.set("salaTransferCodigo", response.body.codigo);
+});
+%}
+
+### 31. GET /auth/me del host -> captura hostUserId (no hay endpoint HTTP de
+# join en develop todavía -- eso es parte de S3-02/join-flow, sin merge -- así
+# que los casos de abajo prueban con el único participante que sí existe hoy
+# vía HTTP: el propio HOST creador).
+GET {{host}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("auth/me del host 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("hostUserId", response.body.id || response.body.usuario?.id);
+});
+%}
+
+### 31b. GET participantes -> captura hostParticipantId para transfer-host
+GET {{host}}/salas/{{salaTransferId}}/participantes
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("captura participante HOST de la sala", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  const hostParticipant = response.body.participantes.find(function(p) {
+    return p.rol === "HOST";
+  });
+  client.assert(!!hostParticipant, "no se encontró el participante HOST");
+  client.global.set("hostParticipantId", hostParticipant.id);
+});
+%}
+
+### 32. POST transfer-host sin token -> 401
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+
+{
+  "nuevoHostId": "00000000-0000-4000-8000-000000000099"
+}
+
+> {%
+client.test("transfer-host sin token 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 33. POST transfer-host sin nuevoHostId -> 400
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{}
+
+> {%
+client.test("transfer-host sin nuevoHostId 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 34. POST transfer-host a uno mismo -> 400
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nuevoHostId": "{{hostParticipantId}}"
+}
+
+> {%
+client.test("transfer-host auto-transferencia 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+});
+%}
+
+### 35. POST transfer-host por un no-HOST -> 403
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{guestToken}}
+
+{
+  "nuevoHostId": "{{hostUserId}}"
+}
+
+> {%
+client.test("transfer-host por no-host 403", function() {
+  client.assert(response.status === 403, "status " + response.status);
+});
+%}
+
+### 36. POST transfer-host a alguien que no es participante de la sala -> 404
+POST {{host}}/salas/{{salaTransferId}}/transfer-host
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "nuevoHostId": "00000000-0000-4000-8000-000000000099"
+}
+
+> {%
+client.test("transfer-host a no-participante 404", function() {
+  client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 37. POST /rooms/:id/token -> body ignorado (S3-08)
+# Se manda un userId/role distinto al del JWT a propósito: si el bug viejo
+# (rol tomado del body) volviera, este test lo detectaría porque el token
+# resultante no correspondería al rol real en DB.
+POST {{host}}/rooms/{{salaTransferId}}/token
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "userId": "00000000-0000-4000-8000-000000000099",
+  "role": "PARTICIPANTE",
+  "callCid": "no-deberia-importar"
+}
+
+> {%
+client.test("rooms/token ignora el body y responde con el token del HOST real", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(!!response.body.token, "falta token");
+});
+%}

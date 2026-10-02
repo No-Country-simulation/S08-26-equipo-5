@@ -1,0 +1,111 @@
+@host = http://localhost:4000/api/v1
+@email = qa-foto-{{$timestamp}}@test.com
+@password = password123
+
+# Foto de perfil. Solo cubre los caminos que NO necesitan Cloudinary real:
+# 401 sin token, y 503 UPLOADS_NOT_CONFIGURED (CI no tiene CLOUDINARY_URL).
+# Si el servidor SI tiene Cloudinary configurado, un PUT sin archivo responde
+# 400 VALIDATION_ERROR: ambos resultados son validos para esos casos.
+
+### 1. Register -> 201
+POST {{host}}/auth/register
+Content-Type: application/json
+
+{
+  "nombre": "Foto",
+  "apellido": "Perfil",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("register 201", function() {
+  client.assert(response.status === 201, "status " + response.status);
+});
+%}
+
+### 2. Login -> 200
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+client.test("login 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.global.set("fotoToken", response.body.accessToken);
+});
+%}
+
+### 3. GET /auth/me incluye fotoUrl null -> 200
+GET {{host}}/auth/me
+Authorization: Bearer {{fotoToken}}
+
+> {%
+client.test("me 200 con fotoUrl null", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(response.body.fotoUrl === null, "fotoUrl " + response.body.fotoUrl);
+});
+%}
+
+### 4. PATCH nombre y apellido -> 200
+PATCH {{host}}/usuarios/me
+Authorization: Bearer {{fotoToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "apellido": "Actualizada"
+}
+
+> {%
+client.test("patch perfil 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(response.body.nombre === "Ana", "nombre " + response.body.nombre);
+  client.assert(response.body.apellido === "Actualizada", "apellido " + response.body.apellido);
+});
+%}
+
+### 5. PUT foto sin token -> 401
+PUT {{host}}/usuarios/me/foto
+
+> {%
+client.test("put foto 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 6. DELETE foto sin token -> 401
+DELETE {{host}}/usuarios/me/foto
+
+> {%
+client.test("delete foto 401", function() {
+  client.assert(response.status === 401, "status " + response.status);
+});
+%}
+
+### 7. PUT foto sin archivo -> 503 (sin Cloudinary) o 400 (con Cloudinary)
+PUT {{host}}/usuarios/me/foto
+Authorization: Bearer {{fotoToken}}
+
+> {%
+client.test("put foto sin archivo 503/400", function() {
+  var ok = response.status === 503 || response.status === 400;
+  client.assert(ok, "status " + response.status);
+  var code = response.body.error.code;
+  client.assert(code === "UPLOADS_NOT_CONFIGURED" || code === "VALIDATION_ERROR", "code " + code);
+});
+%}
+
+### 8. DELETE foto sin foto -> 204 (funciona con o sin Cloudinary)
+DELETE {{host}}/usuarios/me/foto
+Authorization: Bearer {{fotoToken}}
+
+> {%
+client.test("delete foto 204", function() {
+  client.assert(response.status === 204, "status " + response.status);
+});
+%}

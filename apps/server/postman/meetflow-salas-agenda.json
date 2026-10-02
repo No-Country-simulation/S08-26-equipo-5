@@ -1,0 +1,497 @@
+{
+  "info": {
+    "name": "MeetFlow API — Salas & Agenda",
+    "description": "API completa para gestión de salas y agenda (S2-01, S2-02)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api/v1"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "salaId",
+      "value": ""
+    },
+    {
+      "key": "salaCodigo",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/login — Obtener token",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"host@test.com\",\n  \"password\": \"Password123!\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login exitoso', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.accessToken).to.exist;",
+                  "    pm.environment.set('token', body.accessToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S01 — Crear Sala",
+      "item": [
+        {
+          "name": "POST /salas — Crear sala (201)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Reunión Q4\",\n  \"resumen\": \"Presentación de resultados del trimestre\",\n  \"fechaInicio\": \"2026-09-20T10:00:00Z\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sala creada (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.salaId).to.exist;",
+                  "    pm.expect(body.codigo).to.have.length(8);",
+                  "    pm.expect(body.nombre).to.equal('Reunión Q4');",
+                  "    pm.expect(body.enlace).to.contain('/sala/');",
+                  "    pm.expect(body.streamRoomId).to.exist;",
+                  "    pm.environment.set('salaId', body.salaId);",
+                  "    pm.environment.set('salaCodigo', body.codigo);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /salas — Sin token (401)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sala Sin Auth\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Unauthorized (401)', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /salas — Nombre vacío (400)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/salas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Bad Request (400)', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S02 — Consulta Pública",
+      "item": [
+        {
+          "name": "GET /salas/:code — Sala encontrada (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/{{salaCodigo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sala encontrada (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.codigo).to.equal(pm.environment.get('salaCodigo'));",
+                  "    pm.expect(body.nombre).to.be.a('string');",
+                  "    pm.expect(body.estado).to.be.oneOf(['PROGRAMADA', 'ACTIVA', 'FINALIZADA', 'CANCELADA']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /salas/:code — Código inexistente (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/NOEXISTE"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Not Found (404)', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S03 — Agenda (Mis Salas)",
+      "item": [
+        {
+          "name": "GET /salas/mis-salas/list — Mis salas (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/mis-salas/list",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Mis salas (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.salas).to.be.an('array');",
+                  "    if (body.salas.length > 0) {",
+                  "        pm.expect(body.salas[0].esHost).to.be.true;",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S04 — Salas Programadas",
+      "item": [
+        {
+          "name": "GET /salas/programadas/list — Salas futuras (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/programadas/list",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Salas programadas (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.salas).to.be.an('array');",
+                  "    pm.expect(body.salas.length).to.be.at.most(20);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S05 — Detalle de Sala",
+      "item": [
+        {
+          "name": "GET /salas/:id/detalle — Detalle completo (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/{{salaId}}/detalle",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Detalle sala (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.equal(pm.environment.get('salaId'));",
+                  "    pm.expect(body.codigo).to.exist;",
+                  "    pm.expect(body.nombre).to.be.a('string');",
+                  "    pm.expect(body.participantes).to.be.an('array');",
+                  "    pm.expect(body.creador).to.exist;",
+                  "    pm.expect(body.enlace).to.contain('/sala/');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /salas/:id/detalle — Sala inexistente (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/00000000-0000-0000-0000-000000000000/detalle",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Not Found (404)', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S06 — Actualizar Sala",
+      "item": [
+        {
+          "name": "PUT /salas/:id — Actualizar nombre (200)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/salas/{{salaId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Reunión Q4 - Actualizada\",\n  \"resumen\": \"Nuevo resumen de la reunión\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sala actualizada (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.nombre).to.equal('Reunión Q4 - Actualizada');",
+                  "    pm.expect(body.resumen).to.equal('Nuevo resumen de la reunión');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S07 — Cancelar Sala",
+      "item": [
+        {
+          "name": "DELETE /salas/:id — Cancelar sala (200)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/salas/{{salaId}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sala cancelada (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.message).to.contain('cancelada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S08 — Participantes",
+      "item": [
+        {
+          "name": "GET /salas/:id/participantes — Lista (200)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/salas/{{salaId}}/participantes",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Participantes (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.salaId).to.equal(pm.environment.get('salaId'));",
+                  "    pm.expect(body.participantes).to.be.an('array');",
+                  "    pm.expect(body.total).to.be.a('number');",
+                  "    if (body.participantes.length > 0) {",
+                  "        pm.expect(body.participantes[0].rol).to.be.oneOf(['HOST', 'PARTICIPANTE']);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S09 — Generar Token (Legacy)",
+      "item": [
+        {
+          "name": "POST /rooms/:id/token — Token HOST (200)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/rooms/{{salaId}}/token",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-123\",\n  \"role\": \"HOST\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Token generado (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.exist;",
+                  "    pm.expect(body.token.split('.')).to.have.length(3);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

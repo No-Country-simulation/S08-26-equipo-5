@@ -1,0 +1,28 @@
+# Normaliza a LF en checkout en cualquier SO.
+# Sin esto, Git for Windows (core.autocrlf=true) convierte los .sh a CRLF
+# y fallan dentro de los contenedores Linux ("bad interpreter: ^M").
+
+* text=auto eol=lf
+
+# Scripts y config que se ejecutan en Linux/Docker: siempre LF.
+*.sh                 text eol=lf
+Dockerfile           text eol=lf
+*.Dockerfile         text eol=lf
+docker-compose*.yml  text eol=lf
+*.yml                text eol=lf
+*.yaml               text eol=lf
+
+# Scripts nativos de Windows: CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: nunca tocar.
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary

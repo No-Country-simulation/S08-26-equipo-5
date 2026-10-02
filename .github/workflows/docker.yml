@@ -1,0 +1,54 @@
+name: Docker
+
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - ".github/workflows/docker.yml"
+  push:
+    branches: [develop, main]
+    paths:
+      - "apps/**"
+      - ".github/workflows/docker.yml"
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compose build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare env files
+        run: cp apps/server/.env.example apps/server/.env
+
+      - name: Validate compose
+        working-directory: apps
+        run: docker compose config --quiet
+
+      - name: Build dev images
+        working-directory: apps
+        run: docker compose build
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build web (production)
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          target: runner
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build server (production)
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/server
+          target: runner
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

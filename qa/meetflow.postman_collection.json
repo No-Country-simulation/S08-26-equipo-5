@@ -1,0 +1,577 @@
+{
+  "info": {
+    "name": "S08-26-equipo-5 — API MeetFlow",
+    "description": "Documentación generada a partir del backend real (Express + Prisma). Todas las rutas (salvo `/health` y `/webhooks/*`) están montadas bajo el prefijo `/api/v1`.\n\nGenerada desde apps/server/src/docs/openapi.ts.\nSwagger UI: http://localhost:4000/api/v1/docs\nSpec JSON: http://localhost:4000/api/v1/docs.json",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api/v1"
+    },
+    {
+      "key": "rootUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "salaId",
+      "value": "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d"
+    },
+    {
+      "key": "salaCodigo",
+      "value": "ABCD1234"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Estado del servicio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "operationId: health_check"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Registrar usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "operationId: auth_register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Jhon\",\n  \"apellido\": \"Rivera\",\n  \"email\": \"jhon.rivera@example.com\",\n  \"password\": \"NubeAzul#4821\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Iniciar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "operationId: auth_login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jhon.rivera@example.com\",\n  \"password\": \"NubeAzul#4821\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set(\"accessToken\", json.accessToken);",
+                  "if (json.refreshToken) pm.collectionVariables.set(\"refreshToken\", json.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener usuario autenticado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "operationId: auth_me"
+          },
+          "response": []
+        },
+        {
+          "name": "Cerrar sesión (revoca refresh token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "operationId: auth_logout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Renovar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "operationId: auth_refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set(\"accessToken\", json.accessToken);",
+                  "if (json.refreshToken) pm.collectionVariables.set(\"refreshToken\", json.refreshToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Salas",
+      "item": [
+        {
+          "name": "Crear sala",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/salas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas"
+              ]
+            },
+            "description": "operationId: salas_create",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Daily Backend\",\n  \"resumen\": \"Revisión del sprint y bloqueos\",\n  \"fechaInicio\": \"2026-09-15T18:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.salaId) pm.collectionVariables.set(\"salaId\", json.salaId);",
+                  "if (json.codigo) pm.collectionVariables.set(\"salaCodigo\", json.codigo);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener sala por código público",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/salas/:code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas",
+                ":code"
+              ],
+              "variable": [
+                {
+                  "key": "code",
+                  "value": "ABCD1234",
+                  "description": "path"
+                }
+              ]
+            },
+            "description": "operationId: salas_get_by_code"
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener detalle de sala (con participantes)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/salas/:id/detalle",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas",
+                ":id",
+                "detalle"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{salaId}}",
+                  "description": "uuid"
+                }
+              ]
+            },
+            "description": "operationId: salas_get_detalle"
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar sala (solo HOST)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/salas/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{salaId}}",
+                  "description": "uuid"
+                }
+              ]
+            },
+            "description": "operationId: salas_update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"string\",\n  \"resumen\": \"string\",\n  \"fechaInicio\": \"2026-09-15T18:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancelar sala (solo HOST)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/salas/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{salaId}}",
+                  "description": "uuid"
+                }
+              ]
+            },
+            "description": "operationId: salas_delete"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar participantes de una sala",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/salas/:id/participantes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas",
+                ":id",
+                "participantes"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{salaId}}",
+                  "description": "uuid"
+                }
+              ]
+            },
+            "description": "operationId: salas_get_participantes"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agenda",
+      "item": [
+        {
+          "name": "Agenda del usuario: salas donde participo (HOST o PARTICIPANTE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/salas/mis-participaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "salas",
+                "mis-participaciones"
+              ]
+            },
+            "description": "Endpoint de **Agenda** (issue #33 la referenciaba como `GET /agenda`). Devuelve todas las salas donde el usuario autenticado participa, ordenadas por `fechaInicio` descendente. El campo `rol` permite que el frontend distinga entre reuniones creadas (`HOST`) y reuniones a las que fue invitado (`PARTICIPANTE`).\n\noperationId: salas_mis_participaciones"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Legacy",
+      "item": [
+        {
+          "name": "Generar token de GetStream (legacy)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rooms/:id/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rooms",
+                ":id",
+                "token"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{salaId}}",
+                  "description": "uuid"
+                }
+              ]
+            },
+            "description": "operationId: legacy_generate_token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"string\",\n  \"role\": \"HOST\",\n  \"callCid\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Recibir eventos de GetStream (verificados por firma HMAC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rootUrl}}/webhooks/getstream",
+              "host": [
+                "{{rootUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "getstream"
+              ]
+            },
+            "description": "⚠️ Ruta real: `POST /webhooks/getstream` (NO lleva el prefijo `/api/v1`). No requiere JWT; se valida mediante la cabecera de firma HMAC de GetStream.\n\noperationId: webhooks_getstream",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

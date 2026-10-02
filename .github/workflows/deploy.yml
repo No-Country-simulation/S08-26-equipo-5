@@ -1,0 +1,94 @@
+name: Deploy
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "apps/**"
+      - "render.yaml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: false
+
+jobs:
+  # ─── Migraciones de base de datos (Prisma/Neon) ───────────
+  # Corre antes de desplegar el backend para que el nuevo codigo
+  # nunca arranque contra un schema viejo.
+  migrate:
+    name: Prisma migrate deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: apps/server
+        run: npm ci
+
+      - name: Apply pending migrations
+        working-directory: apps/server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+  # ─── Frontend (Vercel por CLI) ────────────────────────────
+  # El repo pertenece a una organizacion de GitHub, por lo que
+  # el plan Hobby de Vercel no puede usar la Git integration.
+  # Se despliega con el token de Vercel desde CI.
+  deploy-web:
+    name: Deploy web (Vercel)
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Vercel secrets
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::Faltan secrets de Vercel (VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID). Ver docs/DEPLOY.md."
+            exit 1
+          fi
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        working-directory: apps/web
+        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+
+      - name: Build project artifacts
+        working-directory: apps/web
+        run: vercel build --prod --token=$VERCEL_TOKEN
+
+      - name: Deploy prebuilt to production
+        working-directory: apps/web
+        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+
+  # ─── Backend (Render deploy hook) ─────────────────────────
+  # Render construye la imagen Docker (target `runner`) y la
+  # despliega. El hook solo se dispara si las migraciones pasaron.
+  deploy-server:
+    name: Deploy server (Render)
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::error::Falta el secret RENDER_DEPLOY_HOOK_URL. Ver docs/DEPLOY.md."
+            exit 1
+          fi
+          curl -fsSL -X POST "$RENDER_DEPLOY_HOOK_URL"
