@@ -157,7 +157,8 @@ export interface StreamTokenResponse {
   token: string;
   /** user_id en GetStream (= Participante.id). */
   userId: string;
-  user: { id: string; name: string };
+  /** image: foto de la cuenta vinculada; null para invitados o sin foto. */
+  user: { id: string; name: string; image: string | null };
   rol: RoomRole;
   callType: string;
   callId: string;
