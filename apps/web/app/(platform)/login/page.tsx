@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { useAuth } from "../../lib/auth";
+import { saveRecoveryContext } from "../../lib/password-recovery";
 import { rutaDestinoSegura } from "../../lib/safe-redirect";
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = rutaDestinoSegura(searchParams.get("next"));
+  const passwordWasReset = searchParams.get("reset") === "1";
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,6 +39,11 @@ function LoginContent() {
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">MeetFlow</p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">Iniciar sesión</h1>
         <p className="mt-3 text-sm text-slate-600">Ingresá para crear reuniones y acceder a tu dashboard.</p>
+        {passwordWasReset && (
+          <p role="status" className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+            Tu contraseña fue actualizada. Iniciá sesión con la nueva.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <label className="block text-sm font-medium text-slate-700">
             Email
@@ -53,6 +60,15 @@ function LoginContent() {
               </button>
             </span>
           </label>
+          <p className="-mt-2 text-right text-sm">
+            <Link
+              href="/recuperar-contrasena"
+              onClick={() => saveRecoveryContext({ email, next: searchParams.get("next") ?? undefined })}
+              className="font-semibold text-blue-600 hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </p>
           {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <button type="submit" disabled={loading} className="w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
             {loading ? "Ingresando…" : "Iniciar sesión"}
