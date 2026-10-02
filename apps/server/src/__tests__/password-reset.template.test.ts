@@ -88,6 +88,15 @@ describe("renderPasswordChangedEmail", () => {
     expect(mail.html).toContain("Si no fuiste vos");
   });
 
+  it("no promete cierre inmediato de todas las sesiones (el access token dura hasta 15 min)", () => {
+    const mail = renderPasswordChangedEmail({ nombre: "Ana", loginUrl: "http://front.test/login" });
+
+    for (const texto of [mail.text, mail.html]) {
+      expect(texto).toContain("pueden tardar hasta 15 minutos en cerrarse por completo");
+      expect(texto).not.toContain("cerramos tus sesiones abiertas");
+    }
+  });
+
   it("escapa el nombre", () => {
     const mail = renderPasswordChangedEmail({
       nombre: "<b>Ana</b>",

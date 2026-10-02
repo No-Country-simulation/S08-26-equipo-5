@@ -550,7 +550,7 @@ export const openApiSpec = {
         description:
           "Mismas reglas de contraseña que el registro (mínimo 8). El token se consume de forma atómica " +
           "(un solo uso: ante dos pedidos concurrentes uno recibe 410), se actualiza el hash y se revocan " +
-          "**todos** los refresh tokens del usuario en una sola transacción. No inicia sesión: el cliente " +
+          "**todos** los refresh tokens del usuario en una sola transacción. Los access tokens ya emitidos siguen valiendo hasta `JWT_EXPIRES_IN` (15 min): las otras sesiones pueden tardar hasta ese tiempo en cerrarse. No inicia sesión: el cliente " +
           "debe hacer login. Se envía un correo de aviso (best-effort). Rate limit por IP: `RATE_LIMIT_TOKEN_MAX`.",
         operationId: "auth_reset_password",
         parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],

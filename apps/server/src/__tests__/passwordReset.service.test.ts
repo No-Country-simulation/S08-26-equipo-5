@@ -121,15 +121,23 @@ describe("solicitarReset", () => {
     expect(a).not.toBe(b);
   });
 
-  it("si el correo falla no propaga el error y no loguea el token ni el enlace", async () => {
-    m.mailer.send.mockRejectedValue(new Error("proveedor caído"));
+  it("si el correo falla no propaga el error y el log solo lleva email enmascarado y nombre/código del error", async () => {
+    const falla = Object.assign(new Error("401 Unauthorized key=xkeysib-SECRETA to ana@x.com"), {
+      name: "BrevoError",
+      code: "ERR_PROVIDER",
+    });
+    m.mailer.send.mockRejectedValue(falla);
 
     await expect(solicitarReset(m.deps, "ana@x.com")).resolves.toBeUndefined();
     await vaciar();
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const logueado = errorSpy.mock.calls.flat().join(" ");
-    expect(logueado).toContain("proveedor caído");
+    expect(logueado).toContain("a***@x.com");
+    expect(logueado).toContain("BrevoError");
+    expect(logueado).toContain("ERR_PROVIDER");
+    expect(logueado).not.toContain("ana@x.com");
+    expect(logueado).not.toContain("SECRETA");
     expect(logueado).not.toContain("restablecer-contrasena");
   });
 

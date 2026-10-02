@@ -548,8 +548,8 @@ Token desconocido, vencido o ya usado: `410 RESET_TOKEN_INVALID` (idéntico en l
 **Response 200:** `{ "message": "Contraseña actualizada" }`. **No inicia sesión**: no devuelve tokens; el cliente debe hacer `POST /auth/login`.
 
 - Consumo atómico del token (update condicional `usedAt IS NULL AND expiresAt > now`): ante dos usos concurrentes uno gana y el otro recibe `410 RESET_TOKEN_INVALID`.
-- En la misma transacción se actualiza el hash de la contraseña y se **revocan todos los refresh tokens del usuario** (todas las familias). Los access tokens ya emitidos siguen valiendo hasta que expiran (`JWT_EXPIRES_IN`, 15 min).
-- Se envía un correo de aviso "tu contraseña fue cambiada" (best-effort).
+- En la misma transacción se actualiza el hash de la contraseña y se **revocan todos los refresh tokens del usuario** (todas las familias). Los access tokens ya emitidos siguen valiendo hasta que expiran (`JWT_EXPIRES_IN`, 15 min por defecto): las sesiones en otros dispositivos **pueden tardar hasta ese tiempo en cerrarse por completo**; no se cierran de inmediato.
+- Se envía un correo de aviso "tu contraseña fue cambiada" (best-effort; no promete cierre inmediato de sesiones). Los fallos de envío se loguean con el email enmascarado y solo el nombre/código del error.
 - Rate limit por IP: `RATE_LIMIT_TOKEN_MAX`, con contador propio (no comparte con las invitaciones).
 
 | Variable | Default | Descripción |

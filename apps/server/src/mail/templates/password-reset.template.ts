@@ -166,15 +166,15 @@ export function renderPasswordChangedEmail(params: PasswordChangedEmailParams): 
 
   const text =
     `${hola.text}\n\n` +
-    "La contraseña de tu cuenta de MeetFlow se cambió hace un momento y cerramos tus sesiones abiertas.\n\n" +
+    "La contraseña de tu cuenta de MeetFlow se cambió hace un momento. Cerramos las sesiones en tus otros dispositivos; pueden tardar hasta 15 minutos en cerrarse por completo.\n\n" +
     `Si no fuiste vos, restablecela de inmediato desde ${params.loginUrl} y revisá la seguridad de tu correo.`;
 
   const html = layout({
     title: subject,
-    preheader: "La contraseña de tu cuenta se cambió. Cerramos tus sesiones abiertas.",
+    preheader: "La contraseña de tu cuenta se cambió. Las sesiones en otros dispositivos se cierran en hasta 15 minutos.",
     eyebrow: "Cuenta de MeetFlow",
     heading: "Tu contraseña fue cambiada",
-    bodyHtml: `${hola.html}<br><br>La contraseña de tu cuenta se cambió hace un momento y cerramos tus sesiones abiertas.`,
+    bodyHtml: `${hola.html}<br><br>La contraseña de tu cuenta se cambió hace un momento. Cerramos las sesiones en tus otros dispositivos; pueden tardar hasta 15 minutos en cerrarse por completo.`,
     footerHtml: `Si no fuiste vos, restablecela de inmediato desde <a href="${escapeHtml(params.loginUrl)}" target="_blank" style="color:${color.blue};text-decoration:underline;">${escapeHtml(params.loginUrl)}</a> y revisá la seguridad de tu correo.`,
     afterFooterHtml: "Te avisamos porque cambió la contraseña de tu cuenta de MeetFlow.",
   });

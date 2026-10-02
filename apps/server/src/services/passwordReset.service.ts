@@ -29,10 +29,10 @@ const invalido = () =>
   new AppError(410, "RESET_TOKEN_INVALID", "El enlace no es válido o ya venció");
 
 /**
- * Envío "fire and forget": no se espera al proveedor de correo para que el
- * tiempo de respuesta no distinga cuentas existentes de inexistentes, y un
- * fallo nunca cambia la respuesta. Se loguea solo destinatario y motivo,
- * jamás el token ni el enlace.
+ * Envío "fire and forget": no se espera al proveedor de correo y un fallo nunca
+ * cambia la respuesta. El log lleva el destinatario enmascarado y solo el
+ * nombre/código del error: el mensaje del proveedor puede traer el email
+ * completo, la API key o el enlace con el token.
  */
 function enviarEnSegundoPlano(
   mailer: MailPort,
@@ -43,8 +43,16 @@ function enviarEnSegundoPlano(
     try {
       await mailer.send(message);
     } catch (error) {
-      const motivo = error instanceof Error ? error.message : "error desconocido";
-      console.error(`[password-reset] falló el envío (${etiqueta}) a ${message.to}: ${motivo}`);
+      const code = (error as { code?: unknown } | null)?.code;
+      const motivo = [
+        error instanceof Error ? error.name : "error desconocido",
+        typeof code === "string" || typeof code === "number" ? String(code) : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      console.error(
+        `[password-reset] falló el envío (${etiqueta}) a ${maskEmail(message.to)}: ${motivo}`,
+      );
     }
   })();
 }
