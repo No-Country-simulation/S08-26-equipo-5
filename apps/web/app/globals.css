@@ -337,9 +337,71 @@ body {
 }
 .stream-conference-layout__video-inner .str-video__speaker-layout__spotlight {
   flex: 1 1 0%;
-  height: auto !important;
+  height: 100%;
+  min-height: 12rem;
+  overflow: hidden;
+}
+.stream-conference-layout__video-inner .str-video__participant-view,
+.stream-conference-layout__video-inner .str-video__video {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.stream-conference-layout__video-inner .str-video__participant-view {
+  position: relative;
+}
+.stream-conference-layout__video-inner .str-video__participant-view--speaking {
+  outline: none;
+}
+.stream-conference-layout__video-inner .str-video__participant-view--speaking::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 3px solid #005fff;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.stream-conference-shares {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.stream-conference-shares__grid {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 0.45rem;
+}
+.stream-conference-shares__tile {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+.stream-conference-shares__tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.stream-conference-shares__tile .str-video__participant-view,
+.stream-conference-shares__cameras .str-video__participant-view {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+.stream-conference-shares__cameras {
+  display: flex;
+  flex: none;
+  gap: 0.4rem;
+  height: 5.5rem;
+  overflow-x: auto;
+}
+.stream-conference-layout__video-inner .stream-conference-shares__cameras .str-video__participant-view {
+  width: 8.5rem;
+  height: 100%;
+  flex: none;
 }
 .stream-conference-layout__video-inner .str-video__speaker-layout__participants-bar-wrapper {
   flex: 0 1 auto;
@@ -367,18 +429,27 @@ body {
   width: 3.25rem;
   height: 3.25rem;
 }
-.stream-conference-layout__controls .str-video__call-controls > .str-video__menu-container {
-  z-index: 30;
-  flex: none;
-  width: auto;
-  height: auto;
+.stream-conference-layout__controls .str-video__call-controls > .str-video__menu-container,
+.stream-conference-layout__controls .str-video__call-controls > .str-video__tooltip {
+  z-index: 40;
+  flex: none !important;
+  width: max-content !important;
+  height: auto !important;
+  max-height: none !important;
   overflow: visible !important;
 }
+.stream-conference-layout__controls .str-video__call-controls > .str-video__tooltip {
+  white-space: nowrap;
+  padding: 0.4rem 0.7rem;
+}
 .stream-conference-layout__controls .str-video__reactions-menu {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  box-sizing: border-box;
   width: max-content;
-  max-width: min(100vw - 1.5rem, 28rem);
+  max-width: none;
   height: auto;
-  flex-wrap: wrap;
   justify-content: center;
   gap: 0.55rem;
   border-radius: 1rem;
@@ -551,7 +622,34 @@ body {
 .stream-conference-sidebar__participants li { display: flex; min-width: 0; align-items: center; gap: 0.65rem; border-radius: 0.75rem; padding: 0.65rem; background: rgb(255 255 255 / 10%); }
 .stream-conference-sidebar__avatar { display: flex; width: 2rem; height: 2rem; flex: none; align-items: center; justify-content: center; border-radius: 50%; background: #d9dce8; color: #252d54; font-weight: 700; }
 .stream-conference-sidebar__participant-name { overflow: hidden; color: white; font-size: 0.85rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.stream-conference-sidebar__participant-name--sharing { color: #8ee8b0; }
+.stream-conference-tile-ui,
+.stream-conference-sharing-tile {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.stream-conference-tile-ui > *,
+.stream-conference-sharing-tile > * { pointer-events: auto; }
+.stream-conference-sharing-tile .str-video__participant-details__name { color: #8ee8b0; }
+.stream-conference-sidebar__live {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border-radius: 50%;
+  background: #3ddc84;
+  box-shadow: 0 0 0 0 rgb(61 220 132 / 70%);
+  animation: stream-share-pulse 1.4s ease-out infinite;
+}
+@keyframes stream-share-pulse {
+  70% { box-shadow: 0 0 0 0.45rem rgb(61 220 132 / 0%); }
+  100% { box-shadow: 0 0 0 0 rgb(61 220 132 / 0%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stream-conference-sidebar__live { animation: none; }
+}
 .stream-conference-sidebar__role { flex: none; color: #bfc4d9; font-size: 0.72rem; }
+.stream-conference-sidebar__role--host { color: #f4e28a; font-weight: 700; }
 .stream-conference-sidebar__audio {
   flex: none;
   margin-left: auto;
@@ -578,7 +676,12 @@ body {
 .stream-conference-sidebar [data-embedded="true"] h2,
 .stream-conference-sidebar [data-embedded="true"] p { color: #e6e8f1; }
 .stream-conference-sidebar [data-embedded="true"] > div:nth-of-type(2) { padding: 0.5rem 0; }
-.stream-conference-sidebar .stream-chat-panel { background: #2c345f; }
+.stream-conference-sidebar .stream-chat-panel {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  background: #2c345f;
+}
 
 @media (max-width: 800px) {
   .room-page { height: 100dvh; padding: 0.75rem 0.75rem 0.15rem; }
@@ -590,6 +693,8 @@ body {
   .stream-conference-layout__controls { padding: 0.15rem 0.5rem 0.2rem; }
   .stream-conference-layout__controls .str-video__call-controls { gap: 0.35rem; border-radius: 0.85rem; padding: 0.4rem; }
   .stream-conference-layout__controls .str-video__call-controls > * { flex-basis: 2.75rem; width: 2.75rem; height: 2.75rem; }
+  .stream-conference-layout__controls .str-video__call-controls > .str-video__menu-container,
+  .stream-conference-layout__controls .str-video__call-controls > .str-video__tooltip { flex-basis: auto; width: max-content; height: auto; }
   .stream-conference-layout__controls .str-video__call-controls .str-video__composite-button { width: 2.75rem; height: 2.75rem; }
   .stream-conference-layout__controls .str-video__call-controls .str-video__call-controls__button:not(.str-video__menu-toggle-button) { width: 2.75rem !important; min-width: 2.75rem; height: 2.75rem !important; min-height: 2.75rem; border-radius: 0.7rem; }
   .stream-conference-layout__controls .str-video__call-controls [data-testid="cancel-call-button"] { width: 2.75rem !important; min-width: 2.75rem !important; height: 2.75rem !important; min-height: 2.75rem !important; border-radius: 0.7rem !important; }
@@ -831,6 +936,7 @@ body {
 
 /* Input area */
 .stream-chat-panel__input-area {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
@@ -839,6 +945,46 @@ body {
   background: rgba(255, 255, 255, 0.03);
   flex-shrink: 0;
 }
+.stream-chat-panel__emoji-picker {
+  position: absolute;
+  z-index: 5;
+  right: 0.75rem;
+  bottom: calc(100% + 0.35rem);
+  left: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  border-radius: 0.85rem;
+  padding: 0.45rem;
+  background: #20294f;
+  box-shadow: 0 12px 32px rgb(8 11 25 / 45%);
+}
+.stream-chat-panel__emoji,
+.stream-chat-panel__emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.stream-chat-panel__emoji {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.45rem;
+}
+.stream-chat-panel__emoji:hover { background: rgb(255 255 255 / 12%); }
+.stream-chat-panel__emoji-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 8%);
+}
+.stream-chat-panel__emoji-btn[aria-expanded="true"] { background: #3d4fdb; }
+.stream-chat-panel__emoji-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .stream-chat-panel__textarea {
   flex: 1 1 0%;

@@ -3,18 +3,23 @@
 import {
   CancelCallButton,
   OwnCapability,
+  DefaultParticipantViewUI,
   ReactionsButton,
   RecordCallButton,
   Restricted,
+  ParticipantView,
+  ParticipantsAudio,
   ScreenShareButton,
   SpeakerLayout,
   SpeakingWhileMutedNotification,
   StreamCall,
   StreamVideo,
   ToggleAudioPublishingButton,
+  useParticipantViewContext,
   ToggleVideoPublishingButton,
+  useCallStateHooks,
 } from "@stream-io/video-react-sdk";
-import { Call, CallingState, hasAudio, StreamVideoClient } from "@stream-io/video-client";
+import { Call, CallingState, hasAudio, hasScreenShare, StreamVideoClient } from "@stream-io/video-client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { UserAvatar } from "./ui/avatar";
 import { displayName } from "../lib/participant-name";
@@ -22,6 +27,60 @@ import { StreamChatPanel } from "./stream-chat-panel";
 import { HostRequestPanel } from "./host-request-panel";
 import type { JoinRequest } from "../lib/host-socket";
 import { transferHost, finalizarSala } from "../lib/salas-api";
+
+const callTranslations = {
+  en: {},
+  es: {
+    Reactions: "Reacciones",
+    Mic: "Micrófono",
+    Video: "Cámara",
+    "Share screen": "Compartir pantalla",
+    "Stop Screen Sharing": "Dejar de compartir",
+    "You are presenting your screen": "Estás compartiendo tu pantalla",
+    "You can now share your screen.": "Ya puedes compartir tu pantalla.",
+    "You can no longer share your screen.": "Ya no puedes compartir tu pantalla.",
+    "Awaiting for an approval to share screen.": "Esperando permiso para compartir pantalla.",
+    "Record call": "Grabar llamada",
+    "End recording": "Detener grabación",
+    "Are you sure you want end the recording?": "¿Quieres detener la grabación?",
+    Cancel: "Cancelar",
+    "Waiting for recording to start...": "Esperando que empiece la grabación…",
+    "Waiting for recording to stop...": "Esperando que termine la grabación…",
+    "Leave call": "Salir de la llamada",
+    "End call for all": "Terminar la llamada para todos",
+    "You are muted. Unmute to speak.": "Estás silenciado. Activa el micrófono para hablar.",
+    "Microphone on": "Micrófono activado",
+    "Microphone off": "Micrófono silenciado",
+    "Camera on": "Cámara activada",
+    "Camera off": "Cámara apagada",
+    "You can now speak.": "Ya puedes hablar.",
+    "You can no longer speak.": "Ya no puedes hablar.",
+    "You can now share your video.": "Ya puedes compartir tu cámara.",
+    "You can no longer share your video.": "Ya no puedes compartir tu cámara.",
+    "You have no permission to share your audio": "No tienes permiso para usar el micrófono",
+    "You have no permission to share your video": "No tienes permiso para usar la cámara",
+    Pin: "Fijar",
+    Unpin: "Dejar de fijar",
+    "Pin for everyone": "Fijar para todos",
+    "Unpin for everyone": "Dejar de fijar para todos",
+    Block: "Bloquear",
+    Kick: "Expulsar",
+    "Turn off video": "Apagar cámara",
+    "Turn off screen share": "Dejar de compartir pantalla",
+    "Mute audio": "Silenciar audio",
+    "Mute screen share audio": "Silenciar el audio de la pantalla",
+    "Allow audio": "Permitir audio",
+    "Allow video": "Permitir cámara",
+    "Allow screen sharing": "Permitir compartir pantalla",
+    "Disable audio": "Desactivar audio",
+    "Disable video": "Desactivar cámara",
+    "Disable screen sharing": "Desactivar pantalla compartida",
+    Enter: "Entrar en",
+    Leave: "Salir de",
+    "{{ direction }} fullscreen": "{{ direction }} pantalla completa",
+    "{{ direction }} picture-in-picture": "{{ direction }} imagen en imagen",
+  },
+};
 
 type StreamConferenceProps = {
   apiKey: string;
@@ -57,12 +116,81 @@ type RoomParticipant = {
   isLocal: boolean;
   isCallHost: boolean;
   publishingAudio: boolean;
+  sharingScreen: boolean;
 };
 
 const HOST_UNMUTE_EVENT = "meetflow.host-unmute";
 
+let streamSessionChain: Promise<void> = Promise.resolve();
+
+function enqueueStreamSession(task: () => Promise<void>): Promise<void> {
+  const run = streamSessionChain.then(task, task);
+  streamSessionChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 function isStreamHostRole(role: string | undefined) {
   return role === "admin" || role === "host";
+}
+
+function SharingParticipantUI({ menuPlacement = "bottom-start" }: { menuPlacement?: "bottom-start" | "top-end" }) {
+  const { participant } = useParticipantViewContext();
+  const sharing = hasScreenShare(participant);
+  return (
+    <div className={sharing ? "stream-conference-sharing-tile" : "stream-conference-tile-ui"}>
+      <DefaultParticipantViewUI menuPlacement={menuPlacement} />
+    </div>
+  );
+}
+
+function SharingParticipantBarUI() {
+  return <SharingParticipantUI menuPlacement="top-end" />;
+}
+
+function CallStage() {
+  const { useParticipants } = useCallStateHooks();
+  const participants = useParticipants();
+  const sharing = participants.filter((participant) => hasScreenShare(participant));
+  const remote = participants.filter((participant) => !participant.isLocalParticipant);
+
+  if (sharing.length < 2) {
+    return (
+      <SpeakerLayout
+        participantsBarPosition="bottom"
+        ParticipantViewUISpotlight={SharingParticipantUI}
+        ParticipantViewUIBar={SharingParticipantBarUI}
+      />
+    );
+  }
+
+  return (
+    <div className="stream-conference-shares">
+      <ParticipantsAudio participants={remote} />
+      <div className="stream-conference-shares__grid">
+        {sharing.map((participant) => (
+          <div key={participant.sessionId} className="stream-conference-shares__tile">
+            <ParticipantView
+              participant={participant}
+              trackType="screenShareTrack"
+              muteAudio
+              ParticipantViewUI={SharingParticipantUI}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="stream-conference-shares__cameras">
+        {participants.map((participant) => (
+          <ParticipantView
+            key={participant.sessionId}
+            participant={participant}
+            trackType="videoTrack"
+            muteAudio
+            ParticipantViewUI={SharingParticipantBarUI}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 async function enableMicrophoneFromHost(call: Call) {
@@ -267,6 +395,7 @@ export function StreamConference({
           isLocal: Boolean(participant.isLocalParticipant || participant.userId === user.id),
           isCallHost,
           publishingAudio: hasAudio(participant),
+          sharingScreen: hasScreenShare(participant),
         };
       }));
       setLocalCanSendAudio(call.permissionsContext.hasPermission(OwnCapability.SEND_AUDIO));
@@ -389,12 +518,16 @@ export function StreamConference({
       return disconnectPromise;
     };
 
-    const setupPromise = (async () => {
+    const setupPromise = enqueueStreamSession(async () => {
+      if (!active) return;
       await nextClient.connectUser(
         { id: user.id, name: user.name, ...(user.image ? { image: user.image } : {}) },
         token,
       );
-      if (!active) return;
+      if (!active) {
+        await disconnectClient().catch(() => {});
+        return;
+      }
 
       // Best-effort camera probe: a missing camera/mic must NEVER block
       // joining. The user joins first and publishes later if devices exist.
@@ -409,13 +542,17 @@ export function StreamConference({
           // No camera available — the user still joins as viewer/listener.
         }
       }
-      if (!active) return;
+      if (!active) {
+        await disconnectClient().catch(() => {});
+        return;
+      }
 
       await nextCall.join({ create: false });
       joined = true;
       if (!active) {
-        await nextCall.leave();
+        await nextCall.leave().catch(() => {});
         joined = false;
+        await disconnectClient().catch(() => {});
         return;
       }
 
@@ -427,8 +564,9 @@ export function StreamConference({
         await nextCall.camera.disable().catch(() => {});
       }
       if (!active) {
-        await nextCall.leave();
+        await nextCall.leave().catch(() => {});
         joined = false;
+        await disconnectClient().catch(() => {});
         return;
       }
       try {
@@ -437,14 +575,15 @@ export function StreamConference({
         await nextCall.microphone.disable().catch(() => {});
       }
       if (!active) {
-        await nextCall.leave();
+        await nextCall.leave().catch(() => {});
         joined = false;
+        await disconnectClient().catch(() => {});
         return;
       }
 
       setClient(nextClient);
       setCall(nextCall);
-    })().catch(async (joinError: unknown) => {
+    }).catch(async (joinError: unknown) => {
       if (active) {
         setError(
           joinError instanceof Error
@@ -463,8 +602,8 @@ export function StreamConference({
 
     return () => {
       active = false;
-      void (async () => {
-        await setupPromise;
+      void enqueueStreamSession(async () => {
+        await setupPromise.catch(() => {});
         if (joined && nextCall.state.callingState !== CallingState.LEFT && !isEndingCall) {
           await nextCall.leave().catch(() => {});
           joined = false;
@@ -472,7 +611,7 @@ export function StreamConference({
         if (connectionGenerationRef.current === connectionGeneration) {
           await disconnectClient().catch(() => {});
         }
-      })();
+      });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, callId, callType, token, user.id, user.name]);
@@ -646,13 +785,13 @@ export function StreamConference({
           👑 Ahora sos el host de esta reunión. Podés transferir el rol o finalizarla para todos.
         </div>
       )}
-      <StreamVideo client={client}>
+      <StreamVideo client={client} language="es" fallbackLanguage="en" translationsOverrides={callTranslations}>
         <StreamCall call={call}>
           <div className="stream-conference-layout">
             {/* ── Video area ── */}
             <div className="stream-conference-layout__video">
               <div className="stream-conference-layout__video-inner">
-                <SpeakerLayout participantsBarPosition="bottom" />
+                <CallStage />
               </div>
               <div className="stream-conference-layout__controls">
                 <div className="str-video__call-controls">
@@ -715,8 +854,11 @@ export function StreamConference({
                           return (
                           <li key={participant.sessionId}>
                             <UserAvatar name={participant.name} src={participant.image} decorative className="stream-conference-sidebar__avatar" />
-                            <span className="stream-conference-sidebar__participant-name">{participant.name}{participant.isLocal ? " (Vos)" : ""}</span>
-                            <span className="stream-conference-sidebar__role">{showAsHost ? "Anfitrión" : "Participante"}</span>
+                            <span className={`stream-conference-sidebar__participant-name${participant.sharingScreen ? " stream-conference-sidebar__participant-name--sharing" : ""}`}>{participant.name}{participant.isLocal ? " (Vos)" : ""}</span>
+                            {participant.sharingScreen && (
+                              <span className="stream-conference-sidebar__live" role="img" title="Está compartiendo pantalla" aria-label="Está compartiendo pantalla" />
+                            )}
+                            <span className={`stream-conference-sidebar__role${showAsHost ? " stream-conference-sidebar__role--host" : ""}`}>{showAsHost ? "Anfitrión" : "Participante"}</span>
                             {effectiveIsHost && !participant.isLocal && (
                               <button
                                 type="button"
