@@ -377,6 +377,13 @@ body {
   grid-auto-rows: minmax(0, 1fr);
   gap: 0.45rem;
 }
+.stream-conference-shares--single .stream-conference-shares__grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.stream-conference-shares__tile .str-video__video {
+  object-fit: contain;
+  background: #080b19;
+}
 .stream-conference-shares__tile {
   min-width: 0;
   min-height: 0;
@@ -419,6 +426,7 @@ body {
 }
 .stream-conference-layout__controls .str-video__call-controls {
   gap: 0.6rem;
+  overflow: visible;
   border-radius: 1rem;
   padding: 0.55rem;
   background: #20294f;
@@ -609,12 +617,101 @@ body {
   flex: none;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   margin: 0 1.25rem;
   border-bottom: 1px solid rgb(255 255 255 / 18%);
-  padding: 1.25rem 0 0.9rem;
+  padding: 1rem 0 0.9rem;
 }
-.stream-conference-sidebar__header h2 { margin: 0; font-size: 1rem; font-weight: 700; }
-.stream-conference-sidebar__header button { border: 0; background: transparent; color: white; font-size: 1.75rem; line-height: 1; cursor: pointer; }
+.stream-conference-sidebar__switch {
+  display: flex;
+  min-width: 0;
+  gap: 0.35rem;
+}
+.stream-conference-sidebar__switch button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: #d5d8ea;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.stream-conference-sidebar__switch button[aria-selected="true"] {
+  background: #3d4fdb;
+  color: white;
+}
+.stream-conference-sidebar__close {
+  border: 0;
+  background: transparent;
+  color: white;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.stream-conference-layout__controls .str-video__call-controls > .stream-conference-record-wrap {
+  position: relative;
+  overflow: visible;
+}
+.stream-conference-record-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stream-conference-record {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.85rem;
+  background: #303f99;
+  color: white;
+  cursor: pointer;
+}
+.stream-conference-record-menu {
+  position: absolute;
+  bottom: calc(100% + 0.55rem);
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  width: max-content;
+  gap: 0.2rem;
+  transform: translateX(-50%);
+  border-radius: 0.85rem;
+  padding: 0.35rem;
+  background: #20294f;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 28%);
+}
+.stream-conference-record-menu button {
+  border: 0;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.stream-conference-record-menu button:hover {
+  background: #3d4fdb;
+}
+.stream-conference-record__dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: #ff5a6a;
+}
+.stream-conference-record--live {
+  background: #d94f62;
+}
+.stream-conference-record--live .stream-conference-record__dot {
+  background: white;
+  animation: stream-share-pulse 1.4s ease-out infinite;
+}
 .stream-conference-sidebar__content { min-height: 0; flex: 1; overflow-y: auto; padding: 0 1.25rem 1.25rem; }
 .stream-conference-sidebar__section { margin-top: 1rem; }
 .stream-conference-sidebar__section h3 { margin: 0 0 0.65rem; color: #ffe45e; font-size: 0.875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
@@ -650,9 +747,16 @@ body {
 }
 .stream-conference-sidebar__role { flex: none; color: #bfc4d9; font-size: 0.72rem; }
 .stream-conference-sidebar__role--host { color: #f4e28a; font-weight: 700; }
+.stream-conference-sidebar__actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+.stream-conference-sidebar__host,
 .stream-conference-sidebar__audio {
   flex: none;
-  margin-left: auto;
+  margin-left: 0;
   border: 0;
   border-radius: 999px;
   padding: 0.35rem 0.7rem;
@@ -662,6 +766,11 @@ body {
   font-weight: 700;
   cursor: pointer;
 }
+.stream-conference-sidebar__host {
+  background: #f4e28a;
+  color: #1c2344;
+}
+.stream-conference-sidebar__host:disabled,
 .stream-conference-sidebar__audio:disabled { cursor: wait; opacity: 0.6; }
 .stream-conference-layout__muted-note {
   margin: 0.45rem 0 0;

@@ -34,6 +34,7 @@ export type SalaDetalle = Sala & {
     rol: "HOST" | "PARTICIPANTE";
     estado: string;
     fechaIngreso: string | null;
+    puedeSerHost?: boolean;
   }>;
 };
 
@@ -83,6 +84,7 @@ export type ParticipanteSala = {
   rol: "HOST" | "PARTICIPANTE";
   estado: string;
   fechaIngreso: string | null;
+  puedeSerHost?: boolean;
 };
 
 export type ParticipantesResponse = {
@@ -258,6 +260,19 @@ export function getStreamToken(
     `/salas/${encodeURIComponent(salaId)}/stream-token`,
     token,
     { method: "POST" },
+  );
+}
+
+export function promoteHost(
+  salaId: string,
+  nuevoHostId: string,
+): Promise<{ message: string; host: { usuarioId: string } }> {
+  return request(
+    `/salas/${encodeURIComponent(salaId)}/promote-host`,
+    {
+      method: "POST",
+      body: JSON.stringify({ nuevoHostId }),
+    },
   );
 }
 

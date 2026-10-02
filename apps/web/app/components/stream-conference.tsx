@@ -5,7 +5,6 @@ import {
   OwnCapability,
   DefaultParticipantViewUI,
   ReactionsButton,
-  RecordCallButton,
   Restricted,
   ParticipantView,
   ParticipantsAudio,
@@ -26,7 +25,13 @@ import { displayName } from "../lib/participant-name";
 import { StreamChatPanel } from "./stream-chat-panel";
 import { HostRequestPanel } from "./host-request-panel";
 import type { JoinRequest } from "../lib/host-socket";
-import { transferHost, finalizarSala } from "../lib/salas-api";
+import { transferHost, promoteHost, finalizarSala, getParticipantes } from "../lib/salas-api";
+import { downloadRecording, LocalCallRecorder, type RecordingMode } from "../lib/local-call-recorder";
+import {
+  otherSessionHoldsSameMic,
+  readSelectedMicLabel,
+  type MicClaim,
+} from "../lib/mic-lock";
 
 const callTranslations = {
   en: {},
@@ -100,6 +105,7 @@ type StreamConferenceProps = {
   onApproveRequest?: (participanteId: string) => void;
   onRejectRequest?: (participanteId: string) => void;
   onLeave?: (error?: Error) => void;
+  onBecameHost?: () => void;
 };
 
 // ── Participant type used in the transfer-host modal ──
@@ -120,6 +126,36 @@ type RoomParticipant = {
 };
 
 const HOST_UNMUTE_EVENT = "meetflow.host-unmute";
+const MIC_CLAIM_EVENT = "meetflow.mic-claim";
+const MIC_LOCK_MESSAGE = "Ese micrófono ya está abierto en otro navegador de esta cuenta.";
+const RECORDING_STATUS: Record<RecordingMode, string> = {
+  meeting: "Grabando la reunión, con video y audio. Al detener, se descarga el archivo.",
+  audio: "Grabando solo audio. Al detener, se descarga el archivo.",
+  video: "Grabando solo video. Al detener, se descarga el archivo.",
+};
+
+async function enableLocalCamera(call: Call): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await call.camera.enable();
+      return "";
+    } catch (cause) {
+      lastError = cause;
+      await call.camera.disable().catch(() => undefined);
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+    }
+  }
+
+  const cameras = await navigator.mediaDevices?.enumerateDevices?.()
+    .then((devices) => devices.filter((device) => device.kind === "videoinput"))
+    .catch(() => []);
+  console.error("No se pudo abrir la cámara local", lastError);
+  if (!cameras || cameras.length === 0) {
+    return "Este navegador no ve tu cámara. En Nobara, permití la cámara en el navegador y revisá que PipeWire la esté mostrando. Las cámaras de los demás no dependen de la tuya.";
+  }
+  return "La cámara aparece en el sistema, pero el navegador no pudo abrirla. En Linux suele quedar ocupada si otra aplicación la está usando.";
+}
 
 let streamSessionChain: Promise<void> = Promise.resolve();
 
@@ -153,7 +189,7 @@ function CallStage() {
   const sharing = participants.filter((participant) => hasScreenShare(participant));
   const remote = participants.filter((participant) => !participant.isLocalParticipant);
 
-  if (sharing.length < 2) {
+  if (sharing.length === 0) {
     return (
       <SpeakerLayout
         participantsBarPosition="bottom"
@@ -164,7 +200,7 @@ function CallStage() {
   }
 
   return (
-    <div className="stream-conference-shares">
+    <div className={`stream-conference-shares${sharing.length === 1 ? " stream-conference-shares--single" : ""}`}>
       <ParticipantsAudio participants={remote} />
       <div className="stream-conference-shares__grid">
         {sharing.map((participant) => (
@@ -178,19 +214,20 @@ function CallStage() {
           </div>
         ))}
       </div>
-      <div className="stream-conference-shares__cameras">
-        {participants.map((participant) => (
-          <ParticipantView
-            key={participant.sessionId}
-            participant={participant}
-            trackType="videoTrack"
-            muteAudio
-            ParticipantViewUI={SharingParticipantBarUI}
-          />
-        ))}
-      </div>
     </div>
   );
+}
+
+function ShareSidebarSync({ onShareCount }: { onShareCount: (count: number) => void }) {
+  const { useParticipants } = useCallStateHooks();
+  const participants = useParticipants();
+  const count = participants.filter((participant) => hasScreenShare(participant)).length;
+
+  useEffect(() => {
+    onShareCount(count);
+  }, [count, onShareCount]);
+
+  return null;
 }
 
 async function enableMicrophoneFromHost(call: Call) {
@@ -215,12 +252,14 @@ function HostLeaveModal({
   onEndForEveryone,
   onTransfer,
   onCancel,
+  listError = "",
 }: {
   participants: CallParticipant[];
   transferring: boolean;
   onEndForEveryone: () => void;
   onTransfer: (userId: string) => void;
   onCancel: () => void;
+  listError?: string;
 }) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
@@ -294,9 +333,15 @@ function HostLeaveModal({
           </div>
         )}
 
-        {participants.length === 0 && (
+        {listError && (
+          <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {listError}
+          </p>
+        )}
+
+        {participants.length === 0 && !listError && (
           <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-            No hay otros participantes en la llamada a quienes transferir el rol.
+            No hay otra cuenta en la llamada para dejarle el rol. Quien entró como invitado no puede ser anfitrión.
           </p>
         )}
 
@@ -329,6 +374,7 @@ export function StreamConference({
   onApproveRequest,
   onRejectRequest,
   onLeave,
+  onBecameHost,
 }: StreamConferenceProps) {
   const [client, setClient] = useState<StreamVideoClient | null>(null);
   const [call, setCall] = useState<Call | null>(null);
@@ -347,10 +393,28 @@ export function StreamConference({
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [otherParticipants, setOtherParticipants] = useState<CallParticipant[]>([]);
+  const [leaveListError, setLeaveListError] = useState("");
+  const [promotableIds, setPromotableIds] = useState<Set<string>>(new Set());
+  const [hostBusyId, setHostBusyId] = useState<string | null>(null);
   const [isStreamHost, setIsStreamHost] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<RecordingMode | null>(null);
+  const [recordMenuOpen, setRecordMenuOpen] = useState(false);
+  const [recordingError, setRecordingError] = useState("");
+  const [cameraNotice, setCameraNotice] = useState("");
+  const [micLockMessage, setMicLockMessage] = useState("");
+  const micClaimsRef = useRef<Map<string, MicClaim>>(new Map());
+  const stageRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<LocalCallRecorder | null>(null);
+  const shareCountRef = useRef(0);
   const connectionGenerationRef = useRef(0);
 
   const effectiveIsHost = Boolean(isHost || isStreamHost);
+
+  useEffect(() => {
+    if (!isStreamHost || isHost) return;
+    onBecameHost?.();
+  }, [isHost, isStreamHost, onBecameHost]);
   const pendingRequestsCount = requests.filter(
     (request) => request.status === "pending" || request.status === "approving" || request.status === "rejecting",
   ).length;
@@ -429,6 +493,129 @@ export function StreamConference({
     });
     return () => {
       unsub();
+    };
+  }, [call, user.id]);
+
+  useEffect(() => {
+    if (!call) return;
+    const microphone = call.microphone;
+    const originalEnable = microphone.enable.bind(microphone);
+    const originalToggle = microphone.toggle.bind(microphone);
+    let since = 0;
+    let checking = false;
+
+    const sameAccountSessions = () => (call.state.participants ?? [])
+      .filter((participant) => participant.userId === user.id && !participant.isLocalParticipant)
+      .map((participant) => ({
+        sessionId: participant.sessionId,
+        publishingAudio: hasAudio(participant),
+      }));
+
+    const holdsSameMic = async () => {
+      const label = await readSelectedMicLabel(microphone.state.selectedDevice);
+      return otherSessionHoldsSameMic(
+        sameAccountSessions(),
+        call.state.localParticipant?.sessionId,
+        label,
+        micClaimsRef.current,
+      );
+    };
+
+    const publishClaim = async (active: boolean) => {
+      const sessionId = call.state.localParticipant?.sessionId;
+      if (!sessionId) return;
+      const label = await readSelectedMicLabel(microphone.state.selectedDevice);
+      await call.sendCustomEvent({
+        type: MIC_CLAIM_EVENT,
+        userId: user.id,
+        sessionId,
+        label,
+        active,
+        since,
+      }).catch(() => undefined);
+    };
+
+    const patchedEnable = async () => {
+      if (await holdsSameMic()) {
+        setMicLockMessage(MIC_LOCK_MESSAGE);
+        if (microphone.state.status === "enabled") {
+          await microphone.disable();
+        }
+        return;
+      }
+      await originalEnable();
+      if (!since) since = Date.now();
+      setMicLockMessage("");
+      await publishClaim(true);
+    };
+
+    microphone.enable = patchedEnable as typeof microphone.enable;
+    microphone.toggle = (async () => {
+      if (microphone.state.status === "enabled") {
+        await microphone.disable();
+        since = 0;
+        setMicLockMessage("");
+        await publishClaim(false);
+        return;
+      }
+      await patchedEnable();
+    }) as typeof microphone.toggle;
+
+    const unsubCustom = call.on("custom", (event) => {
+      const payload = event.custom;
+      if (!payload || payload.type !== MIC_CLAIM_EVENT || payload.userId !== user.id) return;
+      if (typeof payload.sessionId !== "string") return;
+      micClaimsRef.current.set(payload.sessionId, {
+        sessionId: payload.sessionId,
+        label: typeof payload.label === "string" ? payload.label : "",
+        active: payload.active !== false,
+        since: typeof payload.since === "number" ? payload.since : 0,
+      });
+      if (microphone.state.status !== "enabled" || checking) return;
+      checking = true;
+      void holdsSameMic()
+        .then(async (blocked) => {
+          if (!blocked) return;
+          const claimSince = [...micClaimsRef.current.values()]
+            .filter((claim) => claim.active && claim.sessionId !== call.state.localParticipant?.sessionId)
+            .map((claim) => claim.since)
+            .filter((value) => value > 0);
+          const earliestOther = claimSince.length > 0 ? Math.min(...claimSince) : 0;
+          if (since > 0 && (earliestOther === 0 || since <= earliestOther)) return;
+          await microphone.disable();
+          since = 0;
+          setMicLockMessage(MIC_LOCK_MESSAGE);
+          await publishClaim(false);
+        })
+        .finally(() => {
+          checking = false;
+        });
+    });
+
+    const statusSub = microphone.state.status$.subscribe((status) => {
+      if (status !== "enabled" || checking) return;
+      checking = true;
+      void holdsSameMic()
+        .then(async (blocked) => {
+          if (blocked) {
+            await microphone.disable();
+            since = 0;
+            setMicLockMessage(MIC_LOCK_MESSAGE);
+            return;
+          }
+          if (!since) since = Date.now();
+          await publishClaim(true);
+        })
+        .finally(() => {
+          checking = false;
+        });
+    });
+
+    return () => {
+      microphone.enable = originalEnable;
+      microphone.toggle = originalToggle;
+      unsubCustom();
+      statusSub.unsubscribe();
     };
   }, [call, user.id]);
 
@@ -529,24 +716,6 @@ export function StreamConference({
         return;
       }
 
-      // Best-effort camera probe: a missing camera/mic must NEVER block
-      // joining. The user joins first and publishes later if devices exist.
-      if (navigator.mediaDevices?.getUserMedia) {
-        try {
-          const permissionStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          });
-          permissionStream.getTracks().forEach((track) => track.stop());
-        } catch {
-          // No camera available — the user still joins as viewer/listener.
-        }
-      }
-      if (!active) {
-        await disconnectClient().catch(() => {});
-        return;
-      }
-
       await nextCall.join({ create: false });
       joined = true;
       if (!active) {
@@ -556,13 +725,10 @@ export function StreamConference({
         return;
       }
 
-      // Publishing is best-effort too: without devices the user stays
-      // connected and can still see/hear the meeting.
-      try {
-        await nextCall.camera.enable();
-      } catch {
-        await nextCall.camera.disable().catch(() => {});
-      }
+      // Una sola apertura. En Linux (PipeWire) un intento previo deja la
+      // webcam ocupada y el segundo falla, aunque las cámaras ajenas se vean.
+      const cameraMessage = await enableLocalCamera(nextCall);
+      if (active) setCameraNotice(cameraMessage);
       if (!active) {
         await nextCall.leave().catch(() => {});
         joined = false;
@@ -618,45 +784,126 @@ export function StreamConference({
 
   // ── Collect other participants when the modal opens ──
   useEffect(() => {
+    if (!salaId || !effectiveIsHost) return;
+    let active = true;
+    void getParticipantes(salaId)
+      .then((roster) => {
+        if (!active) return;
+        setPromotableIds(new Set(
+          roster.participantes
+            .filter((person) => person.puedeSerHost && person.rol !== "HOST")
+            .map((person) => person.id),
+        ));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [salaId, effectiveIsHost, participants.length]);
+
+  useEffect(() => {
     if (!showLeaveModal || !call || !salaId) return;
 
     let active = true;
     setOtherParticipants([]);
+    setLeaveListError("");
 
-    // Stream asigna IDs de participante tanto a cuentas como a invitados.
-    // Usamos el indicador de cuenta registrada que el servidor guarda en el
-    // perfil de Stream. Refrescamos miembros para no depender de metadatos
-    // que pudieron quedar en caché antes de que la cuenta ingresara.
-    void call
-      .get()
-      .then(() => {
+    void Promise.all([call.get().catch(() => undefined), getParticipantes(salaId)])
+      .then(([, roster]) => {
         if (!active) return;
-        const members = call.state.members ?? [];
-        const registeredIds = new Set(
-          members
-            .filter((member) => member.user?.custom?.registered === true)
-            .map((member) => member.user_id),
+        const eligible = new Set(
+          roster.participantes
+            .filter((person) => person.puedeSerHost)
+            .map((person) => person.id),
         );
-        const participants = call.state.participants ?? [];
-        const others: CallParticipant[] = participants
-          .filter((participant) => !participant.isLocalParticipant)
-          .filter((participant) => participant.userId !== user.id)
-          .filter((participant) => registeredIds.has(participant.userId))
-          .map((participant) => ({
-            userId: participant.userId,
-            name: participant.name || participant.userId,
-          }));
-
-        setOtherParticipants(others);
+        const inCall = call.state.participants ?? [];
+        setOtherParticipants(
+          inCall
+            .filter((participant) => !participant.isLocalParticipant)
+            .filter((participant) => participant.userId !== user.id)
+            .filter((participant) => eligible.has(participant.userId))
+            .map((participant) => ({
+              userId: participant.userId,
+              name: participant.name || participant.userId,
+            })),
+        );
       })
       .catch((err) => {
-        console.error("No se pudo actualizar la lista de participantes de GetStream", err);
+        if (!active) return;
+        setLeaveListError(err instanceof Error ? err.message : "No se pudo cargar a quién dejar el rol.");
       });
 
     return () => {
       active = false;
     };
   }, [showLeaveModal, call, salaId, user.id]);
+
+  const handleShareCount = useCallback((count: number) => {
+    if (shareCountRef.current === 0 && count > 0) {
+      setActiveSidebar((current) => current ?? "chat");
+    }
+    shareCountRef.current = count;
+  }, []);
+
+  const toggleRecording = useCallback(async (mode?: RecordingMode) => {
+    if (!call || !stageRef.current) return;
+    setRecordingError("");
+    setRecordMenuOpen(false);
+    if (recorderRef.current) {
+      const recorder = recorderRef.current;
+      const savedMode = recorder.recordingMode;
+      recorderRef.current = null;
+      setRecording(false);
+      setRecordingMode(null);
+      try {
+        downloadRecording(await recorder.stop(), savedMode);
+      } catch (cause) {
+        setRecordingError(cause instanceof Error ? cause.message : "No se pudo guardar la grabación.");
+      }
+      return;
+    }
+    if (!mode) return;
+
+    const audioStreams = call.state.participants.flatMap((participant) => (
+      [participant.audioStream, participant.screenShareAudioStream].filter((stream): stream is MediaStream => Boolean(stream))
+    ));
+    const recorder = new LocalCallRecorder();
+    try {
+      await recorder.start(stageRef.current, audioStreams, mode);
+      recorderRef.current = recorder;
+      setRecordingMode(mode);
+      setRecording(true);
+    } catch (cause) {
+      setRecordingError(cause instanceof Error ? cause.message : "No se pudo empezar a grabar.");
+    }
+  }, [call]);
+
+  useEffect(() => () => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+      if (recorder) {
+      void recorder.stop().then((blob) => downloadRecording(blob, recorder.recordingMode)).catch(() => undefined);
+    }
+  }, []);
+
+  const assignCoHost = useCallback(async (userId: string) => {
+    if (!call || !salaId) return;
+    setHostBusyId(userId);
+    setAudioActionError("");
+    try {
+      await promoteHost(salaId, userId);
+      setPromotableIds((current) => {
+        const next = new Set(current);
+        next.delete(userId);
+        return next;
+      });
+      await call.get().catch(() => undefined);
+    } catch (cause) {
+      setAudioActionError(cause instanceof Error ? cause.message : "No se pudo asignar el anfitrión.");
+    } finally {
+      setHostBusyId(null);
+    }
+  }, [call, salaId]);
 
   const setRemoteAudio = useCallback(async (userId: string, enabled: boolean) => {
     if (!call) return;
@@ -787,10 +1034,11 @@ export function StreamConference({
       )}
       <StreamVideo client={client} language="es" fallbackLanguage="en" translationsOverrides={callTranslations}>
         <StreamCall call={call}>
+          <ShareSidebarSync onShareCount={handleShareCount} />
           <div className="stream-conference-layout">
             {/* ── Video area ── */}
             <div className="stream-conference-layout__video">
-              <div className="stream-conference-layout__video-inner">
+              <div ref={stageRef} className="stream-conference-layout__video-inner">
                 <CallStage />
               </div>
               <div className="stream-conference-layout__controls">
@@ -809,19 +1057,44 @@ export function StreamConference({
                   <Restricted requiredGrants={[OwnCapability.SCREENSHARE]}>
                     <ScreenShareButton />
                   </Restricted>
-                  <Restricted
-                    requiredGrants={[
-                      OwnCapability.START_RECORD_CALL,
-                      OwnCapability.STOP_RECORD_CALL,
-                    ]}
-                  >
-                    <RecordCallButton />
-                  </Restricted>
+                  {effectiveIsHost && (
+                    <div className="stream-conference-record-wrap">
+                      <button
+                        type="button"
+                        className={`stream-conference-record${recording ? " stream-conference-record--live" : ""}`}
+                        aria-pressed={recording}
+                        aria-expanded={recordMenuOpen}
+                        aria-haspopup="menu"
+                        aria-label={recording ? "Detener y descargar" : "Opciones de grabación"}
+                        title={recording ? "Detener y descargar" : "Grabar"}
+                        onClick={() => {
+                          if (recording) {
+                            void toggleRecording();
+                            return;
+                          }
+                          setRecordMenuOpen((open) => !open);
+                        }}
+                      >
+                        <span className="stream-conference-record__dot" aria-hidden="true" />
+                      </button>
+                      {recordMenuOpen && !recording && (
+                        <div className="stream-conference-record-menu" role="menu">
+                          <button type="button" role="menuitem" onClick={() => void toggleRecording("meeting")}>Grabar reunión</button>
+                          <button type="button" role="menuitem" onClick={() => void toggleRecording("audio")}>Grabar audio</button>
+                          <button type="button" role="menuitem" onClick={() => void toggleRecording("video")}>Grabar video</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <CancelCallButton onClick={handleLeave} />
                 </div>
                 {!localCanSendAudio && !effectiveIsHost && (
                   <p className="stream-conference-layout__muted-note" role="status">El anfitrión silenció tu micrófono.</p>
                 )}
+                {recording && recordingMode && <p className="stream-conference-layout__muted-note" role="status">{RECORDING_STATUS[recordingMode]}</p>}
+                {recordingError && <p className="stream-conference-layout__muted-note" role="alert">{recordingError}</p>}
+                {cameraNotice && <p className="stream-conference-layout__muted-note" role="status">{cameraNotice}</p>}
+                {micLockMessage && <p className="stream-conference-layout__muted-note" role="status">{micLockMessage}</p>}
 
               </div>
             </div>
@@ -830,14 +1103,31 @@ export function StreamConference({
             {activeSidebar && (
               <aside className="stream-conference-layout__chat stream-conference-sidebar" aria-label={activeSidebar === "chat" ? "Chat de la reunión" : "Participantes de la reunión"}>
                 <div className="stream-conference-sidebar__header">
-                  <h2>{activeSidebar === "chat" ? "Chat" : `Participantes (${participants.length})`}</h2>
-                  <button type="button" onClick={() => setActiveSidebar(null)} aria-label="Cerrar panel">×</button>
+                  <div className="stream-conference-sidebar__switch" role="tablist" aria-label="Panel de la reunión">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSidebar === "chat"}
+                      onClick={() => setActiveSidebar("chat")}
+                    >
+                      Chat
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSidebar === "participants"}
+                      onClick={() => setActiveSidebar("participants")}
+                    >
+                      Participantes
+                    </button>
+                  </div>
+                  <button type="button" className="stream-conference-sidebar__close" onClick={() => setActiveSidebar(null)} aria-label="Cerrar panel">×</button>
                 </div>
                 {activeSidebar === "chat" ? (
                   <StreamChatPanel apiKey={apiKey} token={token} user={user} channelId={callId} />
                 ) : (
                   <div className="stream-conference-sidebar__content">
-                    {isHost && (
+                    {effectiveIsHost && (
                       <section className="stream-conference-sidebar__section">
                         <h3>Solicitudes de ingreso</h3>
                         {onApproveRequest && onRejectRequest ? (
@@ -860,14 +1150,26 @@ export function StreamConference({
                             )}
                             <span className={`stream-conference-sidebar__role${showAsHost ? " stream-conference-sidebar__role--host" : ""}`}>{showAsHost ? "Anfitrión" : "Participante"}</span>
                             {effectiveIsHost && !participant.isLocal && (
-                              <button
-                                type="button"
-                                className="stream-conference-sidebar__audio"
-                                disabled={audioBusyId === participant.userId}
-                                onClick={() => void setRemoteAudio(participant.userId, !participant.publishingAudio)}
-                              >
-                                {participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
-                              </button>
+                              <div className="stream-conference-sidebar__actions">
+                                {promotableIds.has(participant.userId) && !showAsHost && (
+                                  <button
+                                    type="button"
+                                    className="stream-conference-sidebar__host"
+                                    disabled={hostBusyId === participant.userId}
+                                    onClick={() => void assignCoHost(participant.userId)}
+                                  >
+                                    {hostBusyId === participant.userId ? "Asignando…" : "Hacer anfitrión"}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="stream-conference-sidebar__audio"
+                                  disabled={audioBusyId === participant.userId}
+                                  onClick={() => void setRemoteAudio(participant.userId, !participant.publishingAudio)}
+                                >
+                                  {participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
+                                </button>
+                              </div>
                             )}
                           </li>
                           );
@@ -931,6 +1233,7 @@ export function StreamConference({
               onEndForEveryone={endCallForEveryone}
               onTransfer={transferHostAndLeave}
               onCancel={() => setShowLeaveModal(false)}
+              listError={leaveListError}
             />
           )}
         </StreamCall>

@@ -239,6 +239,7 @@ export const openApiSpec = {
           estado: { $ref: "#/components/schemas/EstadoParticipante" },
           fechaIngreso: { type: "string", format: "date-time", nullable: true },
           fotoUrl: { type: "string", format: "uri", nullable: true, description: "Foto de la cuenta vinculada; null para invitados o sin foto" },
+          puedeSerHost: { type: "boolean", description: "true si tiene cuenta registrada y no está INVITADO" },
         },
       },
       InvitarBody: {
@@ -939,6 +940,45 @@ export const openApiSpec = {
           },
           403: { description: "La cuenta no es participante de la sala (NOT_A_PARTICIPANT)", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           404: { description: "Sala no encontrada", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/salas/{id}/promote-host": {
+      post: {
+        tags: ["Salas"],
+        summary: "Sumar otro anfitrión sin quitar el rol actual",
+        description:
+          "Solo un HOST puede promover. El caller sigue siendo HOST y el target también " +
+          "pasa a HOST. El target debe tener cuenta registrada y no estar INVITADO. " +
+          "En GetStream el target queda como admin; el caller no se degrada.",
+        operationId: "salas_promote_host",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TransferHostBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Anfitrión asignado, o ya lo era",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    host: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: "`nuevoHostId` ausente, auto-asignación o INVITADO", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "Solo el HOST puede asignar otro anfitrión", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada o el target no tiene cuenta", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },
