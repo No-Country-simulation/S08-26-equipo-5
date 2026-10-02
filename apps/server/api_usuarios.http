@@ -51,7 +51,25 @@ client.test("me 200 con fotoUrl null", function() {
 });
 %}
 
-### 4. PUT foto sin token -> 401
+### 4. PATCH nombre y apellido -> 200
+PATCH {{host}}/usuarios/me
+Authorization: Bearer {{fotoToken}}
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "apellido": "Actualizada"
+}
+
+> {%
+client.test("patch perfil 200", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(response.body.nombre === "Ana", "nombre " + response.body.nombre);
+  client.assert(response.body.apellido === "Actualizada", "apellido " + response.body.apellido);
+});
+%}
+
+### 5. PUT foto sin token -> 401
 PUT {{host}}/usuarios/me/foto
 
 > {%
@@ -60,7 +78,7 @@ client.test("put foto 401", function() {
 });
 %}
 
-### 5. DELETE foto sin token -> 401
+### 6. DELETE foto sin token -> 401
 DELETE {{host}}/usuarios/me/foto
 
 > {%
@@ -69,7 +87,7 @@ client.test("delete foto 401", function() {
 });
 %}
 
-### 6. PUT foto sin archivo -> 503 (sin Cloudinary) o 400 (con Cloudinary)
+### 7. PUT foto sin archivo -> 503 (sin Cloudinary) o 400 (con Cloudinary)
 PUT {{host}}/usuarios/me/foto
 Authorization: Bearer {{fotoToken}}
 
@@ -82,7 +100,7 @@ client.test("put foto sin archivo 503/400", function() {
 });
 %}
 
-### 7. DELETE foto sin foto -> 204 (funciona con o sin Cloudinary)
+### 8. DELETE foto sin foto -> 204 (funciona con o sin Cloudinary)
 DELETE {{host}}/usuarios/me/foto
 Authorization: Bearer {{fotoToken}}
 

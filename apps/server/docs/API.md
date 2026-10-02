@@ -521,6 +521,26 @@ escuchar `participant:state`/`participant:connection` en la room `sala:{id}`.
 
 ---
 
+## Usuarios — perfil
+
+### PATCH /usuarios/me — Cambiar nombre y apellido
+
+**Auth:** JWT requerido · **Content-Type:** `application/json`
+
+```json
+{ "nombre": "Ana", "apellido": "Pérez" }
+```
+
+Ambos campos son obligatorios, se recortan y no pueden superar 100 caracteres. El usuario sale del token; el cuerpo no acepta `id` ni `email`.
+
+**Response 200:** la misma forma que `GET /auth/me` (`id`, `nombre`, `apellido`, `email`, `fotoUrl`).
+
+| Status | `error.code` | Cuándo |
+| --- | --- | --- |
+| 400 | VALIDATION_ERROR | Falta un campo, no es texto, queda vacío o supera 100 caracteres |
+| 401 | — | Sin token |
+| 404 | USER_NOT_FOUND | El `sub` del token no es un usuario |
+
 ## Usuarios — foto de perfil
 
 La imagen pasa por el backend y se guarda en Cloudinary (recorte 256x256 centrado en la cara). Sin `CLOUDINARY_URL` solo `PUT` responde `503 UPLOADS_NOT_CONFIGURED`; `DELETE` sigue funcionando (limpia la base y omite el borrado remoto). El resto del servidor funciona igual. Cada subida usa un identificador opaco (UUID) en Cloudinary, sin el id del usuario; la foto anterior se borra tras guardar la nueva.

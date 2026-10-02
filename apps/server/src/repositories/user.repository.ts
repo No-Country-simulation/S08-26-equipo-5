@@ -31,6 +31,8 @@ export interface IUserRepository {
     expectedPublicId: string | null,
     foto: { fotoUrl: string; fotoPublicId: string },
   ): Promise<boolean>;
+  /** null si el usuario no existe. */
+  updateDatos(id: string, datos: { nombre: string; apellido: string }): Promise<User | null>;
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -82,5 +84,12 @@ export class PrismaUserRepository implements IUserRepository {
       data: foto,
     });
     return result.count > 0;
+  }
+
+  async updateDatos(id: string, datos: { nombre: string; apellido: string }): Promise<User | null> {
+    const existing = await prisma.usuario.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) return null;
+    const usuario = await prisma.usuario.update({ where: { id }, data: datos });
+    return toUser(usuario);
   }
 }

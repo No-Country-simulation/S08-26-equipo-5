@@ -38,3 +38,25 @@ export async function uploadProfilePhoto(file: File) {
 export async function removeProfilePhoto() {
   await requestPhoto("/usuarios/me/foto", { method: "DELETE" });
 }
+
+export async function updateProfile(datos: { nombre: string; apellido: string }) {
+  const token = getAccessToken();
+  if (!token) throw new Error("Iniciá sesión para editar tu perfil.");
+
+  const response = await fetch(`${API_URL}/usuarios/me`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(datos),
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ApiErrorResponse | null;
+    const message = typeof body?.error === "string"
+      ? body.error
+      : body?.error?.message ?? body?.message ?? "No se pudo actualizar el perfil.";
+    throw new Error(message);
+  }
+}

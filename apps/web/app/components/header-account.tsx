@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import Image from "next/image";
 import { AuthModal } from "./auth-modal";
 import { useAuth } from "../lib/auth";
-import { removeProfilePhoto, uploadProfilePhoto } from "../lib/usuarios-api";
+import { removeProfilePhoto, updateProfile, uploadProfilePhoto } from "../lib/usuarios-api";
 
 const accountButton =
   "rounded-lg px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
@@ -133,13 +133,17 @@ export function HeaderAccount() {
 
 function ProfileSettingsDialog({ onClose, onPhotoChanged }: { onClose: () => void; onPhotoChanged: () => Promise<void> }) {
   const { user } = useAuth();
+  const [nombre, setNombre] = useState(user?.nombre ?? "");
+  const [apellido, setApellido] = useState(user?.apellido ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const fullName = [user?.nombre, user?.apellido].filter(Boolean).join(" ");
+  const fullName = [nombre, apellido].filter(Boolean).join(" ") || [user?.nombre, user?.apellido].filter(Boolean).join(" ");
+  const nameChanged = nombre.trim() !== (user?.nombre ?? "") || apellido.trim() !== (user?.apellido ?? "");
+  const canSave = (nameChanged || Boolean(file)) && nombre.trim().length > 0 && apellido.trim().length > 0;
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -163,18 +167,23 @@ function ProfileSettingsDialog({ onClose, onPhotoChanged }: { onClose: () => voi
     setFile(selected);
   }
 
-  async function savePhoto(event: FormEvent<HTMLFormElement>) {
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!file) return;
+    if (!canSave) return;
     setSaving(true);
     setError("");
     try {
-      await uploadProfilePhoto(file);
+      if (nameChanged) {
+        await updateProfile({ nombre: nombre.trim(), apellido: apellido.trim() });
+      }
+      if (file) {
+        await uploadProfilePhoto(file);
+        setFile(null);
+      }
       await onPhotoChanged();
       setSaved(true);
-      setFile(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo guardar la foto.");
+      setError(cause instanceof Error ? cause.message : "No se pudo guardar el perfil.");
     } finally {
       setSaving(false);
     }
@@ -199,12 +208,40 @@ function ProfileSettingsDialog({ onClose, onPhotoChanged }: { onClose: () => voi
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#080b19]/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" className="w-full max-w-md rounded-[24px] border border-[#e8dc76] bg-[#f7f7fa] p-5 text-[#1c2452] shadow-[0_18px_55px_rgba(8,11,25,0.3)] sm:p-6">
         <header className="flex items-center justify-between">
-          <h2 id="profile-settings-title" className="text-lg font-bold">Editar foto de perfil</h2>
+          <h2 id="profile-settings-title" className="text-lg font-bold">Editar perfil</h2>
           <button type="button" onClick={onClose} disabled={saving} aria-label="Cerrar" className="rounded-lg p-1 text-2xl leading-none text-[#1c2452] hover:bg-[#e9eaf1] disabled:opacity-50">×</button>
         </header>
 
-        <form onSubmit={savePhoto} className="mt-4">
-          <div className="flex flex-col items-center">
+        <form onSubmit={saveProfile} className="mt-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-[#1c2452]">
+              Nombre
+              <input
+                value={nombre}
+                onChange={(event) => {
+                  setNombre(event.target.value);
+                  setSaved(false);
+                }}
+                maxLength={100}
+                autoComplete="given-name"
+                className="mt-1 w-full rounded-xl border border-[#d5d8e6] bg-white px-3 py-2 text-sm outline-none focus:border-[#3d4fdb]"
+              />
+            </label>
+            <label className="block text-sm font-medium text-[#1c2452]">
+              Apellido
+              <input
+                value={apellido}
+                onChange={(event) => {
+                  setApellido(event.target.value);
+                  setSaved(false);
+                }}
+                maxLength={100}
+                autoComplete="family-name"
+                className="mt-1 w-full rounded-xl border border-[#d5d8e6] bg-white px-3 py-2 text-sm outline-none focus:border-[#3d4fdb]"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-col items-center">
             <Avatar name={fullName} photo={previewUrl ?? user?.fotoUrl ?? null} size="large" />
             <label className="mt-3 cursor-pointer text-sm font-medium text-[#3d4fdb] underline-offset-2 hover:underline">
               Cambiar foto
@@ -219,7 +256,7 @@ function ProfileSettingsDialog({ onClose, onPhotoChanged }: { onClose: () => voi
           {saved && <p role="status" className="mt-3 text-sm font-medium text-emerald-700">Perfil actualizado.</p>}
           <footer className="mt-5 flex justify-end gap-3">
             <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border border-[#d94f62] px-5 py-2.5 text-sm font-semibold text-[#d94f62] hover:bg-[#fff0f1] disabled:opacity-50">Cancelar</button>
-            <button type="submit" disabled={!file || saving} className="rounded-xl border border-[#3d4fdb] bg-[#3d4fdb] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3344c4] disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Guardando…" : "Guardar"}</button>
+            <button type="submit" disabled={!canSave || saving} className="rounded-xl border border-[#3d4fdb] bg-[#3d4fdb] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#3344c4] disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Guardando…" : "Guardar"}</button>
           </footer>
         </form>
       </section>

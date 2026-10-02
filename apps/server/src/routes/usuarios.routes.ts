@@ -7,18 +7,20 @@ import { createLimiter } from "../middlewares/rateLimit.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 import { PrismaUserRepository } from "../repositories/user.repository.js";
 import { UsuarioFotoService } from "../services/usuarioFoto.service.js";
+import { UsuarioPerfilService } from "../services/usuarioPerfil.service.js";
 import { createImageStorage } from "../storage/cloudinary.storage.js";
 import { AppError } from "../utils/AppError.js";
 
 export interface UsuariosRouterDeps {
   service: UsuarioFotoService;
+  perfil?: UsuarioPerfilService;
   maxBytes: number;
   /** Máximo de operaciones de foto por usuario cada 15 minutos. */
   rateLimitMax: number;
 }
 
-export function createUsuariosRouter({ service, maxBytes, rateLimitMax }: UsuariosRouterDeps): Router {
-  const controller = new UsuariosController(service);
+export function createUsuariosRouter({ service, perfil, maxBytes, rateLimitMax }: UsuariosRouterDeps): Router {
+  const controller = new UsuariosController(service, perfil);
 
   // memoryStorage: nunca se escribe a disco. `fileSize` corta el stream en
   // cuanto se excede el máximo (no se bufferea un archivo gigante).
@@ -61,6 +63,10 @@ export function createUsuariosRouter({ service, maxBytes, rateLimitMax }: Usuari
 
   const router = Router();
 
+  if (perfil) {
+    router.patch("/usuarios/me", verifyToken, controller.updatePerfil.bind(controller));
+  }
+
   router.put(
     "/usuarios/me/foto",
     verifyToken,
@@ -89,6 +95,7 @@ export function buildUsuariosRouter(): Router {
   );
   return createUsuariosRouter({
     service,
+    perfil: new UsuarioPerfilService(new PrismaUserRepository()),
     maxBytes: env.avatarMaxBytes,
     rateLimitMax: env.rateLimitAvatarMax,
   });

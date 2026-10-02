@@ -468,6 +468,41 @@ export const openApiSpec = {
         },
       },
     },
+    "/usuarios/me": {
+      patch: {
+        tags: ["Usuarios"],
+        summary: "Cambiar nombre y apellido",
+        description:
+          "Actualiza el nombre y el apellido del usuario autenticado. Ambos campos son obligatorios, " +
+          "se recortan y tienen un máximo de 100 caracteres. El id sale del token.",
+        operationId: "usuarios_patch_me",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["nombre", "apellido"],
+                properties: {
+                  nombre: { type: "string", maxLength: 100 },
+                  apellido: { type: "string", maxLength: 100 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Perfil actualizado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/MeResponse" } } },
+          },
+          400: { description: "`VALIDATION_ERROR`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "`USER_NOT_FOUND`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
     "/usuarios/me/foto": {
       put: {
         tags: ["Usuarios"],
