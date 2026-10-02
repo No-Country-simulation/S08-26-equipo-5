@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { StreamVideoClient } from "@stream-io/video-client";
+import { UserAvatar } from "./ui/avatar";
 import { useStreamChat, type ChatMessage } from "../lib/use-stream-chat";
 
 type StreamChatPanelProps = {
   apiKey: string;
   token: string;
-  user: { id: string; name: string };
+  user: { id: string; name: string; image?: string | null };
   channelId: string;
 };
 
@@ -67,15 +68,6 @@ export function StreamChatPanel({
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
-
-  function getInitials(name: string) {
-    return name
-      .split(" ")
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase();
   }
 
   // Color palette for avatars based on userId hash
@@ -158,12 +150,13 @@ export function StreamChatPanel({
               >
                 {/* Avatar — only for others */}
                 {!group[0].isOwn && (
-                  <div
-                    className={`stream-chat-panel__avatar bg-gradient-to-br ${getAvatarColor(group[0].userId)}`}
-                    aria-hidden="true"
-                  >
-                    {getInitials(group[0].userName)}
-                  </div>
+                  <UserAvatar
+                    name={group[0].userName}
+                    src={group[0].userImage}
+                    decorative
+                    className="stream-chat-panel__avatar"
+                    fallbackClassName={`bg-gradient-to-br text-white ${getAvatarColor(group[0].userId)}`}
+                  />
                 )}
 
                 <div className="stream-chat-panel__message-group-content">

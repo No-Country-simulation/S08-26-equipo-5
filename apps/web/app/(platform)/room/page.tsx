@@ -274,6 +274,7 @@ function RoomContent() {
               user={{
                 id: streamConnection.user.id,
                 name: streamConnection.user.name,
+                image: streamConnection.user.image ?? null,
               }}
               callType={streamConnection.callType}
               callId={streamConnection.callId}

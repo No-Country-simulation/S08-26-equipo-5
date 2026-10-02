@@ -167,6 +167,16 @@ describe("POST /salas/:salaId/stream-token — image", () => {
     expect(mockIssueCallAccess).toHaveBeenCalledWith(
       expect.objectContaining({ isRegistered: true, image: "https://cdn/v1/h.jpg" }),
     );
+    expect(res.body.user.image).toBe("https://cdn/v1/h.jpg");
+  });
+
+  it("user.image es null sin foto (invitado o cuenta sin avatar)", async () => {
+    mockParticipanteFindFirst.mockResolvedValue({ ...p("host", { fotoUrl: null }, "HOST"), sala });
+
+    const res = await request(app).post("/api/v1/salas/55555555-5555-4555-8555-555555555555/stream-token").set(auth);
+
+    expect(res.status).toBe(200);
+    expect(res.body.user).toHaveProperty("image", null);
   });
 
   it("image queda undefined sin foto", async () => {

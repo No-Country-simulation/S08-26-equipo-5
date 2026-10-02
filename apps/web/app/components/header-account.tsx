@@ -1,24 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import Image from "next/image";
 import { AuthModal } from "./auth-modal";
 import { useAuth } from "../lib/auth";
+import { UserAvatar } from "./ui/avatar";
 import { removeProfilePhoto, uploadProfilePhoto } from "../lib/usuarios-api";
 
 const accountButton =
   "rounded-lg px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 
-function Avatar({ name, photo, size = "normal" }: { name: string; photo: string | null; size?: "small" | "normal" | "large" }) {
-  const sizeClass = size === "small" ? "h-7 w-7 text-xs" : size === "large" ? "h-20 w-20 text-2xl" : "h-9 w-9 text-sm";
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#d9dce8] font-semibold text-[#252d54] ${sizeClass}`}
-      aria-label={name || "Avatar de perfil"}
-    >
-      {photo ? <Image src={photo} alt="" width={80} height={80} unoptimized className="h-full w-full object-cover" /> : name.trim().charAt(0).toUpperCase() || "?"}
-    </span>
-  );
+function Avatar({ name, photo, size = "normal", decorative = false }: { name: string; photo: string | null; size?: "small" | "normal" | "large"; decorative?: boolean }) {
+  const mapped = size === "small" ? "xs" : size === "large" ? "xl" : "sm";
+  return <UserAvatar name={name} src={photo} size={mapped} initialsCount={1} decorative={decorative} />;
 }
 
 export function HeaderAccount() {
@@ -75,7 +68,7 @@ export function HeaderAccount() {
         }}
         className="flex items-center gap-2 rounded-xl bg-[#2f3ba8]/90 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#27328f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
       >
-        <Avatar name={fullName} photo={user?.fotoUrl ?? null} size="small" />
+        <Avatar name={fullName} photo={user?.fotoUrl ?? null} size="small" decorative />
         <span className="max-w-28 truncate">{user?.nombre || "Cuenta"}</span>
         <svg viewBox="0 0 20 20" fill="none" className={`h-4 w-4 transition-transform ${menuOpen ? "rotate-180" : ""}`} aria-hidden="true">
           <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -85,7 +78,7 @@ export function HeaderAccount() {
       {menuOpen && (
         <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#20294f] p-2 text-white shadow-xl" role="menu">
           <div className="flex items-center gap-2.5 border-b border-white/15 px-2 py-2.5">
-            <Avatar name={fullName} photo={user?.fotoUrl ?? null} size="small" />
+            <Avatar name={fullName} photo={user?.fotoUrl ?? null} size="small" decorative />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{fullName}</p>
               <p className="truncate text-xs text-white/65">{user?.email ?? ""}</p>

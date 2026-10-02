@@ -1037,7 +1037,7 @@ export const openApiSpec = {
                   apiKey: "gs-api-key",
                   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                   userId: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
-                  user: { id: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d", name: "Ana Pérez" },
+                  user: { id: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d", name: "Ana Pérez", image: "https://cdn.example.com/v1/ana.jpg" },
                   rol: "HOST",
                   callType: "default",
                   callId: "abc-123",

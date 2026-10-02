@@ -817,7 +817,7 @@ export async function getStreamToken(
     apiKey: env.getstreamApiKey,
     token,
     userId: ctx.participanteId,
-    user: { id: ctx.participanteId, name: nombreCompleto },
+    user: { id: ctx.participanteId, name: nombreCompleto, image: ctx.fotoUrl ?? null },
     rol: ctx.rol,
     callType: call.callType,
     callId: call.callId,

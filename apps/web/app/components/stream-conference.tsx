@@ -16,6 +16,8 @@ import {
 } from "@stream-io/video-react-sdk";
 import { Call, CallingState, hasAudio, StreamVideoClient } from "@stream-io/video-client";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { UserAvatar } from "./ui/avatar";
+import { displayName } from "../lib/participant-name";
 import { StreamChatPanel } from "./stream-chat-panel";
 import { HostRequestPanel } from "./host-request-panel";
 import type { JoinRequest } from "../lib/host-socket";
@@ -27,6 +29,7 @@ type StreamConferenceProps = {
   user: {
     id: string;
     name: string;
+    image?: string | null;
   };
   callType: string;
   callId: string;
@@ -50,6 +53,7 @@ type RoomParticipant = {
   sessionId: string;
   userId: string;
   name: string;
+  image: string | null;
   isLocal: boolean;
   isCallHost: boolean;
   publishingAudio: boolean;
@@ -259,6 +263,7 @@ export function StreamConference({
           sessionId: participant.sessionId,
           userId: participant.userId,
           name: participant.name || participant.userId,
+          image: participant.image || null,
           isLocal: Boolean(participant.isLocalParticipant || participant.userId === user.id),
           isCallHost,
           publishingAudio: hasAudio(participant),
@@ -372,7 +377,7 @@ export function StreamConference({
 
     const nextClient = StreamVideoClient.getOrCreateInstance({
       apiKey,
-      user: { id: user.id, name: user.name },
+      user: { id: user.id, name: user.name, ...(user.image ? { image: user.image } : {}) },
       token,
     });
     const nextCall = nextClient.call(callType, callId);
@@ -385,7 +390,10 @@ export function StreamConference({
     };
 
     const setupPromise = (async () => {
-      await nextClient.connectUser({ id: user.id, name: user.name }, token);
+      await nextClient.connectUser(
+        { id: user.id, name: user.name, ...(user.image ? { image: user.image } : {}) },
+        token,
+      );
       if (!active) return;
 
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -607,7 +615,8 @@ export function StreamConference({
       {requestToast && (
         <div className="stream-conference-request-toast" role="status" aria-live="polite">
           <span className="stream-conference-request-toast__dot" aria-hidden="true" />
-          <p><strong>{requestToast.nombre} {requestToast.apellido}</strong> se quiere unir</p>
+          <UserAvatar name={displayName(requestToast)} src={requestToast.fotoUrl} size="xs" decorative />
+          <p><strong>{displayName(requestToast)}</strong> se quiere unir</p>
           <button
             type="button"
             onClick={() => {
@@ -693,7 +702,7 @@ export function StreamConference({
                           const showAsHost = participant.isCallHost || (participant.isLocal && effectiveIsHost);
                           return (
                           <li key={participant.sessionId}>
-                            <span className="stream-conference-sidebar__avatar" aria-hidden="true">{participant.name.charAt(0).toUpperCase()}</span>
+                            <UserAvatar name={participant.name} src={participant.image} decorative className="stream-conference-sidebar__avatar" />
                             <span className="stream-conference-sidebar__participant-name">{participant.name}{participant.isLocal ? " (Vos)" : ""}</span>
                             <span className="stream-conference-sidebar__role">{showAsHost ? "Anfitrión" : "Participante"}</span>
                             {effectiveIsHost && !participant.isLocal && (

@@ -594,6 +594,7 @@ curl -X PUT http://localhost:4000/api/v1/usuarios/me/foto \
 ### Dónde se ve la foto
 
 - `GET /auth/me`, `GET /salas/:id/participantes`, `GET /salas/:id/detalle`, y los eventos `join:pending` / `room:state`: campo `fotoUrl`.
+- `POST /salas/:salaId/stream-token` (y el alias `POST /rooms/:id/token`): `user.image` (`string | null`, aditivo) con la foto de la cuenta; `null` para invitados. Sirve para conectar el chat con `{ id, name, image }`.
 - GetStream: al pedir el token de la llamada se sincroniza como `image` del usuario (avatar en video y chat). La foto nueva (o su baja) se refleja en GetStream recién en el próximo `stream-token` que pida el participante.
 
 ### Variables de entorno
