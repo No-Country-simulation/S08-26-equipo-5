@@ -14,7 +14,7 @@ import {
   ToggleAudioPublishingButton,
   ToggleVideoPublishingButton,
 } from "@stream-io/video-react-sdk";
-import { Call, CallingState, StreamVideoClient } from "@stream-io/video-client";
+import { Call, CallingState, hasAudio, StreamVideoClient } from "@stream-io/video-client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { StreamChatPanel } from "./stream-chat-panel";
 import { HostRequestPanel } from "./host-request-panel";
@@ -45,6 +45,36 @@ type CallParticipant = {
   userId: string;
   name: string;
 };
+
+type RoomParticipant = {
+  sessionId: string;
+  userId: string;
+  name: string;
+  isLocal: boolean;
+  isCallHost: boolean;
+  publishingAudio: boolean;
+};
+
+const HOST_UNMUTE_EVENT = "meetflow.host-unmute";
+
+function isStreamHostRole(role: string | undefined) {
+  return role === "admin" || role === "host";
+}
+
+async function enableMicrophoneFromHost(call: Call) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await call.microphone.enable();
+      return;
+    } catch (cause) {
+      if (attempt === 4) {
+        console.error("El anfitrión reactivó el micrófono, pero no se pudo publicar el audio", cause);
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+    }
+  }
+}
 
 // ── Host Leave Modal ──────────────────────────────────────────
 function HostLeaveModal({
@@ -172,7 +202,10 @@ export function StreamConference({
   const [call, setCall] = useState<Call | null>(null);
   const [error, setError] = useState("");
   const [activeSidebar, setActiveSidebar] = useState<"chat" | "participants" | null>("participants");
-  const [participants, setParticipants] = useState<Array<{ sessionId: string; name: string; isLocal: boolean }>>([]);
+  const [participants, setParticipants] = useState<RoomParticipant[]>([]);
+  const [localCanSendAudio, setLocalCanSendAudio] = useState(true);
+  const [audioBusyId, setAudioBusyId] = useState<string | null>(null);
+  const [audioActionError, setAudioActionError] = useState("");
   const [requestToast, setRequestToast] = useState<JoinRequest | null>(null);
   const notifiedRequestIdsRef = useRef(new Set<string>());
   const requestToastTimeoutRef = useRef<number | null>(null);
@@ -217,19 +250,51 @@ export function StreamConference({
     if (!call) return;
 
     const syncParticipants = () => {
-      setParticipants((call.state.participants ?? []).map((participant) => ({
-        sessionId: participant.sessionId,
-        name: participant.name || participant.userId,
-        isLocal: Boolean(participant.isLocalParticipant || participant.userId === user.id),
-      })));
+      const members = call.state.members ?? [];
+      setParticipants((call.state.participants ?? []).map((participant) => {
+        const member = members.find((item) => item.user_id === participant.userId);
+        const isCallHost = isStreamHostRole(member?.role)
+          || participant.roles.some((role) => isStreamHostRole(role));
+        return {
+          sessionId: participant.sessionId,
+          userId: participant.userId,
+          name: participant.name || participant.userId,
+          isLocal: Boolean(participant.isLocalParticipant || participant.userId === user.id),
+          isCallHost,
+          publishingAudio: hasAudio(participant),
+        };
+      }));
+      setLocalCanSendAudio(call.permissionsContext.hasPermission(OwnCapability.SEND_AUDIO));
     };
 
     syncParticipants();
+    const subscription = call.state.participants$.subscribe(() => {
+      syncParticipants();
+    });
     const unsubJoined = call.on("call.session_participant_joined", syncParticipants);
     const unsubLeft = call.on("call.session_participant_left", syncParticipants);
+    const unsubPermissions = call.on("call.permissions_updated", syncParticipants);
+    const unsubMember = call.on("call.member_updated", syncParticipants);
+    const refresh = window.setInterval(syncParticipants, 1000);
     return () => {
+      subscription.unsubscribe();
       unsubJoined();
       unsubLeft();
+      unsubPermissions();
+      unsubMember();
+      window.clearInterval(refresh);
+    };
+  }, [call, user.id]);
+
+  useEffect(() => {
+    if (!call) return;
+    const unsub = call.on("custom", (event) => {
+      const payload = event.custom;
+      if (payload?.type !== HOST_UNMUTE_EVENT || payload.userId !== user.id) return;
+      void enableMicrophoneFromHost(call);
+    });
+    return () => {
+      unsub();
     };
   }, [call, user.id]);
 
@@ -434,6 +499,24 @@ export function StreamConference({
     };
   }, [showLeaveModal, call, salaId, user.id]);
 
+  const setRemoteAudio = useCallback(async (userId: string, enabled: boolean) => {
+    if (!call) return;
+    setAudioBusyId(userId);
+    setAudioActionError("");
+    try {
+      if (enabled) {
+        await call.grantPermissions(userId, [OwnCapability.SEND_AUDIO]);
+        await call.sendCustomEvent({ type: HOST_UNMUTE_EVENT, userId });
+      } else {
+        await call.revokePermissions(userId, [OwnCapability.SEND_AUDIO]);
+      }
+    } catch (cause) {
+      setAudioActionError(cause instanceof Error ? cause.message : "No se pudo cambiar el micrófono.");
+    } finally {
+      setAudioBusyId(null);
+    }
+  }, [call]);
+
   const handleLeave = useCallback(async () => {
     if (!call) return;
     if (effectiveIsHost) {
@@ -576,6 +659,9 @@ export function StreamConference({
                   </Restricted>
                   <CancelCallButton onClick={handleLeave} />
                 </div>
+                {!localCanSendAudio && !effectiveIsHost && (
+                  <p className="stream-conference-layout__muted-note" role="status">El anfitrión silenció tu micrófono.</p>
+                )}
 
               </div>
             </div>
@@ -601,14 +687,28 @@ export function StreamConference({
                     )}
                     <section className="stream-conference-sidebar__section">
                       <h3>Participantes conectados</h3>
+                      {audioActionError && <p role="alert" className="stream-conference-sidebar__muted">{audioActionError}</p>}
                       <ul className="stream-conference-sidebar__participants">
-                        {participants.map((participant) => (
+                        {participants.map((participant) => {
+                          const showAsHost = participant.isCallHost || (participant.isLocal && effectiveIsHost);
+                          return (
                           <li key={participant.sessionId}>
                             <span className="stream-conference-sidebar__avatar" aria-hidden="true">{participant.name.charAt(0).toUpperCase()}</span>
                             <span className="stream-conference-sidebar__participant-name">{participant.name}{participant.isLocal ? " (Vos)" : ""}</span>
-                            <span className="stream-conference-sidebar__role">{participant.isLocal && effectiveIsHost ? "Anfitrión" : "Participante"}</span>
+                            <span className="stream-conference-sidebar__role">{showAsHost ? "Anfitrión" : "Participante"}</span>
+                            {effectiveIsHost && !participant.isLocal && (
+                              <button
+                                type="button"
+                                className="stream-conference-sidebar__audio"
+                                disabled={audioBusyId === participant.userId}
+                                onClick={() => void setRemoteAudio(participant.userId, !participant.publishingAudio)}
+                              >
+                                {participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
+                              </button>
+                            )}
                           </li>
-                        ))}
+                          );
+                        })}
                         {participants.length === 0 && <li className="stream-conference-sidebar__muted">Esperando a otros participantes…</li>}
                       </ul>
                     </section>

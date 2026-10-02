@@ -41,7 +41,6 @@ function RoomContent() {
   const guestSession = getGuestSession();
   const roomAccessToken =
     guestSession?.salaId === salaId ? guestSession.accessToken : accessToken;
-  const waitingRoomPath = `/waiting-room?code=${encodeURIComponent(code)}${isDemo ? "&demo=true" : ""}`;
   const {
     requests,
     approve,
@@ -54,9 +53,10 @@ function RoomContent() {
     accessToken: isHost ? accessToken : null,
   });
 
-  async function copyWaitingRoomLink() {
+  async function copyRoomCode() {
+    if (!code) return;
     try {
-      await navigator.clipboard.writeText(new URL(waitingRoomPath, window.location.origin).toString());
+      await navigator.clipboard.writeText(code);
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 1800);
     } catch {
@@ -252,7 +252,7 @@ function RoomContent() {
           <h1>Reunión MeetFlow</h1>
           <div className="room-page__share-link">
             <p title={`Código de sala: ${code}`}>{code}</p>
-            <button type="button" onClick={() => void copyWaitingRoomLink()} aria-label="Copiar enlace completo de la sala de espera" title="Copiar enlace completo de la sala de espera">
+            <button type="button" onClick={() => void copyRoomCode()} aria-label="Copiar código de la sala" title="Copiar código de la sala">
               {linkCopied ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" /></svg>
               ) : (
