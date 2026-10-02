@@ -134,14 +134,65 @@ const RECORDING_STATUS: Record<RecordingMode, string> = {
   video: "Grabando solo video. Al detener, se descarga el archivo.",
 };
 
+const CAMERA_PERMISSION_MESSAGE =
+  "El navegador bloqueó el permiso de tu cámara. Desbloqueala desde el candado (o ícono de permisos) de la barra de direcciones, elegí tu webcam en Cámara → Permitir y volvé a activar el botón de cámara.";
+const CAMERA_BUSY_MESSAGE =
+  "La cámara aparece en el sistema, pero el navegador no pudo abrirla. En Linux suele quedar ocupada si otra aplicación (otro navegador u OBS) la está usando; cerrala y volvé a activar el botón de cámara.";
+const CAMERA_PUBLISH_PERMISSION_MESSAGE =
+  "No tenés permiso para publicar tu cámara en esta llamada. El anfitrión debe otorgarte el permiso de video.";
+// Stream elige el deviceId persistido en localStorage (o "default"); en Linux el
+// id de la webcam cambia entre sesiones (USB) y puede caer en una cámara
+// virtual (v4l2loopback/OBS). Si el dispositivo seleccionado no existe o es
+// virtual, elegimos la primera webcam real antes de enable(). enumerateDevices
+// no abre el dispositivo, así que esto no ocupa la webcam en PipeWire.
+const VIRTUAL_CAMERA_PATTERN = /virtual|loopback|obs|droidcam|manycam|snap/i;
+
+function errorNameOf(cause: unknown): string {
+  if (cause instanceof DOMException) return cause.name;
+  if (cause instanceof Error) return cause.name;
+  return "";
+}
+
+function isPermissionErrorName(name: string): boolean {
+  return name === "NotAllowedError" || name === "SecurityError";
+}
+
+function isBusyErrorName(name: string): boolean {
+  return name === "NotReadableError" || name === "TrackStartError" || name === "AbortError";
+}
+
+function isPublishPermissionError(cause: unknown): boolean {
+  return cause instanceof Error && /No permission to publish/i.test(cause.message);
+}
+
+async function selectRealCamera(call: Call): Promise<void> {
+  const cameras = await navigator.mediaDevices?.enumerateDevices?.()
+    .then((devices) => devices.filter((device) => device.kind === "videoinput" && device.label !== ""))
+    .catch(() => []);
+  if (!cameras || cameras.length === 0) return;
+
+  const selected = call.camera.state.selectedDevice;
+  const selectedDevice = selected ? cameras.find((device) => device.deviceId === selected) : undefined;
+  if (selectedDevice && !VIRTUAL_CAMERA_PATTERN.test(selectedDevice.label)) return;
+
+  const real = cameras.find((device) => !VIRTUAL_CAMERA_PATTERN.test(device.label));
+  if (!real || real.deviceId === selected) return;
+  // select() antes de enable() solo guarda el deviceId: no abre la cámara.
+  await call.camera.select(real.deviceId).catch(() => undefined);
+}
+
 async function enableLocalCamera(call: Call): Promise<string> {
+  await selectRealCamera(call);
+
   let lastError: unknown;
+  let lastErrorName = "";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       await call.camera.enable();
       return "";
     } catch (cause) {
       lastError = cause;
+      lastErrorName = errorNameOf(cause);
       await call.camera.disable().catch(() => undefined);
       await new Promise((resolve) => window.setTimeout(resolve, 400));
     }
@@ -150,9 +201,22 @@ async function enableLocalCamera(call: Call): Promise<string> {
   const cameras = await navigator.mediaDevices?.enumerateDevices?.()
     .then((devices) => devices.filter((device) => device.kind === "videoinput"))
     .catch(() => []);
-  console.error("No se pudo abrir la cámara local", lastError);
+  console.error("No se pudo abrir la cámara local", {
+    error: lastError,
+    name: lastErrorName,
+    cameras: (cameras ?? []).map((device) => ({ deviceId: device.deviceId, label: device.label })),
+  });
+  if (isPermissionErrorName(lastErrorName)) {
+    return CAMERA_PERMISSION_MESSAGE;
+  }
+  if (isPublishPermissionError(lastError)) {
+    return CAMERA_PUBLISH_PERMISSION_MESSAGE;
+  }
   if (!cameras || cameras.length === 0) {
     return "Este navegador no ve tu cámara. En Nobara, permití la cámara en el navegador y revisá que PipeWire la esté mostrando. Las cámaras de los demás no dependen de la tuya.";
+  }
+  if (isBusyErrorName(lastErrorName)) {
+    return CAMERA_BUSY_MESSAGE;
   }
   return "La cámara aparece en el sistema, pero el navegador no pudo abrirla. En Linux suele quedar ocupada si otra aplicación la está usando.";
 }
@@ -618,6 +682,21 @@ export function StreamConference({
       statusSub.unsubscribe();
     };
   }, [call, user.id]);
+
+  // El SDK solo pide el permiso de cámara una vez por enable(); si el navegador
+  // lo denegó, no vuelve a preguntar: avisamos con el motivo concreto sin
+  // impedir que el usuario siga en la llamada.
+  useEffect(() => {
+    if (!call) return;
+    const permissionSub = call.camera.state.browserPermissionState$.subscribe((state) => {
+      if (state !== "denied") return;
+      if (call.camera.state.status === "enabled") return;
+      setCameraNotice(CAMERA_PERMISSION_MESSAGE);
+    });
+    return () => {
+      permissionSub.unsubscribe();
+    };
+  }, [call]);
 
   // ── Dynamically check if the user is an admin/host in GetStream ──
   useEffect(() => {
@@ -1165,9 +1244,19 @@ export function StreamConference({
                                   type="button"
                                   className="stream-conference-sidebar__audio"
                                   disabled={audioBusyId === participant.userId}
+                                  aria-label={participant.publishingAudio ? `Silenciar a ${participant.name}` : `Activar el micrófono de ${participant.name}`}
+                                  title={participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
                                   onClick={() => void setRemoteAudio(participant.userId, !participant.publishingAudio)}
                                 >
-                                  {participant.publishingAudio ? "Silenciar" : "Activar micrófono"}
+                                  {participant.publishingAudio ? (
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                                    </svg>
+                                  ) : (
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 2l20 20M18.89 13.23A7.12 7.12 0 0 0 19 12v-2M5 10v2a7 7 0 0 0 12 5M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12M12 19v3" />
+                                    </svg>
+                                  )}
                                 </button>
                               </div>
                             )}

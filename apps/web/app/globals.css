@@ -770,6 +770,15 @@ body {
   background: #f4e28a;
   color: #1c2344;
 }
+.stream-conference-sidebar__audio {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.stream-conference-sidebar__audio svg { width: 1.05rem; height: 1.05rem; }
 .stream-conference-sidebar__host:disabled,
 .stream-conference-sidebar__audio:disabled { cursor: wait; opacity: 0.6; }
 .stream-conference-layout__muted-note {
