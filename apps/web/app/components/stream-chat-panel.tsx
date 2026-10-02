@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { StreamVideoClient } from "@stream-io/video-client";
+import { UserAvatar } from "./ui/avatar";
 import { useStreamChat, type ChatMessage } from "../lib/use-stream-chat";
+
+const CHAT_EMOJIS = ["😀", "😂", "😍", "😮", "😢", "👍", "👏", "🙏", "🔥", "🎉", "✅", "❤️", "👋", "🤔", "👀", "💯"] as const;
 
 type StreamChatPanelProps = {
   apiKey: string;
   token: string;
-  user: { id: string; name: string };
+  user: { id: string; name: string; image?: string | null };
   channelId: string;
 };
 
@@ -26,8 +29,10 @@ export function StreamChatPanel({
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
@@ -39,6 +44,30 @@ export function StreamChatPanel({
       });
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!composerRef.current?.contains(event.target as Node)) {
+        setEmojiOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [emojiOpen]);
+
+  function insertEmoji(emoji: string) {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? text.length;
+    const next = `${text.slice(0, start)}${emoji}${text.slice(end)}`;
+    const cursor = start + emoji.length;
+    setText(next);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(cursor, cursor);
+    });
+  }
 
   async function handleSend() {
     const trimmed = text.trim();
@@ -67,15 +96,6 @@ export function StreamChatPanel({
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
-
-  function getInitials(name: string) {
-    return name
-      .split(" ")
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase();
   }
 
   // Color palette for avatars based on userId hash
@@ -158,12 +178,13 @@ export function StreamChatPanel({
               >
                 {/* Avatar — only for others */}
                 {!group[0].isOwn && (
-                  <div
-                    className={`stream-chat-panel__avatar bg-gradient-to-br ${getAvatarColor(group[0].userId)}`}
-                    aria-hidden="true"
-                  >
-                    {getInitials(group[0].userName)}
-                  </div>
+                  <UserAvatar
+                    name={group[0].userName}
+                    src={group[0].userImage}
+                    decorative
+                    className="stream-chat-panel__avatar"
+                    fallbackClassName={`bg-gradient-to-br text-white ${getAvatarColor(group[0].userId)}`}
+                  />
                 )}
 
                 <div className="stream-chat-panel__message-group-content">
@@ -200,7 +221,33 @@ export function StreamChatPanel({
       </div>
 
       {/* Input */}
-      <div className="stream-chat-panel__input-area">
+      <div ref={composerRef} className="stream-chat-panel__input-area">
+        {emojiOpen && (
+          <div className="stream-chat-panel__emoji-picker" role="listbox" aria-label="Emojis">
+            {CHAT_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className="stream-chat-panel__emoji"
+                role="option"
+                aria-label={`Insertar ${emoji}`}
+                onClick={() => insertEmoji(emoji)}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          className="stream-chat-panel__emoji-btn"
+          aria-label="Insertar emoji"
+          aria-expanded={emojiOpen}
+          disabled={!connected || sending}
+          onClick={() => setEmojiOpen((open) => !open)}
+        >
+          <span aria-hidden="true">😀</span>
+        </button>
         <textarea
           ref={inputRef}
           id="chat-input"

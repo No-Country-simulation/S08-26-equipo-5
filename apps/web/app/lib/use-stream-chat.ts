@@ -8,6 +8,8 @@ export type ChatMessage = {
   text: string;
   userId: string;
   userName: string;
+  /** Foto del autor (user.image de Stream); null si no tiene. */
+  userImage: string | null;
   createdAt: Date;
   isOwn: boolean;
 };
@@ -15,7 +17,7 @@ export type ChatMessage = {
 type UseStreamChatOptions = {
   apiKey: string;
   token: string;
-  user: { id: string; name: string };
+  user: { id: string; name: string; image?: string | null };
   /** Use the callId as the channel ID so all participants share the same channel */
   channelId: string;
 };
@@ -44,7 +46,7 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 
 async function ensureChatUser(
   client: StreamChat,
-  user: { id: string; name: string },
+  user: { id: string; name: string; image?: string | null },
   token: string,
 ) {
   if (client.userID && client.userID !== user.id) {
@@ -52,7 +54,10 @@ async function ensureChatUser(
   }
   if (client.userID !== user.id) {
     try {
-      await client.connectUser({ id: user.id, name: user.name }, token);
+      await client.connectUser(
+        { id: user.id, name: user.name, ...(user.image ? { image: user.image } : {}) },
+        token,
+      );
     } catch (error) {
       // Un connectUser fallido puede dejar userID seteado sin conexión: se
       // limpia para que el próximo intento con el mismo usuario reconecte.
@@ -135,7 +140,7 @@ export function useStreamChat({
       }).catch(() => {});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, token, user.id, user.name, channelId]);
+  }, [apiKey, token, user.id, user.name, user.image, channelId]);
 
   const send = useCallback(async (text: string) => {
     const channel = channelRef.current;
@@ -154,6 +159,7 @@ function toMessage(m: MessageResponse, currentUserId: string): ChatMessage {
     text: m.text ?? "",
     userId: m.user?.id ?? "unknown",
     userName: m.user?.name ?? m.user?.id ?? "Participante",
+    userImage: typeof m.user?.image === "string" && m.user.image ? m.user.image : null,
     createdAt: new Date(m.created_at ?? Date.now()),
     isOwn: m.user?.id === currentUserId,
   };

@@ -65,7 +65,7 @@ function JoinByCodeForm({
   return (
     <form onSubmit={handleSubmit} className="mt-3 w-full max-w-[300px]">
       <label htmlFor="join-code-input" className="sr-only">
-        Código o enlace de invitación
+        Código de reunión
       </label>
       <div className="flex items-center gap-1.5 rounded-[16px] bg-white p-1.5 shadow-[0_4px_14px_rgba(28,36,82,0.08)]">
         <input
@@ -73,7 +73,7 @@ function JoinByCodeForm({
           type="text"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="Ingresa el código o pega el enlace"
+          placeholder="Código de reunión"
           autoComplete="off"
           className="min-w-0 flex-1 rounded-[12px] bg-transparent px-3 py-2 text-sm text-[#1c2452] placeholder:text-slate-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3d4fdb]"
         />

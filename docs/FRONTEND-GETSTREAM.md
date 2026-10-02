@@ -158,7 +158,7 @@ export type StreamTokenResponse = {
   apiKey: string;
   token: string;
   userId: string;
-  user: { id: string; name: string };
+  user: { id: string; name: string; image: string | null }; // image: foto de la cuenta; null para invitados
   rol: "HOST" | "PARTICIPANTE";
   callType: string;
   callId: string;
@@ -413,7 +413,7 @@ Implementado: recibe `callType` y `callId` directos desde la respuesta de
 type StreamConferenceProps = {
   apiKey: string;
   token: string;
-  user: { id: string; name: string };
+  user: { id: string; name: string; image: string | null }; // image: foto de la cuenta; null para invitados
   callType: string;
   callId: string;
 };

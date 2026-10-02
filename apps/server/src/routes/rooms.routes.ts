@@ -11,6 +11,7 @@ import {
   getParticipantes,
   generateToken,
   transferHost,
+  promoteHost,
   joinSala,
   getStreamToken,
   getMiEstado,
@@ -47,6 +48,10 @@ router.get("/salas/:id/detalle", verifyToken, wrap(getSalaDetalle));
 // Transferir rol HOST (solo HOST actual)
 router.post("/salas/:id/transfer-host", verifyToken, (req: Request, res: Response, next) => {
   transferHost(req as Request<{ id: string }>, res).catch(next);
+});
+
+router.post("/salas/:id/promote-host", verifyToken, (req: Request, res: Response, next) => {
+  promoteHost(req as Request<{ id: string }>, res).catch(next);
 });
 
 // Lista de participantes

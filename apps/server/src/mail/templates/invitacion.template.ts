@@ -40,7 +40,7 @@ export interface InvitacionEmail {
 }
 
 /** El nombre de la sala y del host los carga un usuario: nunca van crudos al HTML. */
-function escapeHtml(valor: string): string {
+export function escapeHtml(valor: string): string {
   return valor
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

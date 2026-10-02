@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { JoinRequest } from "../lib/host-socket";
-import { displayName, initials } from "../lib/participant-name";
+import { displayName } from "../lib/participant-name";
+import { UserAvatar } from "./ui/avatar";
 
 type HostRequestPanelProps = {
   requests: JoinRequest[];
@@ -85,15 +86,14 @@ function RequestCard({
         </span>
       )}
 
-      <div className={`flex min-w-0 items-start ${embedded ? "" : "gap-3"}`}>
-        {!embedded && (
-          <div
-            aria-hidden="true"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700"
-          >
-            {initials(request)}
-          </div>
-        )}
+      <div className={`flex min-w-0 items-start ${embedded ? "gap-2.5" : "gap-3"}`}>
+        <UserAvatar
+          name={displayName(request)}
+          src={request.fotoUrl}
+          size={embedded ? "xs" : "md"}
+          decorative
+          fallbackClassName="bg-slate-200 text-slate-700"
+        />
 
         <div className="min-w-0 flex-1">
           <p className={`truncate font-semibold ${embedded ? "text-white" : "text-slate-950"}`}>

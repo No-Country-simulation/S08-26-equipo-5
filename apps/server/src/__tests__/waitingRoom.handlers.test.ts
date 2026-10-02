@@ -68,6 +68,7 @@ function makeDeps(overrides: Partial<WaitingRoomDeps["participantes"]> = {}) {
     updateEstado: vitest.fn(),
     resolveEstadoSiPendiente: vitest.fn().mockResolvedValue(1),
     findAprobadosBySala: vitest.fn().mockResolvedValue([]),
+    findPendientesBySala: vitest.fn().mockResolvedValue([]),
     ...overrides,
   };
   const salas = {
@@ -343,6 +344,38 @@ describe("participant:approve / participant:reject — sin doble emisión en car
     expect(socket.emit).not.toHaveBeenCalledWith(
       "error",
       expect.anything(),
+    );
+  });
+});
+
+describe("host:subscribe — pendientes ya existentes", () => {
+  it("reenvía join:pending de los PENDIENTE de la sala solo a este socket", async () => {
+    const deps = makeDeps({
+      findHost: vitest.fn().mockResolvedValue({ id: "host-participante" }),
+      findPendientesBySala: vitest.fn().mockResolvedValue([
+        {
+          id: "pend-1",
+          nombre: null,
+          apellido: null,
+          email: "ana@test.com",
+        },
+      ]),
+    });
+    const socket = createFakeSocket({ userId: "host-user-1" });
+    registerWaitingRoomHandlers({} as never, socket as never, deps);
+
+    const ack = vitest.fn();
+    await socket.trigger("host:subscribe", { salaId: SALA_ID }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: true });
+    expect(socket.emit).toHaveBeenCalledWith(
+      "join:pending",
+      expect.objectContaining({
+        participanteId: "pend-1",
+        nombre: null,
+        apellido: null,
+        email: "ana@test.com",
+      }),
     );
   });
 });

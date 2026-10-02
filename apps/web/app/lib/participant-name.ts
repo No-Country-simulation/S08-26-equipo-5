@@ -31,3 +31,18 @@ export function initials(person: {
     .join("");
   return letters || "?";
 }
+
+/**
+ * Iniciales a partir de un nombre ya armado ("Ana Pérez" -> "AP"). `count`
+ * limita cuántas letras devuelve; "?" si el nombre está vacío.
+ */
+export function initialsFromName(name: string | null | undefined, count: 1 | 2 = 2): string {
+  const letters = (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, count)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+  return letters || "?";
+}

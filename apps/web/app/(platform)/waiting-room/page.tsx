@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { UserAvatar } from "../../components/ui/avatar";
 import { HostRequestPanel } from "../../components/host-request-panel";
 import { useAuth } from "../../lib/auth";
 import {
@@ -321,9 +322,14 @@ function ParticipantView({
         />
         {!cameraEnabled && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-white/75">
-            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold text-white">
-              {joinForm.nombre.trim().charAt(0).toUpperCase() || user?.nombre?.charAt(0).toUpperCase() || "?"}
-            </span>
+            <UserAvatar
+              name={joinForm.nombre.trim() || user?.nombre || ""}
+              src={user?.fotoUrl ?? null}
+              size="lg"
+              initialsCount={1}
+              decorative
+              fallbackClassName="bg-white/10 text-white"
+            />
             <span className="text-sm font-medium">Tu cámara está apagada</span>
           </div>
         )}

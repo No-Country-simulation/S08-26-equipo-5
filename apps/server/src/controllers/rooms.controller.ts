@@ -9,6 +9,7 @@ import {
   StreamServiceError,
 } from "../errors/index.js";
 import { AppError } from "../utils/AppError.js";
+import { assertUuid } from "../utils/uuid.js";
 import {
   createRoom as createRoomService,
   issueCallAccess,
@@ -36,6 +37,7 @@ import type {
   ParticipantesResponse,
   TransferHostBody,
   TransferHostResponse,
+  PromoteHostResponse,
   JoinSalaBody,
   JoinSalaResponse,
   StreamTokenResponse,
@@ -280,6 +282,7 @@ export async function getSalaDetalle(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -332,6 +335,7 @@ export async function getSalaDetalle(
       estado: p.estado,
       fechaIngreso: p.fechaIngreso?.toISOString() || null,
       fotoUrl: p.usuario?.fotoUrl ?? null,
+      puedeSerHost: p.usuarioId !== null && p.estado !== "INVITADO",
     })),
     creador: creador
       ? {
@@ -358,6 +362,7 @@ export async function updateSala(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const { nombre, resumen, fechaInicio } = req.body;
   const userId = req.user?.sub;
 
@@ -431,6 +436,7 @@ export async function deleteSala(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -483,6 +489,7 @@ export async function finalizarSala(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -544,6 +551,7 @@ export async function transferHost(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const { nuevoHostId } = req.body;
   const userId = req.user?.sub;
 
@@ -643,6 +651,93 @@ export async function transferHost(
   res.status(200).json(response);
 }
 
+// ─── POST /salas/:id/promote-host — Sumar otro HOST ─
+
+/**
+ * Promueve a otro participante a HOST sin quitarle el rol al caller.
+ * Así puede haber más de un anfitrión en la misma sala.
+ * Mismas reglas que la transferencia: cuenta registrada y no INVITADO.
+ */
+export async function promoteHost(
+  req: Request<{ id: string }, unknown, TransferHostBody>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  assertUuid(id);
+  const { nuevoHostId } = req.body;
+  const userId = req.user?.sub;
+
+  if (!userId) {
+    throw new ValidationError("Usuario no autenticado");
+  }
+
+  if (!nuevoHostId || typeof nuevoHostId !== "string") {
+    throw new ValidationError("El campo 'nuevoHostId' es requerido");
+  }
+
+  const sala = await prisma.sala.findUnique({ where: { id } });
+  if (!sala) {
+    throw new NotFoundError("Sala no encontrada");
+  }
+
+  const callerParticipante = await prisma.participante.findUnique({
+    where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+  });
+  if (callerParticipante?.rol !== "HOST") {
+    throw new ForbiddenError("Solo el HOST puede asignar otro anfitrión");
+  }
+
+  const target = await prisma.participante.findFirst({
+    where: { id: nuevoHostId, salaId: id },
+  });
+  if (!target || !target.usuarioId) {
+    throw new NotFoundError("El nuevo host debe ser participante de la sala y tener una cuenta registrada");
+  }
+
+  if (target.usuarioId === userId) {
+    throw new ValidationError("No puedes asignarte el rol a ti mismo");
+  }
+
+  if (target.estado === "INVITADO") {
+    throw new ValidationError(
+      "El participante aún no aceptó la invitación y no puede ser HOST"
+    );
+  }
+
+  if (target.rol !== "HOST") {
+    await prisma.$transaction(async (tx) => {
+      const caller = await tx.participante.findUnique({
+        where: { salaId_usuarioId: { salaId: id, usuarioId: userId } },
+      });
+      if (caller?.rol !== "HOST") {
+        throw new ForbiddenError("Solo el HOST puede asignar otro anfitrión");
+      }
+      await tx.participante.update({
+        where: { id: target.id },
+        data: {
+          rol: "HOST",
+          estado: "APROBADO",
+          fechaIngreso: target.fechaIngreso ?? new Date(),
+        },
+      });
+    });
+
+    const callRef = getStreamCallRef(sala);
+    if (callRef) {
+      await addCallMember(callRef.callType, callRef.callId, target.id, "admin");
+    }
+  }
+
+  const response: PromoteHostResponse = {
+    message: target.rol === "HOST"
+      ? "El participante ya es anfitrión"
+      : "Anfitrión asignado. El anfitrión actual conserva el rol",
+    host: { usuarioId: target.usuarioId },
+  };
+
+  res.status(200).json(response);
+}
+
 // ─── GET /salas/:id/participantes — Lista de participantes ─
 
 /**
@@ -654,6 +749,7 @@ export async function getParticipantes(
   res: Response
 ): Promise<void> {
   const { id } = req.params;
+  assertUuid(id);
   const userId = req.user?.sub;
 
   if (!userId) {
@@ -691,6 +787,7 @@ export async function getParticipantes(
       estado: p.estado,
       fechaIngreso: p.fechaIngreso?.toISOString() || null,
       fotoUrl: p.usuario?.fotoUrl ?? null,
+      puedeSerHost: p.usuarioId !== null && p.estado !== "INVITADO",
     })),
   };
 
@@ -810,7 +907,7 @@ export async function getStreamToken(
     apiKey: env.getstreamApiKey,
     token,
     userId: ctx.participanteId,
-    user: { id: ctx.participanteId, name: nombreCompleto },
+    user: { id: ctx.participanteId, name: nombreCompleto, image: ctx.fotoUrl ?? null },
     rol: ctx.rol,
     callType: call.callType,
     callId: call.callId,

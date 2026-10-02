@@ -11,6 +11,8 @@ export type JoinRequest = {
   nombre: string | null;
   apellido: string | null;
   email: string;
+  /** Foto de la cuenta del solicitante; null/ausente para invitados. */
+  fotoUrl?: string | null;
   timestamp: string;
   /** optimistic UI state while the host is deciding */
   status: "pending" | "approving" | "rejecting" | "approved" | "rejected";
@@ -22,6 +24,7 @@ type JoinPendingPayload = {
   nombre: string | null;
   apellido: string | null;
   email: string;
+  fotoUrl?: string | null;
   timestamp: string;
 };
 
@@ -141,6 +144,7 @@ export function useHostSocket({
             nombre: payload.nombre,
             apellido: payload.apellido,
             email: payload.email,
+            fotoUrl: payload.fotoUrl ?? null,
             timestamp: payload.timestamp ?? new Date().toISOString(),
             status: "pending",
           },

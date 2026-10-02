@@ -126,7 +126,7 @@ Requiere `Authorization: Bearer <token>`, que puede ser **cualquiera de los dos*
   "apiKey": "<api key pública de GetStream>",
   "token": "<jwt de GetStream, restringido a este call>",
   "userId": "<participanteId>",
-  "user": { "id": "<participanteId>", "name": "Ana Pérez" },
+  "user": { "id": "<participanteId>", "name": "Ana Pérez", "image": "https://…/ana.jpg" | null },
   "rol": "PARTICIPANTE",
   "callType": "default",
   "callId": "uuid",
@@ -288,7 +288,7 @@ Estos tres puntos **no se pueden resolver desde el backend**:
 
    const client = new StreamVideoClient({
      apiKey: r.apiKey,
-     user: { id: r.userId, name: r.user.name },
+     user: { id: r.userId, name: r.user.name, image: r.user.image ?? undefined },
      token: r.token,
    });
    const call = client.call(r.callType, r.callId);

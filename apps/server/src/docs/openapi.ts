@@ -80,8 +80,8 @@ export const openApiSpec = {
         properties: {
           nombre: { type: "string", example: "Jhon" },
           apellido: { type: "string", example: "Rivera" },
-          email: { type: "string", format: "email", example: "jhon.rivera@example.com" },
-          password: { type: "string", minLength: 8, example: "NubeAzul#4821" },
+          email: { type: "string", format: "email", maxLength: 254, example: "jhon.rivera@example.com" },
+          password: { type: "string", minLength: 8, maxLength: 72, description: "Entre 8 caracteres y 72 bytes UTF-8 (límite de bcrypt).", example: "NubeAzul#4821" },
         },
       },
       RegisterResponse: {
@@ -95,7 +95,7 @@ export const openApiSpec = {
         type: "object",
         required: ["email", "password"],
         properties: {
-          email: { type: "string", format: "email", example: "jhon.rivera@example.com" },
+          email: { type: "string", format: "email", maxLength: 254, example: "jhon.rivera@example.com" },
           password: { type: "string", example: "NubeAzul#4821" },
         },
       },
@@ -104,6 +104,33 @@ export const openApiSpec = {
         properties: {
           accessToken: { type: "string" },
           refreshToken: { type: "string" },
+        },
+      },
+      ForgotPasswordDto: {
+        type: "object",
+        required: ["email"],
+        properties: {
+          email: { type: "string", format: "email", maxLength: 254, example: "jhon.rivera@example.com" },
+        },
+      },
+      MessageResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string", example: "Contraseña actualizada" },
+        },
+      },
+      ResetPasswordDto: {
+        type: "object",
+        required: ["password"],
+        properties: {
+          password: { type: "string", minLength: 8, maxLength: 72, description: "Entre 8 caracteres y 72 bytes UTF-8 (límite de bcrypt).", example: "NubeAzul#4821" },
+        },
+      },
+      ResetTokenValidationResponse: {
+        type: "object",
+        properties: {
+          valido: { type: "boolean", example: true },
+          emailEnmascarado: { type: "string", example: "j***@example.com" },
         },
       },
       RefreshDto: {
@@ -212,6 +239,7 @@ export const openApiSpec = {
           estado: { $ref: "#/components/schemas/EstadoParticipante" },
           fechaIngreso: { type: "string", format: "date-time", nullable: true },
           fotoUrl: { type: "string", format: "uri", nullable: true, description: "Foto de la cuenta vinculada; null para invitados o sin foto" },
+          puedeSerHost: { type: "boolean", description: "true si tiene cuenta registrada y no está INVITADO" },
         },
       },
       InvitarBody: {
@@ -465,6 +493,80 @@ export const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/MeResponse" } } },
           },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/auth/forgot-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Pedir enlace para restablecer la contraseña",
+        description:
+          "Responde **siempre** 200 con el mismo mensaje, exista o no la cuenta (sin enumeración de usuarios). Responde antes de buscar al usuario (el resto corre en segundo plano), así el tiempo no delata la cuenta. " +
+          "Si la cuenta existe, invalida los pedidos previos pendientes y envía por correo un enlace " +
+          "`FRONTEND_URL/restablecer-contrasena/<token>` de un solo uso que vence en " +
+          "`PASSWORD_RESET_TTL_MINUTES` (30). Un fallo del proveedor de correo no cambia la respuesta. " +
+          "Rate limit: `RATE_LIMIT_FORGOT_MAX` (5) cada 15 min por IP y por email (429 `RATE_LIMITED`).",
+        operationId: "auth_forgot_password",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ForgotPasswordDto" } } },
+        },
+        responses: {
+          200: {
+            description: "Mensaje genérico",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/MessageResponse" },
+                example: { message: "Si el email está registrado, te enviamos un enlace para restablecer la contraseña." },
+              },
+            },
+          },
+          400: { description: "`VALIDATION_ERROR`: email faltante o con formato inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/auth/reset-password/{token}": {
+      get: {
+        tags: ["Auth"],
+        summary: "Validar el token de restablecimiento",
+        description:
+          "Público, no consume el token. Token desconocido, vencido o ya usado responden igual " +
+          "(410 `RESET_TOKEN_INVALID`): no hay oráculo para quien prueba tokens. " +
+          "Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` (30) cada 15 min.",
+        operationId: "auth_reset_password_validate",
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: {
+            description: "Token válido",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ResetTokenValidationResponse" } } },
+          },
+          410: { description: "`RESET_TOKEN_INVALID`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      post: {
+        tags: ["Auth"],
+        summary: "Restablecer la contraseña con el token",
+        description:
+          "Mismas reglas de contraseña que el registro (mínimo 8). El token se consume de forma atómica " +
+          "(un solo uso: ante dos pedidos concurrentes uno recibe 410), se actualiza el hash y se revocan " +
+          "**todos** los refresh tokens del usuario en una sola transacción. Los access tokens ya emitidos siguen valiendo hasta `JWT_EXPIRES_IN` (15 min): las otras sesiones pueden tardar hasta ese tiempo en cerrarse. No inicia sesión: el cliente " +
+          "debe hacer login. Se envía un correo de aviso (best-effort). Rate limit por IP: `RATE_LIMIT_TOKEN_MAX`.",
+        operationId: "auth_reset_password",
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ResetPasswordDto" } } },
+        },
+        responses: {
+          200: {
+            description: "Contraseña actualizada",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/MessageResponse" } } },
+          },
+          400: { description: "`VALIDATION_ERROR`: contraseña faltante o de menos de 8 caracteres", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          410: { description: "`RESET_TOKEN_INVALID`: desconocido, vencido o ya usado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },
@@ -876,6 +978,45 @@ export const openApiSpec = {
         },
       },
     },
+    "/salas/{id}/promote-host": {
+      post: {
+        tags: ["Salas"],
+        summary: "Sumar otro anfitrión sin quitar el rol actual",
+        description:
+          "Solo un HOST puede promover. El caller sigue siendo HOST y el target también " +
+          "pasa a HOST. El target debe tener cuenta registrada y no estar INVITADO. " +
+          "En GetStream el target queda como admin; el caller no se degrada.",
+        operationId: "salas_promote_host",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/TransferHostBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Anfitrión asignado, o ya lo era",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    message: { type: "string" },
+                    host: { type: "object", properties: { usuarioId: { type: "string", format: "uuid" } } },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: "`nuevoHostId` ausente, auto-asignación o INVITADO", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          403: { description: "Solo el HOST puede asignar otro anfitrión", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          404: { description: "Sala no encontrada o el target no tiene cuenta", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
     "/salas/{id}/transfer-host": {
       post: {
         tags: ["Salas"],
@@ -971,7 +1112,7 @@ export const openApiSpec = {
                   apiKey: "gs-api-key",
                   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                   userId: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d",
-                  user: { id: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d", name: "Ana Pérez" },
+                  user: { id: "a3b1c2d4-5e6f-4a1b-8c9d-0e1f2a3b4c5d", name: "Ana Pérez", image: "https://cdn.example.com/v1/ana.jpg" },
                   rol: "HOST",
                   callType: "default",
                   callId: "abc-123",
