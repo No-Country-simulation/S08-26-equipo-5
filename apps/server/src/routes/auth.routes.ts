@@ -23,8 +23,20 @@ const passwordResetController = new PasswordResetController({
   mailer: { send: (message) => getMailer().send(message) },
 });
 
-// Misma regla de contraseña que el registro.
-const passwordRule = { field: "password", required: true, minLength: 8 };
+// RFC 5321: 254 caracteres es el máximo de una dirección. Frena payloads enormes
+// antes de los limiters y de la base.
+const emailRule = { field: "email", required: true, email: true, maxLength: 254 };
+
+// Contraseña nueva (registro y restablecimiento): bcrypt solo usa los primeros 72
+// bytes, así que más largo es engañoso y un vector de CPU. No se aplica al login
+// (cuentas viejas) para no bloquear a nadie.
+const passwordRule = {
+  field: "password",
+  required: true,
+  minLength: 8,
+  maxBytes: 72,
+  maxBytesMessage: "La contraseña no puede superar 72 bytes",
+};
 
 const router = Router();
 
@@ -33,7 +45,7 @@ router.post(
   validateBody([
     { field: "nombre", required: true },
     { field: "apellido", required: true },
-    { field: "email", required: true, email: true },
+    emailRule,
     passwordRule,
   ]),
   authController.register.bind(authController),
@@ -42,7 +54,7 @@ router.post(
 router.post(
   "/login",
   validateBody([
-    { field: "email", required: true, email: true },
+    emailRule,
     { field: "password", required: true },
   ]),
   authController.login.bind(authController),
@@ -63,11 +75,12 @@ router.post(
 );
 
 // ─── Recuperación de contraseña (públicas, sin sesión) ───────
-// Los limiters van antes del handler; el de email después de validar el body.
+// Se valida primero (un body inválido es barato y no consume cupo); el limiter
+// por email necesita el body ya validado.
 router.post(
   "/forgot-password",
+  validateBody([emailRule]),
   forgotIpLimiter,
-  validateBody([{ field: "email", required: true, email: true }]),
   forgotEmailLimiter,
   passwordResetController.forgotPassword.bind(passwordResetController),
 );

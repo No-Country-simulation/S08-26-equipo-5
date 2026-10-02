@@ -85,6 +85,16 @@ describe("POST /api/v1/auth/forgot-password", () => {
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
   });
 
+  it("email de más de 254 caracteres: 400 sin tocar la base", async () => {
+    const res = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: `${"a".repeat(250)}@x.com` });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(m.findByEmailInsensitive).not.toHaveBeenCalled();
+  });
+
   it("email registrado: 200 con el mensaje genérico y manda el correo", async () => {
     m.findByEmailInsensitive.mockResolvedValue({ id: "u1", nombre: "Ana", email: "ana@x.com" });
 
@@ -181,6 +191,32 @@ describe("POST /api/v1/auth/reset-password/:token", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("password de más de 72 bytes UTF-8 (aunque tenga menos de 72 caracteres): 400", async () => {
+    const res = await request(app)
+      .post(`/api/v1/auth/reset-password/${TOKEN}`)
+      .send({ password: "ñ".repeat(37) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.body.error.errors[0].mensaje).toBe("La contraseña no puede superar 72 bytes");
+    expect(m.findValidoByTokenHash).not.toHaveBeenCalled();
+  });
+
+  it("register aplica los mismos topes (password > 72 bytes y email > 254)", async () => {
+    const base = { nombre: "Ana", apellido: "P", email: "ana@x.com", password: "clave-valida-123" };
+
+    const larga = await request(app)
+      .post("/api/v1/auth/register")
+      .send({ ...base, password: "a".repeat(73) });
+    const emailLargo = await request(app)
+      .post("/api/v1/auth/register")
+      .send({ ...base, email: `${"a".repeat(250)}@x.com` });
+
+    expect(larga.status).toBe(400);
+    expect(larga.body.error.errors[0].mensaje).toBe("La contraseña no puede superar 72 bytes");
+    expect(emailLargo.status).toBe(400);
   });
 
   it("token inválido: 410 RESET_TOKEN_INVALID", async () => {

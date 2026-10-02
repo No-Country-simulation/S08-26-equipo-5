@@ -66,6 +66,13 @@ beforeEach(() => {
 });
 
 describe("rate limit de recuperar contraseña", () => {
+  it("un email inválido (400) se rechaza antes de los limiters y no consume cupo (4 rechazos con tope 2, ninguno es 429)", async () => {
+    const largo = `${"a".repeat(250)}@x.com`;
+    for (let i = 0; i < 4; i++) {
+      await request(app).post("/api/v1/auth/forgot-password").send({ email: largo }).expect(400);
+    }
+  });
+
   it("forgot-password: superado el tope por IP responde 429 RATE_LIMITED", async () => {
     const enviar = (email: string) =>
       request(app).post("/api/v1/auth/forgot-password").send({ email });

@@ -80,8 +80,8 @@ export const openApiSpec = {
         properties: {
           nombre: { type: "string", example: "Jhon" },
           apellido: { type: "string", example: "Rivera" },
-          email: { type: "string", format: "email", example: "jhon.rivera@example.com" },
-          password: { type: "string", minLength: 8, example: "NubeAzul#4821" },
+          email: { type: "string", format: "email", maxLength: 254, example: "jhon.rivera@example.com" },
+          password: { type: "string", minLength: 8, maxLength: 72, description: "Entre 8 caracteres y 72 bytes UTF-8 (límite de bcrypt).", example: "NubeAzul#4821" },
         },
       },
       RegisterResponse: {
@@ -95,7 +95,7 @@ export const openApiSpec = {
         type: "object",
         required: ["email", "password"],
         properties: {
-          email: { type: "string", format: "email", example: "jhon.rivera@example.com" },
+          email: { type: "string", format: "email", maxLength: 254, example: "jhon.rivera@example.com" },
           password: { type: "string", example: "NubeAzul#4821" },
         },
       },
@@ -110,7 +110,7 @@ export const openApiSpec = {
         type: "object",
         required: ["email"],
         properties: {
-          email: { type: "string", format: "email", example: "jhon.rivera@example.com" },
+          email: { type: "string", format: "email", maxLength: 254, example: "jhon.rivera@example.com" },
         },
       },
       MessageResponse: {
@@ -123,7 +123,7 @@ export const openApiSpec = {
         type: "object",
         required: ["password"],
         properties: {
-          password: { type: "string", minLength: 8, example: "NubeAzul#4821" },
+          password: { type: "string", minLength: 8, maxLength: 72, description: "Entre 8 caracteres y 72 bytes UTF-8 (límite de bcrypt).", example: "NubeAzul#4821" },
         },
       },
       ResetTokenValidationResponse: {

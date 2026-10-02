@@ -6,6 +6,11 @@ interface ValidationRule {
   required?: boolean;
   email?: boolean;
   minLength?: number;
+  /** Tope en caracteres (UTF-16 units de JS). */
+  maxLength?: number;
+  /** Tope en bytes UTF-8 (bcrypt solo usa los primeros 72). */
+  maxBytes?: number;
+  maxBytesMessage?: string;
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,6 +42,20 @@ export function validateBody(rules: ValidationRule[]) {
         errors.push({
           campo: rule.field,
           mensaje: `Debe tener al menos ${rule.minLength} caracteres`,
+        });
+      }
+
+      if (rule.maxLength !== undefined && value.length > rule.maxLength) {
+        errors.push({
+          campo: rule.field,
+          mensaje: `No puede superar ${rule.maxLength} caracteres`,
+        });
+      }
+
+      if (rule.maxBytes !== undefined && Buffer.byteLength(value, "utf8") > rule.maxBytes) {
+        errors.push({
+          campo: rule.field,
+          mensaje: rule.maxBytesMessage ?? `No puede superar ${rule.maxBytes} bytes`,
         });
       }
     }

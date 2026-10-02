@@ -508,6 +508,8 @@ escuchar `participant:state`/`participant:connection` en la room `sala:{id}`.
 
 ### POST /auth/register — Registrar usuario
 
+**Topes de entrada (cambio de contrato, 2026-10-02):** `email` de hasta 254 caracteres (también en `login` y `forgot-password`) y `password` de hasta **72 bytes UTF-8** en `register` y `reset-password` (bcrypt ignora el resto; con tildes o emoji 72 bytes son menos de 72 caracteres). Se responde `400 VALIDATION_ERROR` con `errors[0].mensaje = "La contraseña no puede superar 72 bytes"`. `login` no limita la contraseña, para no bloquear cuentas existentes.
+
 ### POST /auth/login — Iniciar sesión
 
 ### GET /auth/me — Usuario actual
@@ -542,7 +544,7 @@ Token desconocido, vencido o ya usado: `410 RESET_TOKEN_INVALID` (idéntico en l
 
 #### POST /auth/reset-password/:token — Restablecer
 
-**Body:** `{ "password": "..." }` (misma regla que el registro: mínimo 8 caracteres, si no `400 VALIDATION_ERROR`).
+**Body:** `{ "password": "..." }` (misma regla que el registro: entre 8 caracteres y 72 bytes UTF-8, si no `400 VALIDATION_ERROR`).
 **Response 200:** `{ "message": "Contraseña actualizada" }`. **No inicia sesión**: no devuelve tokens; el cliente debe hacer `POST /auth/login`.
 
 - Consumo atómico del token (update condicional `usedAt IS NULL AND expiresAt > now`): ante dos usos concurrentes uno gana y el otro recibe `410 RESET_TOKEN_INVALID`.
@@ -644,6 +646,7 @@ en `apps/server/.env.example` (ver changelog).
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-10-02 | Topes de entrada: `email` ≤ 254 caracteres (register, login, forgot-password) y `password` ≤ 72 bytes UTF-8 (register, reset-password), `400 VALIDATION_ERROR`. `forgot-password` valida antes de aplicar los limiters. Nueva variable `TRUST_PROXY`. |
 | 2026-10-02 | Recuperación de contraseña: `POST /auth/forgot-password`, `GET`/`POST /auth/reset-password/:token` (tabla `PasswordReset`, token de un solo uso con hash SHA-256, revoca todos los refresh tokens, correo HTML de enlace y de aviso). Variables `PASSWORD_RESET_TTL_MINUTES` y `RATE_LIMIT_FORGOT_MAX`. Casos 15-18 en `api_auth.http`. |
 | 2026-10-01 | Feedback PR #104. **Cambios de contrato:** `GET /invitaciones/:token` devuelve `email` enmascarado (`a***@dominio.com`); las respuestas de invitaciones ya no van envueltas en `{ data }` (`POST /salas/:id/invitaciones` → `{ resultados }`, `GET /invitaciones/:token` → objeto plano); `GET /salas/:id/participantes` y `/detalle` exigen ser participante (403 `NOT_A_PARTICIPANT`) y ocultan las filas `INVITADO` y los emails a quien no es HOST (`email: null`); `POST /invitaciones/:token/aceptar` con sesión sobre un invitado sin cuenta compara emails (403 `INVITATION_ACCOUNT_MISMATCH` sin consumir el token; si coincide vincula la cuenta); `join:pending` envía `nombre`/`apellido` `null` cuando faltan. Documentados el rate limit en memoria y las variables de entorno de invitaciones. |
 | 2026-09-30 | Foto de perfil: `PUT`/`DELETE /usuarios/me/foto` (subida vía backend a Cloudinary), `fotoUrl` en `GET /auth/me`, participantes (REST y sockets) y avatar en GetStream. Suite `api_usuarios.http`. |
