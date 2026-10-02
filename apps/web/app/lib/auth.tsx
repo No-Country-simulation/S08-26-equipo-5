@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 const ACCESS_TOKEN_KEY = "meetflow.accessToken";
@@ -21,6 +21,7 @@ export type AuthUser = {
   nombre: string;
   apellido: string;
   email: string;
+  fotoUrl: string | null;
 };
 
 type AuthContextValue = {
@@ -36,6 +37,7 @@ type AuthContextValue = {
     password: string;
   }) => Promise<RegisterResponse>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 type ApiErrorResponse = {
@@ -110,6 +112,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const [user, setUser] = useState<AuthUser | null>(null);
 
+  const refreshUser = useCallback(async () => {
+    if (!accessToken) {
+      setUser(null);
+      return;
+    }
+    const currentUser = await getCurrentUser(accessToken);
+    setUser(currentUser);
+  }, [accessToken]);
+
   useEffect(() => {
     if (!accessToken) {
       return;
@@ -133,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string) {
     const result = await authRequest<AuthResponse>("/auth/login", { email, password });
+    setUser(null);
     window.localStorage.setItem(ACCESS_TOKEN_KEY, result.accessToken);
     window.localStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken);
     notifyAuthChange();
@@ -172,8 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      refreshUser,
     }),
-    [accessToken, isReady, user],
+    [accessToken, isReady, refreshUser, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
