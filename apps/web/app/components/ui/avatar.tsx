@@ -36,6 +36,33 @@ type UserAvatarProps = {
 const FALLBACK_COLORS = "bg-[#d9dce8] text-[#252d54]";
 
 /**
+ * Hosts de los que se aceptan fotos. Las fotos de otros participantes llegan
+ * vía Stream (user.image), que el propio cliente puede setear: sin esta lista,
+ * cualquiera podría poner una URL propia y usarla de pixel de rastreo (IP de
+ * los demás). Se puede ampliar con NEXT_PUBLIC_AVATAR_HOSTS (separados por coma).
+ */
+const AVATAR_HOSTS = (process.env.NEXT_PUBLIC_AVATAR_HOSTS ?? "res.cloudinary.com")
+  .split(",")
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+/**
+ * Devuelve la URL solo si es https de un host permitido, o un blob: local
+ * (vista previa de un archivo que eligió el propio usuario); si no, null.
+ */
+export function safeAvatarSrc(src: string | null | undefined): string | null {
+  if (!src) return null;
+  try {
+    const url = new URL(src);
+    if (url.protocol === "blob:") return url.href;
+    if (url.protocol !== "https:") return null;
+    return AVATAR_HOSTS.includes(url.hostname.toLowerCase()) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Avatar de persona: foto con respaldo a iniciales. Si la imagen falla al
  * cargar (URL vencida, bloqueada) cae a las iniciales en vez de dejar un
  * ícono roto.
@@ -52,7 +79,8 @@ export function UserAvatar({
 }: UserAvatarProps) {
   // Se guarda la URL que falló (no un booleano): si cambia la foto, se reintenta.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const showPhoto = Boolean(src) && src !== failedSrc;
+  const safeSrc = safeAvatarSrc(src);
+  const showPhoto = safeSrc !== null && safeSrc !== failedSrc;
   const base = `inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold ${sizeClasses[size]}`;
   const label = name.trim() || "Avatar de perfil";
 
@@ -65,12 +93,12 @@ export function UserAvatar({
       {showPhoto ? (
         // eslint-disable-next-line @next/next/no-img-element -- URLs externas (Cloudinary/Stream) con fallback propio
         <img
-          src={src!}
+          src={safeSrc}
           alt={decorative ? "" : label}
           referrerPolicy="no-referrer"
           loading="lazy"
           decoding="async"
-          onError={() => setFailedSrc(src ?? null)}
+          onError={() => setFailedSrc(safeSrc)}
           className="h-full w-full object-cover"
         />
       ) : (
