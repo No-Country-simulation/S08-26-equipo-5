@@ -106,6 +106,33 @@ export const openApiSpec = {
           refreshToken: { type: "string" },
         },
       },
+      ForgotPasswordDto: {
+        type: "object",
+        required: ["email"],
+        properties: {
+          email: { type: "string", format: "email", example: "jhon.rivera@example.com" },
+        },
+      },
+      MessageResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string", example: "Contraseña actualizada" },
+        },
+      },
+      ResetPasswordDto: {
+        type: "object",
+        required: ["password"],
+        properties: {
+          password: { type: "string", minLength: 8, example: "NubeAzul#4821" },
+        },
+      },
+      ResetTokenValidationResponse: {
+        type: "object",
+        properties: {
+          valido: { type: "boolean", example: true },
+          emailEnmascarado: { type: "string", example: "j***@example.com" },
+        },
+      },
       RefreshDto: {
         type: "object",
         required: ["refreshToken"],
@@ -465,6 +492,80 @@ export const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/MeResponse" } } },
           },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/auth/forgot-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Pedir enlace para restablecer la contraseña",
+        description:
+          "Responde **siempre** 200 con el mismo mensaje, exista o no la cuenta (sin enumeración de usuarios). " +
+          "Si la cuenta existe, invalida los pedidos previos pendientes y envía por correo un enlace " +
+          "`FRONTEND_URL/restablecer-contrasena/<token>` de un solo uso que vence en " +
+          "`PASSWORD_RESET_TTL_MINUTES` (30). Un fallo del proveedor de correo no cambia la respuesta. " +
+          "Rate limit: `RATE_LIMIT_FORGOT_MAX` (5) cada 15 min por IP y por email (429 `RATE_LIMITED`).",
+        operationId: "auth_forgot_password",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ForgotPasswordDto" } } },
+        },
+        responses: {
+          200: {
+            description: "Mensaje genérico",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/MessageResponse" },
+                example: { message: "Si el email está registrado, te enviamos un enlace para restablecer la contraseña." },
+              },
+            },
+          },
+          400: { description: "`VALIDATION_ERROR`: email faltante o con formato inválido", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/auth/reset-password/{token}": {
+      get: {
+        tags: ["Auth"],
+        summary: "Validar el token de restablecimiento",
+        description:
+          "Público, no consume el token. Token desconocido, vencido o ya usado responden igual " +
+          "(410 `RESET_TOKEN_INVALID`): no hay oráculo para quien prueba tokens. " +
+          "Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` (30) cada 15 min.",
+        operationId: "auth_reset_password_validate",
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: {
+            description: "Token válido",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ResetTokenValidationResponse" } } },
+          },
+          410: { description: "`RESET_TOKEN_INVALID`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      post: {
+        tags: ["Auth"],
+        summary: "Restablecer la contraseña con el token",
+        description:
+          "Mismas reglas de contraseña que el registro (mínimo 8). El token se consume de forma atómica " +
+          "(un solo uso: ante dos pedidos concurrentes uno recibe 410), se actualiza el hash y se revocan " +
+          "**todos** los refresh tokens del usuario en una sola transacción. No inicia sesión: el cliente " +
+          "debe hacer login. Se envía un correo de aviso (best-effort). Rate limit por IP: `RATE_LIMIT_TOKEN_MAX`.",
+        operationId: "auth_reset_password",
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ResetPasswordDto" } } },
+        },
+        responses: {
+          200: {
+            description: "Contraseña actualizada",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/MessageResponse" } } },
+          },
+          400: { description: "`VALIDATION_ERROR`: contraseña faltante o de menos de 8 caracteres", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          410: { description: "`RESET_TOKEN_INVALID`: desconocido, vencido o ya usado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },
