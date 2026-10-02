@@ -522,6 +522,132 @@ describe("S2-01 — Salas API", () => {
     });
   });
 
+  describe("POST /api/v1/salas/:id/promote-host", () => {
+    const salaId = "33333333-3333-4333-8333-333333333333";
+    const hostId = "user-host-1";
+    const hostParticipantId = "participant-host-1";
+    const targetId = "user-target-2";
+    const targetParticipantId = "participant-target-2";
+    const hostToken = createToken(hostId, "host@test.com");
+    let mockTxParticipanteUpdate: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockSalaFindUnique.mockResolvedValue({
+        id: salaId,
+        codigo: "TRAN1234",
+        nombre: "Sala Transfer",
+        streamCallType: "default",
+        streamCallId: "stream-call-1",
+      });
+      mockAddCallMember.mockResolvedValue(undefined);
+      mockTxParticipanteUpdate = vi.fn().mockResolvedValue({});
+      mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<any>) => {
+        const tx = {
+          participante: {
+            findUnique: vi.fn().mockResolvedValue({ rol: "HOST" }),
+            update: mockTxParticipanteUpdate,
+          },
+        };
+        return fn(tx);
+      });
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: hostParticipantId,
+        salaId,
+        usuarioId: hostId,
+        rol: "HOST",
+        estado: "APROBADO",
+      });
+      mockParticipanteFindFirst.mockResolvedValue({
+        id: targetParticipantId,
+        salaId,
+        usuarioId: targetId,
+        rol: "PARTICIPANTE",
+        estado: "APROBADO",
+        fechaIngreso: new Date("2026-01-02"),
+      });
+    });
+
+    it("200 — suma un anfitrión y el caller sigue siendo HOST", async () => {
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/promote-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetParticipantId });
+
+      expect(res.status).toBe(200);
+      expect(res.body.host).toEqual({ usuarioId: targetId });
+      expect(mockTxParticipanteUpdate).toHaveBeenCalledWith({
+        where: { id: targetParticipantId },
+        data: {
+          rol: "HOST",
+          estado: "APROBADO",
+          fechaIngreso: new Date("2026-01-02"),
+        },
+      });
+      expect(mockAddCallMember).toHaveBeenCalledTimes(1);
+      expect(mockAddCallMember).toHaveBeenCalledWith(
+        "default",
+        "stream-call-1",
+        targetParticipantId,
+        "admin",
+      );
+    });
+
+    it("200 — si ya es HOST no lo vuelve a promover", async () => {
+      mockParticipanteFindFirst.mockResolvedValue({
+        id: targetParticipantId,
+        salaId,
+        usuarioId: targetId,
+        rol: "HOST",
+        estado: "APROBADO",
+        fechaIngreso: new Date("2026-01-02"),
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/promote-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetParticipantId });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain("ya es anfitrión");
+      expect(mockTransaction).not.toHaveBeenCalled();
+      expect(mockAddCallMember).not.toHaveBeenCalled();
+    });
+
+    it("403 — quien no es HOST no asigna", async () => {
+      mockParticipanteFindUnique.mockResolvedValue({
+        id: hostParticipantId,
+        rol: "PARTICIPANTE",
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/promote-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetParticipantId });
+
+      expect(res.status).toBe(403);
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+
+    it("400 — un INVITADO no puede ser anfitrión", async () => {
+      mockParticipanteFindFirst.mockResolvedValue({
+        id: targetParticipantId,
+        salaId,
+        usuarioId: targetId,
+        rol: "PARTICIPANTE",
+        estado: "INVITADO",
+        fechaIngreso: null,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/salas/${salaId}/promote-host`)
+        .set("Authorization", `Bearer ${hostToken}`)
+        .send({ nuevoHostId: targetParticipantId });
+
+      expect(res.status).toBe(400);
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── Participantes INVITADO en consultas (WR-02) ────────
   describe("consultas con participantes INVITADO", () => {
     const salaId = "44444444-4444-4444-8444-444444444444";

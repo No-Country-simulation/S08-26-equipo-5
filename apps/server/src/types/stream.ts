@@ -81,6 +81,8 @@ export interface ParticipanteInfo {
   fechaIngreso: string | null;
   /** Foto de la cuenta vinculada; null para invitados o sin foto. */
   fotoUrl: string | null;
+  /** Cuenta registrada que ya aceptó: puede recibir el rol de anfitrión. */
+  puedeSerHost: boolean;
 }
 
 export interface CreadorInfo {
@@ -123,6 +125,11 @@ export interface TransferHostResponse {
   message: string;
   host: { usuarioId: string };
   previousHost: { usuarioId: string };
+}
+
+export interface PromoteHostResponse {
+  message: string;
+  host: { usuarioId: string };
 }
 
 // ─── POST /salas/:code/join ──────────────────────────────

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useCallback } from "react";
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { useAuth } from "../../lib/auth";
@@ -25,6 +25,9 @@ function RoomContent() {
   const salaId = searchParams.get("salaId") ?? "";
   const isDemo = searchParams.get("demo") === "true" || code === "DEMO-123";
   const isHost = searchParams.get("host") === "true";
+  const [grantedHost, setGrantedHost] = useState(false);
+  const actsAsHost = isHost || grantedHost;
+  const grantHost = useCallback(() => setGrantedHost(true), []);
   const hasRealAccess = Boolean(code && !isDemo);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -48,9 +51,9 @@ function RoomContent() {
     connected: hostSocketConnected,
     error: hostSocketError,
   } = useHostSocket({
-    salaCodigo: isHost ? code : null,
-    salaId: isHost ? salaId : null,
-    accessToken: isHost ? accessToken : null,
+    salaCodigo: actsAsHost ? code : null,
+    salaId: actsAsHost ? salaId : null,
+    accessToken: actsAsHost ? accessToken : null,
   });
 
   async function copyRoomCode() {
@@ -77,7 +80,7 @@ function RoomContent() {
     });
 
     socket.on("connect", () => {
-      if (isHost) {
+      if (actsAsHost) {
         socket.emit(
           "host:subscribe",
           { salaId },
@@ -113,7 +116,7 @@ function RoomContent() {
     return () => {
       socket.disconnect();
     };
-  }, [code, isDemo, isHost, roomAccessToken, router, salaId]);
+  }, [actsAsHost, code, isDemo, roomAccessToken, router, salaId]);
 
   useEffect(() => {
     if (isDemo || !salaId) return;
@@ -285,6 +288,7 @@ function RoomContent() {
               requestsError={hostSocketError}
               onApproveRequest={approve}
               onRejectRequest={reject}
+              onBecameHost={grantHost}
               onLeave={(error) => {
                 if (error) {
                   setConnectionError(error.message);
