@@ -83,6 +83,10 @@ export interface IParticipanteRepository {
         datos?: { nombre?: string; apellido?: string }
     ): Promise<number>;
     findAprobadosBySala(salaId: string): Promise<AprobadoResumen[]>;
+    /** Pendientes ya guardados, para reenviarlos al host cuando reconecta. */
+    findPendientesBySala(
+        salaId: string
+    ): Promise<Pick<Participante, "id" | "nombre" | "apellido" | "email">[]>;
 }
 
 export class PrismaParticipanteRepository implements IParticipanteRepository {
@@ -232,5 +236,13 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
             },
         });
         return rows.map(({ usuario, ...p }) => ({ ...p, fotoUrl: usuario?.fotoUrl ?? null }));
+    }
+
+    async findPendientesBySala(salaId: string) {
+        return this.prisma.participante.findMany({
+            where: { salaId, estado: EstadoParticipante.PENDIENTE },
+            select: { id: true, nombre: true, apellido: true, email: true },
+            orderBy: { createdAt: "asc" },
+        });
     }
 }

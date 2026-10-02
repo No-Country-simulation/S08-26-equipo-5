@@ -49,6 +49,7 @@ function createDeps() {
             findAprobadoByEmail: vi.fn(),
             findBySalaAndUsuario: vi.fn(),
             activarInvitado: vi.fn(),
+            findPendientesBySala: vi.fn(),
         },
         salas: { findByCodigo: vi.fn(), findById: vi.fn() },
         estado: new InMemoryEstadoMedioStore(),

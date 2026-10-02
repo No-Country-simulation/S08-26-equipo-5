@@ -22,6 +22,9 @@ describe("config/env — invitaciones y mail", () => {
     vi.stubEnv("INVITACION_TTL_HORAS", "");
     vi.stubEnv("RATE_LIMIT_INVITE_MAX", "");
     vi.stubEnv("RATE_LIMIT_TOKEN_MAX", "");
+    vi.stubEnv("PASSWORD_RESET_TTL_MINUTES", "");
+    vi.stubEnv("RATE_LIMIT_FORGOT_MAX", "");
+    vi.stubEnv("TRUST_PROXY", "");
   });
 
   afterEach(() => {
@@ -99,4 +102,70 @@ describe("config/env — invitaciones y mail", () => {
       await expect(cargarEnv()).rejects.toThrow(/INVITACION_TTL_HORAS/);
     },
   );
+
+  it("recuperación de contraseña: TTL 30 min y límite 5 por defecto", async () => {
+    const env = await cargarEnv();
+
+    expect(env.passwordResetTtlMinutes).toBe(30);
+    expect(env.rateLimitForgotMax).toBe(5);
+  });
+
+  it("recuperación de contraseña: respeta los valores configurados", async () => {
+    vi.stubEnv("PASSWORD_RESET_TTL_MINUTES", "10");
+    vi.stubEnv("RATE_LIMIT_FORGOT_MAX", "3");
+
+    const env = await cargarEnv();
+
+    expect(env.passwordResetTtlMinutes).toBe(10);
+    expect(env.rateLimitForgotMax).toBe(3);
+  });
+
+  it.each(["0", "-1", "abc"])(
+    "PASSWORD_RESET_TTL_MINUTES inválido (%s) falla al arrancar",
+    async (valor) => {
+      vi.stubEnv("PASSWORD_RESET_TTL_MINUTES", valor);
+
+      await expect(cargarEnv()).rejects.toThrow(/PASSWORD_RESET_TTL_MINUTES/);
+    },
+  );
+
+  it("RATE_LIMIT_FORGOT_MAX inválido falla al arrancar", async () => {
+    vi.stubEnv("RATE_LIMIT_FORGOT_MAX", "0");
+
+    await expect(cargarEnv()).rejects.toThrow(/RATE_LIMIT_FORGOT_MAX/);
+  });
+
+  describe("TRUST_PROXY", () => {
+    it("por defecto es false fuera de producción", async () => {
+      expect((await cargarEnv()).trustProxy).toBe(false);
+    });
+
+    it("por defecto es 1 salto en producción", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      expect((await cargarEnv()).trustProxy).toBe(1);
+    });
+
+    it.each([
+      ["2", 2],
+      ["true", true],
+      ["false", false],
+      ["10.0.0.0/8", "10.0.0.0/8"],
+      ["loopback, 10.0.0.1", "loopback,10.0.0.1"],
+    ])("acepta %s", async (valor, esperado) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("TRUST_PROXY", valor);
+      expect((await cargarEnv()).trustProxy).toBe(esperado);
+    });
+
+    it("un valor explícito pisa el default de producción", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("TRUST_PROXY", "false");
+      expect((await cargarEnv()).trustProxy).toBe(false);
+    });
+
+    it.each(["0", "-1", "1.5"])("número inválido (%s) falla al arrancar", async (valor) => {
+      vi.stubEnv("TRUST_PROXY", valor);
+      await expect(cargarEnv()).rejects.toThrow(/TRUST_PROXY/);
+    });
+  });
 });

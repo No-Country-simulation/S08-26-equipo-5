@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useCallback } from "react";
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { useAuth } from "../../lib/auth";
@@ -25,6 +25,9 @@ function RoomContent() {
   const salaId = searchParams.get("salaId") ?? "";
   const isDemo = searchParams.get("demo") === "true" || code === "DEMO-123";
   const isHost = searchParams.get("host") === "true";
+  const [grantedHost, setGrantedHost] = useState(false);
+  const actsAsHost = isHost || grantedHost;
+  const grantHost = useCallback(() => setGrantedHost(true), []);
   const hasRealAccess = Boolean(code && !isDemo);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -41,7 +44,6 @@ function RoomContent() {
   const guestSession = getGuestSession();
   const roomAccessToken =
     guestSession?.salaId === salaId ? guestSession.accessToken : accessToken;
-  const waitingRoomPath = `/waiting-room?code=${encodeURIComponent(code)}${isDemo ? "&demo=true" : ""}`;
   const {
     requests,
     approve,
@@ -49,14 +51,15 @@ function RoomContent() {
     connected: hostSocketConnected,
     error: hostSocketError,
   } = useHostSocket({
-    salaCodigo: isHost ? code : null,
-    salaId: isHost ? salaId : null,
-    accessToken: isHost ? accessToken : null,
+    salaCodigo: actsAsHost ? code : null,
+    salaId: actsAsHost ? salaId : null,
+    accessToken: actsAsHost ? accessToken : null,
   });
 
-  async function copyWaitingRoomLink() {
+  async function copyRoomCode() {
+    if (!code) return;
     try {
-      await navigator.clipboard.writeText(new URL(waitingRoomPath, window.location.origin).toString());
+      await navigator.clipboard.writeText(code);
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 1800);
     } catch {
@@ -77,7 +80,7 @@ function RoomContent() {
     });
 
     socket.on("connect", () => {
-      if (isHost) {
+      if (actsAsHost) {
         socket.emit(
           "host:subscribe",
           { salaId },
@@ -113,7 +116,7 @@ function RoomContent() {
     return () => {
       socket.disconnect();
     };
-  }, [code, isDemo, isHost, roomAccessToken, router, salaId]);
+  }, [actsAsHost, code, isDemo, roomAccessToken, router, salaId]);
 
   useEffect(() => {
     if (isDemo || !salaId) return;
@@ -252,7 +255,7 @@ function RoomContent() {
           <h1>Reunión MeetFlow</h1>
           <div className="room-page__share-link">
             <p title={`Código de sala: ${code}`}>{code}</p>
-            <button type="button" onClick={() => void copyWaitingRoomLink()} aria-label="Copiar enlace completo de la sala de espera" title="Copiar enlace completo de la sala de espera">
+            <button type="button" onClick={() => void copyRoomCode()} aria-label="Copiar código de la sala" title="Copiar código de la sala">
               {linkCopied ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m5 12 4 4L19 6" /></svg>
               ) : (
@@ -274,6 +277,7 @@ function RoomContent() {
               user={{
                 id: streamConnection.user.id,
                 name: streamConnection.user.name,
+                image: streamConnection.user.image ?? null,
               }}
               callType={streamConnection.callType}
               callId={streamConnection.callId}
@@ -284,6 +288,7 @@ function RoomContent() {
               requestsError={hostSocketError}
               onApproveRequest={approve}
               onRejectRequest={reject}
+              onBecameHost={grantHost}
               onLeave={(error) => {
                 if (error) {
                   setConnectionError(error.message);

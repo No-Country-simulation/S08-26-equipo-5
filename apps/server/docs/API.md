@@ -332,6 +332,7 @@ Limitaciones: el plan gratis permite 300 correos/día. Sin un dominio autenticad
 | `INVITACION_TTL_HORAS` | `72` | Vigencia del enlace de invitación (entero positivo). |
 | `RATE_LIMIT_INVITE_MAX` | `30` | Máx. de `POST /salas/:id/invitaciones` por host cada 15 min. |
 | `RATE_LIMIT_TOKEN_MAX` | `30` | Máx. de `GET /invitaciones/:token` + `POST /invitaciones/:token/aceptar` por IP cada 15 min. |
+| `TRUST_PROXY` | `1` en producción, `false` en el resto | Express `trust proxy`: saltos de proxy (`1`), `true`/`false` o lista de IPs/subredes separada por comas. **Imprescindible detrás de nginx** (`apps/combined`): sin esto `req.ip` es siempre el del proxy y todos los límites por IP (`forgot-password`, tokens de invitación/restablecimiento) pasan a ser un único contador global. Preferí el número de saltos: `true` confía en cualquier `X-Forwarded-For` (spoofeable) y `express-rate-limit` lo advierte (`ERR_ERL_PERMISSIVE_TRUST_PROXY`). Un número inválido (`0`, `-1`, `1.5`) falla al arrancar. |
 
 Estado nuevo de participante: `INVITADO` (invitado que todavía no aceptó; `nombre`/`apellido` pueden ser `null`). Nunca es aprobable directamente ni aparece entre los aprobados.
 
@@ -507,6 +508,8 @@ escuchar `participant:state`/`participant:connection` en la room `sala:{id}`.
 
 ### POST /auth/register — Registrar usuario
 
+**Topes de entrada (cambio de contrato, 2026-10-02):** `email` de hasta 254 caracteres (también en `login` y `forgot-password`) y `password` de hasta **72 bytes UTF-8** en `register` y `reset-password` (bcrypt ignora el resto; con tildes o emoji 72 bytes son menos de 72 caracteres). Se responde `400 VALIDATION_ERROR` con `errors[0].mensaje = "La contraseña no puede superar 72 bytes"`. `login` no limita la contraseña, para no bloquear cuentas existentes.
+
 ### POST /auth/login — Iniciar sesión
 
 ### GET /auth/me — Usuario actual
@@ -518,6 +521,43 @@ escuchar `participant:state`/`participant:connection` en la room `sala:{id}`.
 ### POST /auth/logout — Cerrar sesión
 
 *Ver detalles en el código fuente de auth.controller.ts*
+
+### Recuperación de contraseña
+
+Flujo: `forgot-password` (correo con enlace) → `GET reset-password/:token` (validar) → `POST reset-password/:token` (nueva contraseña) → el cliente hace login. Los tres son públicos (sin sesión).
+
+#### POST /auth/forgot-password — Pedir el enlace
+
+**Body:** `{ "email": "ana@x.com" }` (formato de email válido, si no `400 VALIDATION_ERROR`).
+
+**Response 200 (siempre igual, exista o no la cuenta):** `{ "message": "Si el email está registrado, te enviamos un enlace para restablecer la contraseña." }`
+
+- Sin enumeración de cuentas: misma respuesta, y se responde **antes** de hacer nada: la búsqueda del usuario, la transacción y el envío del correo corren en segundo plano, así el tiempo de respuesta no depende de si el email existe. Un fallo al enviar no cambia la respuesta (se loguea destinatario y motivo, nunca el token ni el enlace).
+- Si la cuenta existe: se invalidan los pedidos previos pendientes y se crea uno nuevo; el correo lleva `FRONTEND_URL/restablecer-contrasena/<token>`.
+- El token es opaco (32 bytes, base64url), de un solo uso, y solo se guarda su hash SHA-256 (`PasswordReset.tokenHash`).
+- Rate limit: `RATE_LIMIT_FORGOT_MAX` (5) cada 15 min, **por IP y por email** (`429 RATE_LIMITED`).
+
+#### GET /auth/reset-password/:token — Validar el token
+
+No lo consume. **Response 200:** `{ "valido": true, "emailEnmascarado": "a***@x.com" }`.
+Token desconocido, vencido o ya usado: `410 RESET_TOKEN_INVALID` (idéntico en los tres casos, sin oráculo). Rate limit por IP: `RATE_LIMIT_TOKEN_MAX` (30) cada 15 min.
+
+#### POST /auth/reset-password/:token — Restablecer
+
+**Body:** `{ "password": "..." }` (misma regla que el registro: entre 8 caracteres y 72 bytes UTF-8, si no `400 VALIDATION_ERROR`).
+**Response 200:** `{ "message": "Contraseña actualizada" }`. **No inicia sesión**: no devuelve tokens; el cliente debe hacer `POST /auth/login`.
+
+- Consumo atómico del token (update condicional `usedAt IS NULL AND expiresAt > now`): ante dos usos concurrentes uno gana y el otro recibe `410 RESET_TOKEN_INVALID`.
+- En la misma transacción se actualiza el hash de la contraseña y se **revocan todos los refresh tokens del usuario** (todas las familias). Los access tokens ya emitidos siguen valiendo hasta que expiran (`JWT_EXPIRES_IN`, 15 min por defecto): las sesiones en otros dispositivos **pueden tardar hasta ese tiempo en cerrarse por completo**; no se cierran de inmediato.
+- Se envía un correo de aviso "tu contraseña fue cambiada" (best-effort; no promete cierre inmediato de sesiones). Los fallos de envío se loguean con el email enmascarado y solo el nombre/código del error.
+- Rate limit por IP: `RATE_LIMIT_TOKEN_MAX`, con contador propio (no comparte con las invitaciones).
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `PASSWORD_RESET_TTL_MINUTES` | `30` | Vigencia del enlace de restablecimiento (entero positivo). |
+| `RATE_LIMIT_FORGOT_MAX` | `5` | Máx. de `POST /auth/forgot-password` por IP y, aparte, por email cada 15 min. |
+
+Error nuevo: `410 RESET_TOKEN_INVALID`. Reusa `MAIL_PROVIDER`, `MAIL_FROM` y `FRONTEND_URL` (ver "Variables de entorno de invitaciones"). Suite: `api_auth.http` (casos 15-18).
 
 ---
 
@@ -574,6 +614,7 @@ curl -X PUT http://localhost:4000/api/v1/usuarios/me/foto \
 ### Dónde se ve la foto
 
 - `GET /auth/me`, `GET /salas/:id/participantes`, `GET /salas/:id/detalle`, y los eventos `join:pending` / `room:state`: campo `fotoUrl`.
+- `POST /salas/:salaId/stream-token` (y el alias `POST /rooms/:id/token`): `user.image` (`string | null`, aditivo) con la foto de la cuenta; `null` para invitados. Sirve para conectar el chat con `{ id, name, image }`.
 - GetStream: al pedir el token de la llamada se sincroniza como `image` del usuario (avatar en video y chat). La foto nueva (o su baja) se refleja en GetStream recién en el próximo `stream-token` que pida el participante.
 
 ### Variables de entorno
@@ -626,6 +667,8 @@ en `apps/server/.env.example` (ver changelog).
 
 | Fecha | Cambio |
 |-------|--------|
+| 2026-10-02 | Topes de entrada: `email` ≤ 254 caracteres (register, login, forgot-password) y `password` ≤ 72 bytes UTF-8 (register, reset-password), `400 VALIDATION_ERROR`. `forgot-password` valida antes de aplicar los limiters. Nueva variable `TRUST_PROXY`. |
+| 2026-10-02 | Recuperación de contraseña: `POST /auth/forgot-password`, `GET`/`POST /auth/reset-password/:token` (tabla `PasswordReset`, token de un solo uso con hash SHA-256, revoca todos los refresh tokens, correo HTML de enlace y de aviso). Variables `PASSWORD_RESET_TTL_MINUTES` y `RATE_LIMIT_FORGOT_MAX`. Casos 15-18 en `api_auth.http`. |
 | 2026-10-01 | Feedback PR #104. **Cambios de contrato:** `GET /invitaciones/:token` devuelve `email` enmascarado (`a***@dominio.com`); las respuestas de invitaciones ya no van envueltas en `{ data }` (`POST /salas/:id/invitaciones` → `{ resultados }`, `GET /invitaciones/:token` → objeto plano); `GET /salas/:id/participantes` y `/detalle` exigen ser participante (403 `NOT_A_PARTICIPANT`) y ocultan las filas `INVITADO` y los emails a quien no es HOST (`email: null`); `POST /invitaciones/:token/aceptar` con sesión sobre un invitado sin cuenta compara emails (403 `INVITATION_ACCOUNT_MISMATCH` sin consumir el token; si coincide vincula la cuenta); `join:pending` envía `nombre`/`apellido` `null` cuando faltan. Documentados el rate limit en memoria y las variables de entorno de invitaciones. |
 | 2026-09-30 | Foto de perfil: `PUT`/`DELETE /usuarios/me/foto` (subida vía backend a Cloudinary), `fotoUrl` en `GET /auth/me`, participantes (REST y sockets) y avatar en GetStream. Suite `api_usuarios.http`. |
 | 2026-09-30 | PR #101 (Ezequiel): agregado `POST /salas/:id/finalizar` (fallback explícito al webhook de GetStream) y evento `room:ended`. **Cambio de contrato en `transfer-host`:** `nuevoHostId` pasó de ser `usuarioId` a ser `Participante.id` (el `userId` que usa GetStream), y ahora solo califican participantes con cuenta registrada; se agregó sincronización de roles en GetStream (`addCallMember`) para que el nuevo host tenga permisos reales en la llamada, no solo en la DB. Doc actualizada acá porque el PR no tocó Swagger/API.md — quedaba desalineada con el código. |

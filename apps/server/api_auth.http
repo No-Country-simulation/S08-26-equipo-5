@@ -2,7 +2,7 @@
 @email = qa-auth-{{$timestamp}}@test.com
 @password = password123
 
-# Contrato v1.0.1. Orden: register -> login -> me -> refresh -> login2 -> logout.
+# Contrato v1.0.1. Orden: register -> login -> me -> refresh -> login2 -> logout -> recuperar contraseña.
 # El email lleva timestamp para que la suite sea repetible (register siempre 201).
 # Auth no tiene rol que devuelva 403; el permiso denegado de este dominio es 401.
 
@@ -198,5 +198,65 @@ GET {{host}}/no-existe
 > {%
 client.test("404", function() {
   client.assert(response.status === 404, "status " + response.status);
+});
+%}
+
+### 15. Forgot-password con email inexistente -> 200 (sin enumeración)
+# La respuesta es idéntica exista o no la cuenta. Rate limit: RATE_LIMIT_FORGOT_MAX
+# (5) cada 15 min por IP y por email: esta suite gasta 1 por corrida.
+POST {{host}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "no-existe-{{$timestamp}}@test.com"
+}
+
+> {%
+client.test("forgot-password 200 genérico", function() {
+  client.assert(response.status === 200, "status " + response.status);
+  client.assert(
+    response.body.message === "Si el email está registrado, te enviamos un enlace para restablecer la contraseña.",
+    JSON.stringify(response.body)
+  );
+});
+%}
+
+### 16. Reset-password: validar token falso -> 410
+GET {{host}}/auth/reset-password/token-falso-que-no-existe-0123456789
+
+> {%
+client.test("reset-password GET token falso 410", function() {
+  client.assert(response.status === 410, "status " + response.status);
+  client.assert(response.body.error.code === "RESET_TOKEN_INVALID", JSON.stringify(response.body));
+});
+%}
+
+### 17. Reset-password: usar token falso -> 410
+POST {{host}}/auth/reset-password/token-falso-que-no-existe-0123456789
+Content-Type: application/json
+
+{
+  "password": "nueva-clave-123"
+}
+
+> {%
+client.test("reset-password POST token falso 410", function() {
+  client.assert(response.status === 410, "status " + response.status);
+  client.assert(response.body.error.code === "RESET_TOKEN_INVALID", JSON.stringify(response.body));
+});
+%}
+
+### 18. Reset-password con contraseña corta -> 400
+POST {{host}}/auth/reset-password/token-falso-que-no-existe-0123456789
+Content-Type: application/json
+
+{
+  "password": "corta"
+}
+
+> {%
+client.test("reset-password password corta 400", function() {
+  client.assert(response.status === 400, "status " + response.status);
+  client.assert(response.body.error.code === "VALIDATION_ERROR", JSON.stringify(response.body));
 });
 %}

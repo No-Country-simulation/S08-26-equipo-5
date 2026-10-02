@@ -81,6 +81,8 @@ export interface ParticipanteInfo {
   fechaIngreso: string | null;
   /** Foto de la cuenta vinculada; null para invitados o sin foto. */
   fotoUrl: string | null;
+  /** Cuenta registrada que ya aceptó: puede recibir el rol de anfitrión. */
+  puedeSerHost: boolean;
 }
 
 export interface CreadorInfo {
@@ -125,6 +127,11 @@ export interface TransferHostResponse {
   previousHost: { usuarioId: string };
 }
 
+export interface PromoteHostResponse {
+  message: string;
+  host: { usuarioId: string };
+}
+
 // ─── POST /salas/:code/join ──────────────────────────────
 /**
  * Con sesión iniciada (Bearer token) los tres campos son opcionales: la
@@ -157,7 +164,8 @@ export interface StreamTokenResponse {
   token: string;
   /** user_id en GetStream (= Participante.id). */
   userId: string;
-  user: { id: string; name: string };
+  /** image: foto de la cuenta vinculada; null para invitados o sin foto. */
+  user: { id: string; name: string; image: string | null };
   rol: RoomRole;
   callType: string;
   callId: string;

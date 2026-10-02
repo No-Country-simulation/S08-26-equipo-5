@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { useAuth } from "../../lib/auth";
+import { PASSWORD_TOO_LONG_MESSAGE, passwordTooLong } from "../../lib/password-recovery";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,6 +17,10 @@ export default function RegisterPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (passwordTooLong(form.password)) {
+      setError(PASSWORD_TOO_LONG_MESSAGE);
+      return;
+    }
     setLoading(true);
     try {
       await register(form);

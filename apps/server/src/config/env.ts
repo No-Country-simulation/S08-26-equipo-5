@@ -32,6 +32,27 @@ function parsePositiveInt(name: string, value: string | undefined, fallback: num
   return n;
 }
 
+// TRUST_PROXY (Express "trust proxy"): saltos de proxy ("1"), "true"/"false" o lista
+// de IPs/subredes/alias separada por comas. Vacío → 1 salto en producción (detrás de
+// nginx) y false en el resto. Se prefiere el número de saltos: "true" confía en
+// cualquier X-Forwarded-For y express-rate-limit lo rechaza (ERR_ERL_PERMISSIVE_TRUST_PROXY).
+function parseTrustProxy(value: string | undefined, nodeEnv: string): boolean | number | string {
+  const v = value?.trim();
+  if (v === undefined || v === "") return nodeEnv === "production" ? 1 : false;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(v)) {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error(
+        `Valor inválido para TRUST_PROXY: "${v}". Un número debe ser un entero positivo (saltos de proxy)`,
+      );
+    }
+    return n;
+  }
+  return v.split(",").map((part) => part.trim()).filter(Boolean).join(",");
+}
+
 const MAIL_PROVIDERS = ["console", "resend", "brevo"] as const;
 export type MailProvider = (typeof MAIL_PROVIDERS)[number];
 
@@ -61,6 +82,7 @@ export const env = {
   refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 7),
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS ?? 12),
   frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:3000",
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY, nodeEnv),
 
   // ── Invitaciones por correo ──────────────────────────────
   // Vigencia del enlace de invitación (horas).
@@ -73,6 +95,16 @@ export const env = {
   // Límites por ventana de 15 min (configurables para evitar 429 en tests).
   rateLimitInviteMax: parsePositiveInt("RATE_LIMIT_INVITE_MAX", process.env.RATE_LIMIT_INVITE_MAX, 30),
   rateLimitTokenMax: parsePositiveInt("RATE_LIMIT_TOKEN_MAX", process.env.RATE_LIMIT_TOKEN_MAX, 30),
+
+  // ── Recuperación de contraseña ───────────────────────────
+  // Vigencia del enlace de restablecimiento (minutos).
+  passwordResetTtlMinutes: parsePositiveInt(
+    "PASSWORD_RESET_TTL_MINUTES",
+    process.env.PASSWORD_RESET_TTL_MINUTES,
+    30,
+  ),
+  // POST /auth/forgot-password por IP y por email, cada 15 min.
+  rateLimitForgotMax: parsePositiveInt("RATE_LIMIT_FORGOT_MAX", process.env.RATE_LIMIT_FORGOT_MAX, 5),
 
   // ── GetStream ────────────────────────────────────────────
   // La API key viaja al cliente en la respuesta de /stream-token; el secret
