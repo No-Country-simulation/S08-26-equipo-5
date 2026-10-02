@@ -1,3 +1,5 @@
+export type SalaEstado = "PROGRAMADA" | "ACTIVA" | "FINALIZADA" | "CANCELADA";
+
 export type Sala = {
   id: string;
   codigo: string;
@@ -5,7 +7,7 @@ export type Sala = {
   resumen?: string | null;
   fechaInicio: string;
   fechaFin?: string | null;
-  estado: string;
+  estado: SalaEstado;
   streamRoomId?: string;
 };
 
@@ -24,9 +26,11 @@ export type SalaDetalle = Sala & {
   totalParticipantes: number;
   participantes: Array<{
     id: string;
-    nombre: string;
-    apellido: string;
-    email: string;
+    // null en invitados por correo que todavía no aceptaron (estado INVITADO).
+    nombre: string | null;
+    apellido: string | null;
+    // null para quien no es HOST: el backend solo le muestra emails al host.
+    email: string | null;
     rol: "HOST" | "PARTICIPANTE";
     estado: string;
     fechaIngreso: string | null;
@@ -70,9 +74,11 @@ export type StreamTokenResponse = {
 
 export type ParticipanteSala = {
   id: string;
-  nombre: string;
-  apellido: string;
-  email: string;
+  // null en invitados por correo sin cuenta que no aceptaron (estado INVITADO).
+  nombre: string | null;
+  apellido: string | null;
+  // null para quien no es HOST.
+  email: string | null;
   rol: "HOST" | "PARTICIPANTE";
   estado: string;
   fechaIngreso: string | null;
@@ -267,9 +273,76 @@ export function transferHost(
   );
 }
 
+export function cancelSala(salaId: string): Promise<{ message: string }> {
+  return request(`/salas/${encodeURIComponent(salaId)}`, {
+    method: "DELETE",
+  });
+}
+
 export function finalizarSala(salaId: string): Promise<{ message: string }> {
   return request(`/salas/${encodeURIComponent(salaId)}/finalizar`, {
     method: "POST",
   });
 }
 
+
+// ── Invitaciones por correo (contrato PR #104, sin envoltorio { data }) ─────
+
+/** Máximo de emails por solicitud de POST /salas/:id/invitaciones. */
+export const MAX_INVITACIONES_POR_SOLICITUD = 20;
+
+export type InvitacionEstado = "INVITADO" | "REENVIADO" | "YA_PARTICIPA";
+
+export type InvitacionResultado = {
+  email: string;
+  estado: InvitacionEstado;
+  /** false: la invitación quedó registrada pero el correo no salió (reintentable). */
+  emailEnviado: boolean;
+};
+
+export type InvitarResponse = { resultados: InvitacionResultado[] };
+
+export type InvitacionPreview = {
+  sala: { id: string; nombre: string };
+  /** Enmascarado por el backend: a***@dominio.com. */
+  email: string;
+  /** true si el invitado no tiene cuenta: hay que pedirle nombre y apellido. */
+  requiereDatos: boolean;
+  /** true si el invitado tiene cuenta: hay que iniciar sesión con ella. */
+  requiereLogin: boolean;
+};
+
+export type AceptarInvitacionResponse = {
+  participanteId: string;
+  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO";
+  salaId: string;
+  salaCodigo: string;
+  accessToken: string;
+};
+
+/** Invita por correo (solo HOST). El backend normaliza y deduplica los emails. */
+export function invitarASala(salaId: string, emails: string[]): Promise<InvitarResponse> {
+  return request<InvitarResponse>(`/salas/${encodeURIComponent(salaId)}/invitaciones`, {
+    method: "POST",
+    body: JSON.stringify({ emails }),
+  });
+}
+
+/** Vista previa pública: no consume el token. Falla con code INVITATION_INVALID (410). */
+export function getInvitacion(token: string): Promise<InvitacionPreview> {
+  return request<InvitacionPreview>(`/invitaciones/${encodeURIComponent(token)}`);
+}
+
+/**
+ * Acepta la invitación (INVITADO → PENDIENTE). Sesión opcional: `request` adjunta
+ * el Bearer del usuario si existe. Sin cuenta: nombre y apellido obligatorios.
+ */
+export function aceptarInvitacion(
+  token: string,
+  body?: { nombre?: string; apellido?: string },
+): Promise<AceptarInvitacionResponse> {
+  return request<AceptarInvitacionResponse>(
+    `/invitaciones/${encodeURIComponent(token)}/aceptar`,
+    { method: "POST", body: JSON.stringify(body ?? {}) },
+  );
+}

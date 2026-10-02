@@ -7,8 +7,9 @@ import { getAccessToken } from "./auth";
 
 export type JoinRequest = {
   participanteId: string;
-  nombre: string;
-  apellido: string;
+  // null en invitados por correo que aún no completaron sus datos (contrato PR #104).
+  nombre: string | null;
+  apellido: string | null;
   email: string;
   timestamp: string;
   /** optimistic UI state while the host is deciding */
@@ -17,8 +18,9 @@ export type JoinRequest = {
 
 type JoinPendingPayload = {
   participanteId: string;
-  nombre: string;
-  apellido: string;
+  // null en invitados por correo que aún no completaron sus datos (contrato PR #104).
+  nombre: string | null;
+  apellido: string | null;
   email: string;
   timestamp: string;
 };
@@ -92,7 +94,7 @@ export function useHostSocket({
                     participanteId: item.id,
                     nombre: item.nombre,
                     apellido: item.apellido,
-                    email: item.email,
+                    email: item.email ?? "",
                     timestamp: item.fechaIngreso ?? new Date().toISOString(),
                     status: "pending" as const,
                   }));

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { JoinRequest } from "../lib/host-socket";
+import { displayName, initials } from "../lib/participant-name";
 
 type HostRequestPanelProps = {
   requests: JoinRequest[];
@@ -10,6 +11,7 @@ type HostRequestPanelProps = {
   error: string;
   onApprove: (participanteId: string) => void;
   onReject: (participanteId: string) => void;
+  embedded?: boolean;
 };
 
 // ... RequestCard function remains the same ...
@@ -31,11 +33,13 @@ function RequestCard({
   connected,
   onApprove,
   onReject,
+  embedded,
 }: {
   request: JoinRequest;
   connected: boolean;
   onApprove: () => void;
   onReject: () => void;
+  embedded: boolean;
 }) {
   const cardRef = useRef<HTMLLIElement>(null);
   const isNew = request.status === "pending";
@@ -54,22 +58,24 @@ function RequestCard({
     <li
       ref={cardRef}
       role="article"
-      aria-label={`Solicitud de ${request.nombre} ${request.apellido}`}
+      aria-label={`Solicitud de ${displayName(request)}`}
       className={[
         "relative overflow-hidden rounded-xl border p-4 transition-all duration-300",
         request.status === "pending"
-          ? "animate-[slideIn_0.3s_ease-out] border-blue-200 bg-blue-50 shadow-md shadow-blue-100"
+          ? embedded
+            ? "animate-[slideIn_0.3s_ease-out] border-transparent bg-[#414a73] shadow-none"
+            : "animate-[slideIn_0.3s_ease-out] border-blue-200 bg-blue-50 shadow-md shadow-blue-100"
           : request.status === "approving"
-            ? "border-green-200 bg-green-50 opacity-80"
+            ? embedded ? "border-transparent bg-[#414a73] opacity-80" : "border-green-200 bg-green-50 opacity-80"
             : request.status === "rejecting"
-              ? "border-red-200 bg-red-50 opacity-80"
+              ? embedded ? "border-transparent bg-[#414a73] opacity-80" : "border-red-200 bg-red-50 opacity-80"
               : request.status === "approved"
-                ? "border-green-200 bg-green-50"
-                : "border-slate-200 bg-slate-50 opacity-60",
+                ? embedded ? "border-transparent bg-[#414a73]" : "border-green-200 bg-green-50"
+                : embedded ? "border-transparent bg-[#414a73] opacity-60" : "border-slate-200 bg-slate-50 opacity-60",
       ].join(" ")}
     >
       {/* New indicator pulse */}
-      {request.status === "pending" && (
+      {!embedded && request.status === "pending" && (
         <span
           aria-hidden="true"
           className="absolute right-3 top-3 flex h-2.5 w-2.5"
@@ -79,24 +85,31 @@ function RequestCard({
         </span>
       )}
 
-      <div className="flex items-start gap-3">
-        {/* Avatar */}
-        <div
-          aria-hidden="true"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700"
-        >
-          {request.nombre.charAt(0).toUpperCase()}
-          {request.apellido.charAt(0).toUpperCase()}
-        </div>
+      <div className={`flex min-w-0 items-start ${embedded ? "" : "gap-3"}`}>
+        {!embedded && (
+          <div
+            aria-hidden="true"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700"
+          >
+            {initials(request)}
+          </div>
+        )}
 
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-slate-950">
-            {request.nombre} {request.apellido}
+          <p className={`truncate font-semibold ${embedded ? "text-white" : "text-slate-950"}`}>
+            {displayName(request)}
           </p>
-          <p className="truncate text-sm text-slate-500">{request.email}</p>
-          <p className="mt-0.5 text-xs text-slate-400">
-            {formatTime(request.timestamp)}
-          </p>
+          {embedded ? (
+            <p className="truncate text-sm text-[#bfc4d9]">Solicita ingresar</p>
+          ) : (
+            request.email &&
+            displayName(request) !== request.email && (
+              <p className="truncate text-sm text-slate-500">{request.email}</p>
+            )
+          )}
+          {!embedded && (
+            <p className="mt-0.5 text-xs text-slate-400">{formatTime(request.timestamp)}</p>
+          )}
         </div>
       </div>
 
@@ -104,7 +117,7 @@ function RequestCard({
       {isDone ? (
         <p
           className={`mt-3 text-center text-sm font-semibold ${
-            request.status === "approved" ? "text-green-700" : "text-slate-500"
+            embedded ? "text-white" : request.status === "approved" ? "text-green-700" : "text-slate-500"
           }`}
         >
           {request.status === "approved" ? "✓ Aprobado" : "✗ Rechazado"}
@@ -116,16 +129,16 @@ function RequestCard({
             type="button"
             disabled={isDeciding || !connected}
             onClick={onApprove}
-            aria-label={`Aprobar a ${request.nombre} ${request.apellido}`}
-            className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-wait disabled:opacity-60"
+            aria-label={`${embedded ? "Admitir" : "Aprobar"} a ${displayName(request)}`}
+            className={`flex-1 ${embedded ? "rounded-full bg-[#4053df] px-3 py-3 hover:bg-[#3547cd]" : "rounded-lg bg-green-600 px-3 py-2 hover:bg-green-700"} text-sm font-semibold text-white transition-colors disabled:cursor-wait disabled:opacity-60`}
           >
             {request.status === "approving" ? (
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Aprobando…
+                {embedded ? "Admitiendo…" : "Aprobando…"}
               </span>
             ) : (
-              "Aprobar"
+              embedded ? "Admitir" : "Aprobar"
             )}
           </button>
           <button
@@ -133,8 +146,8 @@ function RequestCard({
             type="button"
             disabled={isDeciding || !connected}
             onClick={onReject}
-            aria-label={`Rechazar a ${request.nombre} ${request.apellido}`}
-            className="flex-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+            aria-label={`Rechazar a ${displayName(request)}`}
+            className={`flex-1 ${embedded ? "rounded-full bg-[#d94f62] px-3 py-3 text-white hover:bg-[#c94457]" : "rounded-lg border border-red-200 bg-white px-3 py-2 text-red-600 hover:bg-red-50"} text-sm font-semibold transition-colors disabled:cursor-wait disabled:opacity-60`}
           >
             {request.status === "rejecting" ? (
               <span className="inline-flex items-center gap-1.5">
@@ -157,6 +170,7 @@ export function HostRequestPanel({
   error,
   onApprove,
   onReject,
+  embedded = false,
 }: HostRequestPanelProps) {
   const pending = requests.filter((r) => r.status === "pending" || r.status === "approving" || r.status === "rejecting");
   const done = requests.filter((r) => r.status === "approved" || r.status === "rejected");
@@ -169,14 +183,17 @@ export function HostRequestPanel({
   const content = (
     <aside
       aria-label="Panel de solicitudes de ingreso"
+      data-embedded={embedded ? "true" : undefined}
       className={
-        pending.length > 0
+        embedded
+          ? "flex w-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-transparent text-white"
+          : pending.length > 0
           ? "fixed bottom-6 right-6 z-[9999] w-full max-w-sm max-h-[80vh] flex flex-col rounded-2xl border border-blue-200 bg-white shadow-2xl animate-in slide-in-from-bottom-5"
           : "flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm"
       }
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+      {/* Standalone panel header; the participants sidebar provides its own section heading. */}
+      {!embedded && <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Anfitrión
@@ -196,7 +213,7 @@ export function HostRequestPanel({
             {connected ? "En vivo" : "Conectando…"}
           </span>
         </div>
-      </div>
+      </div>}
 
       {error && (
         <p role="alert" className="mx-4 mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -207,6 +224,7 @@ export function HostRequestPanel({
       {/* Pending */}
       <div className="flex-1 overflow-y-auto p-4">
         {pending.length === 0 ? (
+          embedded ? null : (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
             <svg
               aria-hidden="true"
@@ -229,6 +247,7 @@ export function HostRequestPanel({
               Aparecerán aquí en tiempo real
             </p>
           </div>
+          )
         ) : (
           <ul className="space-y-3" aria-label="Solicitudes pendientes">
             {pending.map((r) => (
@@ -236,6 +255,7 @@ export function HostRequestPanel({
                 key={r.participanteId}
                 request={r}
                 connected={connected}
+                embedded={embedded}
                 onApprove={() => onApprove(r.participanteId)}
                 onReject={() => onReject(r.participanteId)}
               />
@@ -244,7 +264,7 @@ export function HostRequestPanel({
         )}
 
         {/* Resolved (compact list) */}
-        {done.length > 0 && (
+        {!embedded && done.length > 0 && (
           <div className="mt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
               Historial de esta sesión
@@ -256,7 +276,7 @@ export function HostRequestPanel({
                   className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
                 >
                   <span className="truncate text-sm text-slate-600">
-                    {r.nombre} {r.apellido}
+                    {displayName(r)}
                   </span>
                   <span
                     className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -275,7 +295,7 @@ export function HostRequestPanel({
       </div>
 
       {/* Pending count badge */}
-      {pending.length > 0 && (
+      {pending.length > 0 && !embedded && (
         <div className="border-t border-slate-100 px-5 py-3 text-center text-sm text-slate-500">
           <span className="font-semibold text-blue-600">{pending.length}</span>{" "}
           {pending.length === 1 ? "solicitud pendiente" : "solicitudes pendientes"}
@@ -284,7 +304,7 @@ export function HostRequestPanel({
     </aside>
   );
 
-  if (pending.length > 0) {
+  if (pending.length > 0 && !embedded) {
     if (!isMounted) return null;
     return createPortal(content, document.body);
   }

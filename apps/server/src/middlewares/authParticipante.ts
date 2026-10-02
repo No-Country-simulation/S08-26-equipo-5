@@ -73,7 +73,7 @@ export function authParticipante(
 
         participante = await prisma.participante.findUnique({
           where: { id: guest.sub },
-          include: { sala: true },
+          include: { sala: true, usuario: { select: { fotoUrl: true } } },
         });
       } else {
         // ── Usuario registrado con access token ────────────
@@ -98,7 +98,7 @@ export function authParticipante(
 
         participante = await prisma.participante.findFirst({
           where: { salaId, usuarioId: payload.sub },
-          include: { sala: true },
+          include: { sala: true, usuario: { select: { fotoUrl: true } } },
         });
       }
 
@@ -145,6 +145,7 @@ export function authParticipante(
         nombre: participante.nombre,
         apellido: participante.apellido,
         email: participante.email,
+        fotoUrl: participante.usuario?.fotoUrl ?? null,
         esInvitado: guest !== null,
       };
 

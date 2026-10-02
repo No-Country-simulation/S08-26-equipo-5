@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Yellowtail } from "next/font/google";
 import { useAuth } from "../lib/auth";
@@ -13,10 +14,11 @@ const yellowtail = Yellowtail({
 
 const authenticatedLinks = [
   { href: "/home", label: "Inicio" },
-  { href: "/dashboard", label: "Mis reuniones" },
+  { href: "/agenda", label: "Mis reuniones" },
 ];
 
-export function HomeHeader() {
+/** `trailing` es opcional (área de sesión en AppShell); sin él, el output es el de siempre. */
+export function HomeHeader({ trailing }: { trailing?: ReactNode } = {}) {
   const { isAuthenticated, isReady } = useAuth();
   const pathname = usePathname();
   const showAuthenticatedNav = isReady && isAuthenticated;
@@ -49,6 +51,8 @@ export function HomeHeader() {
           })}
         </nav>
       )}
+
+      {trailing && <div className="flex items-center gap-3 sm:ml-auto">{trailing}</div>}
     </header>
   );
 }

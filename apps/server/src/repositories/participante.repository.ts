@@ -15,6 +15,12 @@ export interface SalaDelParticipante {
     streamCallId: string | null;
 }
 
+/** Participante aprobado tal como viaja en room:state. */
+export type AprobadoResumen = Pick<Participante, "id" | "nombre" | "estado"> & {
+    /** Foto de la cuenta vinculada; null para invitados o sin foto. */
+    fotoUrl: string | null;
+};
+
 export type ParticipanteConSala = Participante & { sala: SalaDelParticipante };
 
 const SALA_SELECT = {
@@ -76,7 +82,7 @@ export interface IParticipanteRepository {
         participanteId: string,
         datos?: { nombre?: string; apellido?: string }
     ): Promise<number>;
-    findAprobadosBySala(salaId: string): Promise<Pick<Participante, "id" | "nombre" | "estado">[]>;
+    findAprobadosBySala(salaId: string): Promise<AprobadoResumen[]>;
     /** Pendientes ya guardados, para reenviarlos al host cuando reconecta. */
     findPendientesBySala(
         salaId: string
@@ -220,10 +226,16 @@ export class PrismaParticipanteRepository implements IParticipanteRepository {
     }
 
     async findAprobadosBySala(salaId: string) {
-        return this.prisma.participante.findMany({
+        const rows = await this.prisma.participante.findMany({
             where: { salaId, estado: EstadoParticipante.APROBADO },
-            select: { id: true, nombre: true, estado: true },
+            select: {
+                id: true,
+                nombre: true,
+                estado: true,
+                usuario: { select: { fotoUrl: true } },
+            },
         });
+        return rows.map(({ usuario, ...p }) => ({ ...p, fotoUrl: usuario?.fotoUrl ?? null }));
     }
 
     async findPendientesBySala(salaId: string) {

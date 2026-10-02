@@ -43,4 +43,5 @@ export interface MeResponse {
   nombre: string;
   apellido: string;
   email: string;
+  fotoUrl: string | null;
 }

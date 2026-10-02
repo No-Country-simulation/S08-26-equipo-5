@@ -29,6 +29,7 @@ export const openApiSpec = {
   ],
   tags: [
     { name: "Auth", description: "Registro, login y sesión" },
+    { name: "Usuarios", description: "Perfil del usuario (foto)" },
     { name: "Salas", description: "Gestión de salas (videollamadas)" },
     {
       name: "Agenda",
@@ -125,6 +126,20 @@ export const openApiSpec = {
           nombre: { type: "string" },
           apellido: { type: "string" },
           email: { type: "string", format: "email" },
+          fotoUrl: { type: "string", format: "uri", nullable: true, description: "Foto de perfil (null si no subió ninguna)" },
+        },
+      },
+      FotoPerfilBody: {
+        type: "object",
+        required: ["foto"],
+        properties: {
+          foto: { type: "string", format: "binary", description: "JPEG, PNG o WebP. Máx. `AVATAR_MAX_BYTES` (2 MB por defecto). El tipo se valida por contenido, no por extensión." },
+        },
+      },
+      FotoPerfilResponse: {
+        type: "object",
+        properties: {
+          fotoUrl: { type: "string", format: "uri", example: "https://res.cloudinary.com/demo/image/upload/v1759230000/meetflow/avatars/uuid.jpg" },
         },
       },
       CreateSalaBody: {
@@ -196,6 +211,7 @@ export const openApiSpec = {
           rol: { $ref: "#/components/schemas/RolParticipante" },
           estado: { $ref: "#/components/schemas/EstadoParticipante" },
           fechaIngreso: { type: "string", format: "date-time", nullable: true },
+          fotoUrl: { type: "string", format: "uri", nullable: true, description: "Foto de la cuenta vinculada; null para invitados o sin foto" },
         },
       },
       InvitarBody: {
@@ -449,6 +465,50 @@ export const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/MeResponse" } } },
           },
           401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
+    "/usuarios/me/foto": {
+      put: {
+        tags: ["Usuarios"],
+        summary: "Subir o reemplazar la foto de perfil",
+        description:
+          "`multipart/form-data` con el campo `foto`. La imagen se valida por magic bytes " +
+          "(JPEG/PNG/WebP), se recorta a 256x256 centrada en la cara y se guarda en Cloudinary. " +
+          "Sin `CLOUDINARY_URL` responde 503 `UPLOADS_NOT_CONFIGURED`. Rate limit: " +
+          "`RATE_LIMIT_AVATAR_MAX` (10) cada 15 min por usuario. Cada subida usa un id opaco en Cloudinary; " +
+          "el avatar en GetStream se actualiza en el próximo `stream-token`.",
+        operationId: "usuarios_put_foto",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "multipart/form-data": { schema: { $ref: "#/components/schemas/FotoPerfilBody" } } },
+        },
+        responses: {
+          200: {
+            description: "Foto actualizada",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/FotoPerfilResponse" } } },
+          },
+          400: { description: "`VALIDATION_ERROR`: falta la imagen (campo `foto`) o el multipart está mal formado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          409: { description: "`PHOTO_UPDATE_CONFLICT`: otro PUT del mismo usuario cambió la foto en paralelo; el asset recién subido se descarta. Reintentar", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          413: { description: "`FILE_TOO_LARGE`: supera `AVATAR_MAX_BYTES`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          415: { description: "`UNSUPPORTED_MEDIA_TYPE`: no es JPEG/PNG/WebP", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          502: { description: "`UPLOAD_FAILED`: falló Cloudinary", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          503: { description: "`UPLOADS_NOT_CONFIGURED`: sin `CLOUDINARY_URL`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      delete: {
+        tags: ["Usuarios"],
+        summary: "Quitar la foto de perfil",
+        description: "Idempotente: 204 aunque no hubiera foto. Funciona también sin `CLOUDINARY_URL` (limpia la base y omite el borrado remoto). Si falla el borrado en Cloudinary igual se limpia la base (se loguea un warning).",
+        operationId: "usuarios_delete_foto",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          204: { description: "Foto eliminada" },
+          401: { description: "No autenticado", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          429: { description: "`RATE_LIMITED`", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },

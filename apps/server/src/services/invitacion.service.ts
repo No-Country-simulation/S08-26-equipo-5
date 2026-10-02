@@ -10,7 +10,7 @@ import type { RoomRole } from "../types/stream.js";
 import { AppError } from "../utils/AppError.js";
 import { maskEmail } from "../utils/maskEmail.js";
 import { signParticipantToken } from "../utils/participantToken.js";
-import { emitJoinPending } from "./waitingRoom.service.js";
+import { emitJoinPending, lookupFotoUrl } from "./waitingRoom.service.js";
 import {
   generateInvitationToken,
   hashInvitationToken,
@@ -356,13 +356,18 @@ export async function aceptarInvitacion(
     throw invalida();
   }
 
-  emitJoinPending(sala.id, {
-    ...participante,
-    usuarioId: usuarioVinculado ?? participante.usuarioId,
-    estado: EstadoParticipante.PENDIENTE,
-    nombre: nombre ?? participante.nombre,
-    apellido: apellido ?? participante.apellido,
-  });
+  const usuarioIdFinal = usuarioVinculado ?? participante.usuarioId;
+  emitJoinPending(
+    sala.id,
+    {
+      ...participante,
+      usuarioId: usuarioIdFinal,
+      estado: EstadoParticipante.PENDIENTE,
+      nombre: nombre ?? participante.nombre,
+      apellido: apellido ?? participante.apellido,
+    },
+    await lookupFotoUrl(deps, usuarioIdFinal),
+  );
 
   return {
     participanteId: participante.id,
