@@ -2,6 +2,16 @@ import { esRutaInternaSegura } from "./safe-redirect";
 
 /** Mismas reglas que el registro (backend: mínimo 8 caracteres). */
 export const PASSWORD_MIN_LENGTH = 8;
+/** bcrypt solo usa los primeros 72 bytes (UTF-8): el backend rechaza más. */
+export const PASSWORD_MAX_BYTES = 72;
+export const PASSWORD_TOO_LONG_MESSAGE = "La contraseña no puede superar 72 bytes";
+export const EMAIL_MAX_LENGTH = 254;
+export const EMAIL_TOO_LONG_MESSAGE = "El correo no puede superar 254 caracteres.";
+
+/** Largo en bytes UTF-8 (con tildes o emoji, 72 bytes son menos de 72 caracteres). */
+export function passwordTooLong(password: string): boolean {
+  return new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES;
+}
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Segundos que se espera antes de poder reenviar el correo. */

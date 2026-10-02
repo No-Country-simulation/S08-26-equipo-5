@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { AuthRequestError, useAuth } from "../lib/auth";
-import { saveRecoveryContext } from "../lib/password-recovery";
+import {
+  EMAIL_MAX_LENGTH,
+  EMAIL_TOO_LONG_MESSAGE,
+  PASSWORD_TOO_LONG_MESSAGE,
+  passwordTooLong,
+  saveRecoveryContext,
+} from "../lib/password-recovery";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN_LENGTH = 8;
@@ -185,10 +191,14 @@ export function AuthModal({
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
       nextErrors.email = EMAIL_INVALID_MESSAGE;
+    } else if (trimmedEmail.length > EMAIL_MAX_LENGTH) {
+      nextErrors.email = EMAIL_TOO_LONG_MESSAGE;
     }
 
     if (mode === "register" && password.length < PASSWORD_MIN_LENGTH) {
       nextErrors.password = PASSWORD_SHORT_MESSAGE;
+    } else if (mode === "register" && passwordTooLong(password)) {
+      nextErrors.password = PASSWORD_TOO_LONG_MESSAGE;
     } else if (mode === "login" && password.length === 0) {
       nextErrors.password = "Ingresa tu contraseña.";
     }

@@ -14,7 +14,9 @@ import {
 } from "../../../lib/auth";
 import {
   PASSWORD_MIN_LENGTH,
+  PASSWORD_TOO_LONG_MESSAGE,
   clearRecoveryContext,
+  passwordTooLong,
   readRecoveryContext,
 } from "../../../lib/password-recovery";
 
@@ -62,6 +64,9 @@ export default function RestablecerContrasenaPage() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmRef = useRef<HTMLInputElement>(null);
+  // Guard síncrono: el state `submitting` recién se actualiza en el próximo render,
+  // y un doble click/Enter rápido podría mandar dos pedidos.
+  const submittingRef = useRef(false);
 
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -105,11 +110,13 @@ export default function RestablecerContrasenaPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (submittingRef.current) return;
 
     const errors: FieldErrors = {};
     if (!longEnough) {
       errors.password = `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+    } else if (passwordTooLong(password)) {
+      errors.password = PASSWORD_TOO_LONG_MESSAGE;
     }
     if (password !== confirm) errors.confirm = "Las contraseñas no coinciden.";
     setFieldErrors(errors);
@@ -123,6 +130,7 @@ export default function RestablecerContrasenaPage() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await resetPassword(token, password);
@@ -140,6 +148,7 @@ export default function RestablecerContrasenaPage() {
         setFormError(connectionMessage(error));
       }
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -217,8 +226,8 @@ export default function RestablecerContrasenaPage() {
         <p className="text-sm font-bold uppercase tracking-widest text-mf-green">Listo</p>
         <div className="mt-2">{heading("Contraseña actualizada")}</div>
         <p className="mt-3 text-sm text-mf-muted">
-          Ya podés iniciar sesión con tu contraseña nueva. Por seguridad, cerramos las sesiones
-          abiertas en tus otros dispositivos.
+          Ya podés iniciar sesión con tu contraseña nueva. Cerramos las sesiones en tus otros
+          dispositivos; pueden tardar hasta 15 minutos en cerrarse por completo.
         </p>
         {/* replace: "atrás" no debe volver a esta página, cuyo enlace ya se consumió. */}
         <Link
